@@ -44,6 +44,9 @@ export function configPath(): string {
 export function sessionsDir(): string {
   return path.join(domDir(), "sessions");
 }
+export function skillsDir(): string {
+  return path.join(domDir(), "skills");
+}
 
 async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });

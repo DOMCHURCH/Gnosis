@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Mode } from "./config.js";
-import { domDir } from "./config.js";
+import { domDir, skillsDir } from "./config.js";
 import type { ToolDef } from "./tools/index.js";
 
 export type PermissionAnswer = "yes" | "no" | "always";
@@ -98,8 +98,12 @@ function isInside(child: string, parent: string): boolean {
  */
 export function domTarget(tool: ToolDef, args: any): string | null {
   const dom = domDir();
+  // ~/.dom/skills is the one readable/writable pocket of ~/.dom: skills are meant
+  // to be read on demand (and managed) via the tools. The API key (config.json)
+  // and session history stay blocked.
+  const skills = skillsDir();
   const target = resolveTarget(tool, args);
-  if (target && isInside(target, dom)) return target;
+  if (target && isInside(target, dom) && !isInside(target, skills)) return target;
   if (tool.name === "bash") {
     const cmd = String(args?.command ?? "");
     // Best-effort: a shell command that explicitly names the .dom directory.

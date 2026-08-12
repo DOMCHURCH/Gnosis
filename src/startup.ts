@@ -2,6 +2,7 @@
 
 import { Engine } from "./engine.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { loadSkills } from "./skills.js";
 import { fetchModels } from "./models.js";
 import type { ModelInfo } from "./provider.js";
 import {
@@ -79,6 +80,8 @@ export interface Boot {
   models: ModelInfo[];
   config: Config;
   resumed: boolean;
+  /** Non-fatal skill-loading warnings (malformed SKILL.md, cap hit, ...). */
+  skillWarnings: string[];
 }
 
 export class BootError extends Error {}
@@ -121,8 +124,12 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   if (flags.model) session.model = flags.model;
   if (flags.yolo) session.mode = "yolo";
 
-  const systemPrompt = await buildSystemPrompt(cwd);
-  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session });
+  // Skills are parsed frontmatter-only and advertised in the system prompt; the
+  // model reads a SKILL.md body on demand. Loading never throws — malformed files
+  // become warnings.
+  const { skills, warnings: skillWarnings } = await loadSkills(cwd);
+  const systemPrompt = await buildSystemPrompt(cwd, skills);
+  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills });
 
-  return { engine, models, config, resumed };
+  return { engine, models, config, resumed, skillWarnings };
 }

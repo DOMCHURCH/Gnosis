@@ -42,11 +42,12 @@ async function main() {
     }
     throw e;
   }
-  const { engine, resumed } = bootResult;
+  const { engine, resumed, skillWarnings } = bootResult;
 
   // The TUI needs an interactive stdin (raw mode). Fall back to headless otherwise.
   if (flags.headless || !process.stdin.isTTY || !process.stdout.isTTY) {
     if (resumed) process.stderr.write(`resumed session ${engine.sessionId()}\n`);
+    for (const w of skillWarnings) process.stderr.write(`\x1b[2m! ${w}\x1b[0m\n`);
     await runHeadless(engine, { prompt: flags.prompt });
     return;
   }
@@ -62,7 +63,14 @@ async function main() {
   const [ghAuth, initialRepo] = await Promise.all([getGhAuth(), getRepoInfo(engine.cwd)]);
 
   const { waitUntilExit } = render(
-    <App engine={engine} caps={caps} width={termWidth()} ghAuth={ghAuth} initialRepo={initialRepo} />,
+    <App
+      engine={engine}
+      caps={caps}
+      width={termWidth()}
+      ghAuth={ghAuth}
+      initialRepo={initialRepo}
+      skillWarnings={skillWarnings}
+    />,
     { exitOnCtrlC: false },
   );
   await waitUntilExit();

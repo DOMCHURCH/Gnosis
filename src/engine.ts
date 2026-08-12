@@ -21,6 +21,7 @@ import {
 import { shouldCompact, compact } from "./compaction.js";
 import { MarkdownStripper, type StreamLine } from "./strip.js";
 import { saveSession, type CostState, type Mode, type SessionData } from "./config.js";
+import type { LoadedSkill } from "./skills.js";
 
 const MAX_ITER = 100;
 
@@ -43,6 +44,8 @@ export interface EngineDeps {
   systemPrompt: string;
   models: ModelInfo[];
   session: SessionData;
+  /** Skills advertised in the system prompt; surfaced verbatim by /skills. */
+  skills?: LoadedSkill[];
 }
 
 export class Engine {
@@ -51,6 +54,8 @@ export class Engine {
   private systemPrompt: string;
   models: ModelInfo[];
   private session: SessionData;
+  /** Loaded skills (what /skills lists); advertised in the system prompt. */
+  readonly skills: LoadedSkill[];
 
   messages: Msg[];
   modelId: string;
@@ -74,6 +79,7 @@ export class Engine {
     this.systemPrompt = deps.systemPrompt;
     this.models = deps.models;
     this.session = deps.session;
+    this.skills = deps.skills ?? [];
     this.messages = deps.session.messages;
     this.modelId = deps.session.model;
     this.mode = deps.session.mode;

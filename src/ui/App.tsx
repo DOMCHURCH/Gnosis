@@ -43,12 +43,15 @@ interface Props {
   width: number;
   ghAuth: string;
   initialRepo: { branch: string | null; dirtyCount: number };
+  /** Non-fatal skill-loading warnings, shown dim at the top of the transcript. */
+  skillWarnings: string[];
 }
 
 const HELP = [
   "commands:",
   "  /model [id]   switch model (no arg opens the picker)",
   "  /mode <ask|plan|yolo>   change permission mode",
+  "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
   "  /tools        list available tools",
@@ -101,7 +104,7 @@ function useTermWidth(fallback: number): number {
   return cols;
 }
 
-export function App({ engine, caps, width, ghAuth, initialRepo }: Props) {
+export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }: Props) {
   const { exit } = useApp();
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
@@ -114,7 +117,11 @@ export function App({ engine, caps, width, ghAuth, initialRepo }: Props) {
   const idRef = useRef(1);
   const nextId = () => idRef.current++;
 
-  const [log, setLog] = useState<Log[]>([{ id: 0, kind: "banner" }]);
+  const [log, setLog] = useState<Log[]>(() => {
+    const seed: Log[] = [{ id: 0, kind: "banner" }];
+    for (const w of skillWarnings) seed.push({ id: idRef.current++, kind: "system", text: `! ${w}` });
+    return seed;
+  });
   const [input, setInput] = useState("");
   // The transient in-progress line (the streaming owner commits finished lines
   // straight to <Static>; this holds only the line still being typed).
@@ -427,6 +434,18 @@ export function App({ engine, caps, width, ghAuth, initialRepo }: Props) {
       case "tools":
         sysLog("tools: " + TOOL_NAMES.join(", "));
         break;
+      case "skills": {
+        const sk = engine.skills;
+        if (!sk.length) {
+          sysLog("no skills loaded — add SKILL.md under ~/.dom/skills/<name>/ (or ./.dom/skills/<name>/)");
+          break;
+        }
+        const rows = sk.map(
+          (s) => `  ${s.name}${s.scope === "project" ? " [project]" : ""}  —  ${s.description}`,
+        );
+        sysLog([`skills (${sk.length} loaded):`, ...rows].join("\n"));
+        break;
+      }
       case "cost":
         sysLog(
           `${engine.cost.promptTokens} in / ${engine.cost.completionTokens} out tokens · $${engine.cost.usd.toFixed(4)}`,

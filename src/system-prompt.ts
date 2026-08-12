@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveShell } from "./tools/bash.js";
+import { renderSkillsSection, type LoadedSkill } from "./skills.js";
 
 /** The stated-working-directory line's stable prefix, shared with the engine. */
 export const WORKING_DIR_PREFIX = "Working directory: ";
@@ -17,7 +18,7 @@ export function withWorkingDir(prompt: string, cwd: string): string {
     .join("\n");
 }
 
-export async function buildSystemPrompt(cwd: string): Promise<string> {
+export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = []): Promise<string> {
   const shell = resolveShell();
   const lines = [
     "You are dom, a terminal coding agent operating in the user's shell.",
@@ -58,6 +59,10 @@ export async function buildSystemPrompt(cwd: string): Promise<string> {
   } catch {
     /* no AGENTS.md */
   }
+
+  // Advertise loaded skills (names, descriptions, absolute paths — no bodies).
+  const skillsSection = renderSkillsSection(skills);
+  if (skillsSection) lines.push(skillsSection);
 
   return lines.join("\n");
 }
