@@ -85,8 +85,36 @@ interface ToolCallAccumulator {
 
 export class ProviderError extends Error {}
 
-// HTTP statuses worth retrying: rate limiting and transient gateway/server
-// errors. A 429 in particular must not kill the turn — we back off and retry.
+/**
+ * A provider failure that will NOT clear by retrying the same model: a 404 (model
+ * gone / not on this account) or an upstream/shared-pool 429 (the limit is the
+ * provider's, not our account's). The engine catches this to switch to the
+ * configured fallback model rather than backing off in place forever.
+ */
+export class FallbackNeededError extends ProviderError {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly upstream: boolean,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Is this 429 attributable to the UPSTREAM provider / a shared free pool rather
+ * than our own account? OpenRouter names it in the error body as
+ * `limit_source: "upstream_provider_shared_pool"`. Only these get a fallback —
+ * our own rate limit clears on backoff, so it's retried in place.
+ */
+function isUpstreamRateLimit(body: string): boolean {
+  const m = body.match(/"limit_source"\s*:\s*"([^"]+)"/i);
+  return m ? /upstream|shared[\s_-]*pool/i.test(m[1]!) : false;
+}
+
+// HTTP statuses worth retrying IN PLACE: our-own rate limiting and transient
+// gateway/server errors. A 429 in particular must not kill the turn — we back off
+// and retry. (An *upstream* 429 or a 404 is handled separately, via fallback.)
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const DEFAULT_MAX_RETRIES = 4;
 const DEFAULT_BASE_DELAY_MS = 500;
@@ -164,24 +192,36 @@ export async function streamCompletion(
   const maxRetries = opts.retry?.maxRetries ?? DEFAULT_MAX_RETRIES;
   const baseDelayMs = opts.retry?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
 
-  // A rate-limited (429) or transient (5xx) response is retried with exponential
-  // backoff + jitter — honouring the provider's suggested delay when present —
-  // rather than failing the turn. The request body is idempotent across attempts.
+  // Our-own 429 and transient 5xx are retried in place with exponential backoff +
+  // jitter (honouring a provider-suggested delay). A 404 or an *upstream* 429 won't
+  // clear by retrying the same model, so it's thrown as FallbackNeededError for the
+  // engine to switch models. The request body is idempotent across attempts.
   let res: Response;
   let lastDetail = "";
   for (let attempt = 0; ; attempt++) {
     res = await fetch(route.url, { method: "POST", headers, body: payload, signal: opts.signal });
-    if (!RETRYABLE_STATUS.has(res.status) || attempt >= maxRetries) break;
-    lastDetail = await res.text().catch(() => "");
-    const suggested = parseRetryDelay(res.headers.get("retry-after"), lastDetail);
-    const backoff = Math.min(suggested ?? baseDelayMs * 2 ** attempt, MAX_BACKOFF_MS);
-    const jitter = Math.floor(Math.random() * 250);
-    await sleep(backoff + jitter, opts.signal);
+    if (res.ok) break;
+
+    lastDetail = await res.text().catch(() => ""); // read the error body once, to classify
+
+    if (res.status === 404) {
+      throw new FallbackNeededError(`${route.label} 404: model "${route.model}" not found`, 404, false);
+    }
+    if (res.status === 429 && isUpstreamRateLimit(lastDetail)) {
+      throw new FallbackNeededError(`${route.label} 429: upstream provider rate limit (shared pool)`, 429, true);
+    }
+
+    if (RETRYABLE_STATUS.has(res.status) && attempt < maxRetries) {
+      const suggested = parseRetryDelay(res.headers.get("retry-after"), lastDetail);
+      const backoff = Math.min(suggested ?? baseDelayMs * 2 ** attempt, MAX_BACKOFF_MS);
+      await sleep(backoff + Math.floor(Math.random() * 250), opts.signal);
+      continue;
+    }
+    break; // non-retryable, or retries exhausted
   }
 
   if (!res.ok || !res.body) {
-    const detail = lastDetail || (await res.text().catch(() => ""));
-    throw new ProviderError(`${route.label} ${res.status}: ${detail.slice(0, 500)}`);
+    throw new ProviderError(`${route.label} ${res.status}: ${lastDetail.slice(0, 500)}`);
   }
 
   const reader = res.body.getReader();

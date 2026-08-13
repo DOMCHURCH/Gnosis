@@ -487,13 +487,15 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     sysLog(["checkpoints (newest first):", ...rows].join("\n"));
   };
 
-  const applyModel = (id: string) => {
+  const applyModel = async (id: string) => {
     engine.setModel(id);
-    // saveConfig read-merges, so apiKey and any other keys are preserved.
-    void saveConfig({ model: id });
-    void engine.persist();
     const m = modelsRef.current.find((x) => x.id === id);
     sysLog(`model ${g.chevron} ${id}${m ? `  ${priceLabel(m)}` : ""}`);
+    // Persist durably (awaited, not fire-and-forget). A hard exit right after a
+    // switch must not leave config.json and the session file disagreeing about the
+    // model. saveConfig read-merges, so apiKey and other keys are preserved.
+    await saveConfig({ model: id });
+    await engine.persist();
   };
 
   // /model <arg>: an exact full id switches immediately; anything fuzzier opens
@@ -509,26 +511,26 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     setOverlay({ type: "model", items: buildModelItems(matched), initial: res.ids[0] });
   };
 
-  const setModeCmd = (arg: string) => {
+  const setModeCmd = async (arg: string) => {
     if (arg !== "ask" && arg !== "plan" && arg !== "yolo") {
       sysLog(`usage: /mode <ask|plan|yolo>`);
       return;
     }
     engine.setMode(arg as Mode);
-    void saveConfig({ mode: arg as Mode });
-    void engine.persist();
     setModeTick((t) => t + 1);
     sysLog(`mode ${g.chevron} ${arg}`);
+    await saveConfig({ mode: arg as Mode });
+    await engine.persist();
   };
 
   // shift+tab cycles: normal → auto-accept edits → yolo → normal.
-  const cycleMode = () => {
+  const cycleMode = async () => {
     const next = cycleApprovalMode(engine.mode, engine.autoApproveEdits);
     engine.setMode(next.mode);
     engine.autoApproveEdits = next.autoApproveEdits;
-    void saveConfig({ mode: next.mode });
-    void engine.persist();
     setModeTick((t) => t + 1);
+    await saveConfig({ mode: next.mode });
+    await engine.persist();
   };
 
   const openModelPicker = async () => {
@@ -634,7 +636,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         engine.forceCompact(stubCb());
         break;
       case "mode":
-        setModeCmd(arg);
+        void setModeCmd(arg);
         break;
       case "model":
         if (arg) void selectModelByArg(arg);
@@ -735,7 +737,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     // shift+tab cycles the approval mode when the input bar is active.
     if (key.tab && key.shift && overlayRef.current.type === "none" && !busyRef.current) {
-      cycleMode();
+      void cycleMode();
     }
   });
 

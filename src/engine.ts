@@ -3,7 +3,7 @@
 
 import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
-import { streamCompletion, ProviderError, type ModelInfo, type Usage } from "./provider.js";
+import { streamCompletion, ProviderError, FallbackNeededError, type ModelInfo, type Usage } from "./provider.js";
 import { TOOLS, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
@@ -49,6 +49,9 @@ export interface EngineDeps {
   session: SessionData;
   /** Skills advertised in the system prompt; surfaced verbatim by /skills. */
   skills?: LoadedSkill[];
+  /** Model to switch to (for the rest of the session) when the active model 404s
+   * or hits an upstream/shared-pool 429 that won't clear on retry. */
+  fallbackModel?: string;
 }
 
 export class Engine {
@@ -64,6 +67,9 @@ export class Engine {
 
   messages: Msg[];
   modelId: string;
+  /** Fallback model for the rest of the session on an unrecoverable model error
+   * (404 / upstream-pool 429). Undefined disables fallback. */
+  fallbackModel?: string;
   mode: Mode;
   summary: string | null;
   cost: CostState;
@@ -92,6 +98,7 @@ export class Engine {
     this.models = deps.models;
     this.session = deps.session;
     this.skills = deps.skills ?? [];
+    this.fallbackModel = deps.fallbackModel;
     this.messages = deps.session.messages;
     this.modelId = deps.session.model;
     this.mode = deps.session.mode;
@@ -173,6 +180,7 @@ export class Engine {
       models: this.models,
       session,
       skills: this.skills,
+      fallbackModel: this.fallbackModel,
     });
     engine.interactive = this.interactive;
     return engine;
@@ -250,7 +258,20 @@ export class Engine {
             // Committed lines stay (the user saw them); the unfinished partial is
             // dropped by clearing the live region. Mark the turn aborted.
             cb.onSystem("⎿ aborted");
-          } else if (e instanceof ProviderError) {
+            break;
+          }
+          // A model that's gone (404) or throttled by an upstream shared pool won't
+          // recover on retry. Switch to the configured fallback for the rest of the
+          // session (once) and re-run this turn on it. Guard modelId !== fallback so
+          // a failing fallback surfaces the error instead of looping.
+          if (e instanceof FallbackNeededError && this.fallbackModel && this.modelId !== this.fallbackModel) {
+            const from = this.modelId;
+            const why = e.status === 404 ? "not found (404)" : "rate-limited upstream (shared pool)";
+            this.setModel(this.fallbackModel);
+            cb.onSystem(`↪ ${from} ${why} — falling back to ${this.fallbackModel} for this session`);
+            continue; // retry this turn on the fallback model
+          }
+          if (e instanceof ProviderError) {
             cb.onSystem(`✗ ${e.message}`);
           } else {
             cb.onSystem(`✗ ${(e as Error).message}`);

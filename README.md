@@ -51,6 +51,10 @@ dom --headless "message"  # one-shot, no TUI
 - **plan** — every mutating tool is refused.
 - **yolo** — everything runs without prompting, except commands matching `rm -rf`, `git push --force`, `dd`, `mkfs`, `curl | sh`, `> /dev/…`, and mutating HTTP methods (`POST`/`PUT`/`PATCH`/`DELETE`), which always prompt.
 
+## Model fallback
+
+Set `"fallbackModel"` in `~/.dom/config.json` to survive a dead primary. When the active model returns a **404**, or an **upstream/shared-pool 429** (`limit_source: upstream_provider_shared_pool` — common on `:free` models, and not clearable by retrying our own request), dom switches to the fallback for the rest of the session, re-runs the turn on it, and prints a dim notice naming both models. An ordinary 429 from *your own* rate limit still retries in place with exponential backoff.
+
 ## Tools
 
 `read` · `write` · `edit` · `bash` · `glob` · `grep` · `http` — zod schemas are the source of truth; JSON Schema (for the API) and TS types are both derived from them. In multi-tab sessions the model additionally gets `send_message` / `list_tabs`.
@@ -67,7 +71,7 @@ The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis
 
 ## Storage
 
-- `~/.dom/config.json` — model, mode, apiKey
+- `~/.dom/config.json` — model, fallbackModel, mode, apiKey
 - `~/.dom/.env` — `NAME=value` secrets, substituted into `http` requests as `${NAME}` (never logged)
 - `~/.dom/models.json` — model catalog cache (24h TTL)
 - `~/.dom/sessions/<id>.json` — history, cwd, cumulative cost (written after every turn)

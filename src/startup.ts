@@ -130,7 +130,7 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // become warnings.
   const { skills, warnings: skillWarnings } = await loadSkills(cwd);
   const systemPrompt = await buildSystemPrompt(cwd, skills);
-  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills });
+  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel });
 
   // Warm the public-apis index in the background when that skill is installed and
   // we're interactive (skip in headless/CI). Best-effort, non-blocking, refreshes

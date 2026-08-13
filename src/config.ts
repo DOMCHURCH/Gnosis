@@ -9,6 +9,9 @@ export type Mode = "ask" | "plan" | "yolo";
 
 export interface Config {
   model?: string;
+  /** Model to switch to for the rest of the session when the active model 404s or
+   * hits an upstream/shared-pool 429 that won't clear on retry (e.g. a free model). */
+  fallbackModel?: string;
   mode?: Mode;
   apiKey?: string;
   /** Absolute path to an Obsidian vault; `/vault` switches the working root here. */
