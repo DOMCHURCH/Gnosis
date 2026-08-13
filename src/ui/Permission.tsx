@@ -14,7 +14,7 @@ interface Props {
 
 export function Permission({ caps, width, preview, onDecide }: Props) {
   const col = (hex: string) => (caps.color ? hex : undefined);
-  const dangerous = (preview.kind === "bash" || preview.kind === "diff") && preview.dangerous;
+  const dangerous = preview.dangerous;
   const options: { key: PermissionAnswer; label: string }[] = dangerous
     ? [
         { key: "yes", label: "yes" },
@@ -69,6 +69,20 @@ export function Permission({ caps, width, preview, onDecide }: Props) {
 }
 
 function renderPreview(preview: Preview, col: (h: string) => string | undefined) {
+  if (preview.kind === "http") {
+    return (
+      <>
+        <Text color={col(C.value)} wrap="truncate-end">
+          {preview.method} {preview.url}
+        </Text>
+        {preview.warning && (
+          <Text color={col(C.danger)} wrap="truncate-end">
+            ⚠ {preview.warning}
+          </Text>
+        )}
+      </>
+    );
+  }
   if (preview.kind === "bash") {
     return (
       <>

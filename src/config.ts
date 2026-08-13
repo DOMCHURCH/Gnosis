@@ -47,6 +47,11 @@ export function sessionsDir(): string {
 export function skillsDir(): string {
   return path.join(domDir(), "skills");
 }
+/** ~/.dom/cache — a tool-accessible pocket of ~/.dom for skill data caches
+ * (e.g. the public-apis index). Managed by code; readable/greppable by tools. */
+export function cacheDir(): string {
+  return path.join(domDir(), "cache");
+}
 
 async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });

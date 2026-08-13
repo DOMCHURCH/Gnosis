@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "verify": "node verify/run-all.mjs"
   },
   "dependencies": {
     "diff": "^9.0.0",

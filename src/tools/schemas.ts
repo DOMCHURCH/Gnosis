@@ -38,6 +38,22 @@ export const globSchema = z.object({
     ),
 });
 
+export const httpSchema = z.object({
+  url: z
+    .string()
+    .describe("Absolute http(s) URL. Non-http(s) schemes and loopback/private/metadata hosts are blocked."),
+  method: z.string().optional().describe("HTTP method: GET (default), POST, PUT, PATCH, DELETE, HEAD."),
+  headers: z
+    .record(z.string())
+    .optional()
+    .describe(
+      "Request headers as a name→value map. Reference a secret by name as ${VAR_NAME}; the value is read from " +
+        "~/.dom/.env at request time and never stored. Authorization/api-key values are shown as <redacted>.",
+    ),
+  body: z.string().optional().describe("Request body (string). May reference secrets as ${VAR_NAME}."),
+  timeout: z.number().int().positive().optional().describe("Timeout in seconds (default 30)."),
+});
+
 export const grepSchema = z.object({
   pattern: z.string().describe("Regular expression to search for."),
   path: z.string().optional().describe("File or directory to search (default: working directory)."),
@@ -50,12 +66,24 @@ export const grepSchema = z.object({
     ),
 });
 
+export const sendMessageSchema = z.object({
+  tab: z.string().describe("Name of the target tab to deliver the message to (see list_tabs)."),
+  text: z
+    .string()
+    .describe("Message text. Delivered into the target tab's input as a user message tagged with your tab name."),
+});
+
+export const listTabsSchema = z.object({});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
 export type BashArgs = z.infer<typeof bashSchema>;
 export type GlobArgs = z.infer<typeof globSchema>;
 export type GrepArgs = z.infer<typeof grepSchema>;
+export type HttpArgs = z.infer<typeof httpSchema>;
+export type SendMessageArgs = z.infer<typeof sendMessageSchema>;
+export type ListTabsArgs = z.infer<typeof listTabsSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

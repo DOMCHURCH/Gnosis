@@ -4,7 +4,7 @@
 import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { streamCompletion, ProviderError, type ModelInfo, type Usage } from "./provider.js";
-import { TOOLS, toolDefinitions, type ToolDef, type ToolResult } from "./tools/index.js";
+import { TOOLS, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -12,7 +12,10 @@ import { planEdit } from "./tools/edit.js";
 import {
   gate,
   approvalKey,
+  rejectionKey,
+  targetLabel,
   buildBashPreview,
+  buildHttpPreview,
   buildDiffPreview,
   type GateDecision,
   type Preview,
@@ -20,7 +23,7 @@ import {
 } from "./permissions.js";
 import { shouldCompact, compact } from "./compaction.js";
 import { MarkdownStripper, type StreamLine } from "./strip.js";
-import { saveSession, type CostState, type Mode, type SessionData } from "./config.js";
+import { createSession, saveSession, type CostState, type Mode, type SessionData } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 
 const MAX_ITER = 100;
@@ -50,7 +53,9 @@ export interface EngineDeps {
 
 export class Engine {
   private apiKey: string;
-  readonly cwd: string;
+  /** Working root for this tab. Mutable so /vault can move a single tab's root;
+   * process.cwd() is set to the active tab's cwd on switch. */
+  cwd: string;
   private systemPrompt: string;
   models: ModelInfo[];
   private session: SessionData;
@@ -67,11 +72,18 @@ export class Engine {
   interactive = false;
   /** Session flag: 'always' (or the input-bar auto mode) auto-approves write/edit diffs. */
   autoApproveEdits = false;
+  /** Multi-tab runtime access for the send_message/list_tabs tools; set by the
+   * tabs controller. Undefined in single-tab/headless — those tools then no-op. */
+  toolContext?: ToolContext;
 
   lastPromptTokens = 0;
   private abortController: AbortController | null = null;
   private repairs = new Map<string, number>();
-  private surfaceRepair = false;
+  /** Per-target rejection counts for the current turn (keyed by rejectionKey). */
+  private rejections = new Map<string, number>();
+  /** Set to break the tool loop after the current result and hand back to the
+   * user (schema-repair limit or repeated rejection of the same target). */
+  private stopTurn = false;
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -127,6 +139,7 @@ export class Engine {
     this.summary = null;
     this.lastPromptTokens = 0;
     this.repairs.clear();
+    this.rejections.clear();
   }
   abort(): void {
     this.abortController?.abort();
@@ -145,6 +158,24 @@ export class Engine {
     this.cost = s.cost;
     this.lastPromptTokens = 0;
     this.repairs.clear();
+    this.rejections.clear();
+  }
+
+  /** Create a sibling Engine for a new tab: same provider key, system prompt,
+   * catalog, and skills, but a fresh session (own history, model, cwd, mode). */
+  fork(opts?: { cwd?: string; model?: string; mode?: Mode }): Engine {
+    const cwd = opts?.cwd ?? this.cwd;
+    const session = createSession(cwd, opts?.model ?? this.modelId, opts?.mode ?? this.mode);
+    const engine = new Engine({
+      apiKey: this.apiKey,
+      cwd,
+      systemPrompt: this.systemPrompt,
+      models: this.models,
+      session,
+      skills: this.skills,
+    });
+    engine.interactive = this.interactive;
+    return engine;
   }
 
   async persist(): Promise<void> {
@@ -178,7 +209,8 @@ export class Engine {
     this.messages.push({ role: "user", text: userText });
     this.abortController = new AbortController();
     this.repairs.clear();
-    this.surfaceRepair = false;
+    this.rejections.clear();
+    this.stopTurn = false;
 
     let iter = 0;
     try {
@@ -254,7 +286,7 @@ export class Engine {
           const res = await this.gateAndExecute(call, cb);
           this.messages.push({ role: "tool", callId: call.id, name: call.name, result: res.output, isError: res.isError });
           cb.onToolResult(call, res);
-          if (this.surfaceRepair) {
+          if (this.stopTurn) {
             stop = true;
             break;
           }
@@ -290,7 +322,7 @@ export class Engine {
     const n = (this.repairs.get(toolName) ?? 0) + 1;
     this.repairs.set(toolName, n);
     if (n > 2) {
-      this.surfaceRepair = true;
+      this.stopTurn = true;
       cb.onSystem(`✗ ${toolName}: schema repair limit reached — surfacing failure`);
       return { output: `${toolName} failed: ${message}\n(repair limit reached; abandoning this call)`, isError: true };
     }
@@ -300,6 +332,37 @@ export class Engine {
         `${toolName} argument error (repair ${n}/2): ${message}\n` +
         `Expected JSON Schema for ${toolName}:\n${schema}\n` +
         `Correct the arguments and call the tool again.`,
+      isError: true,
+    };
+  }
+
+  /**
+   * The tool result for a user-rejected call. The model is told the user
+   * declined and to ASK rather than retry. Rejections are counted per target
+   * (tool + path/url/command); a second rejection of the SAME target ends the
+   * turn and hands control back to the user instead of looping on a "no".
+   */
+  private rejectionResult(tool: ToolDef, args: unknown, cb: Callbacks): ToolResult {
+    const key = rejectionKey(tool, args);
+    const label = targetLabel(tool, args);
+    const n = (this.rejections.get(key) ?? 0) + 1;
+    this.rejections.set(key, n);
+    if (n >= 2) {
+      this.stopTurn = true;
+      cb.onSystem(`✗ ${tool.name} (${label}) declined twice — ending turn, over to you`);
+      return {
+        output:
+          `The user declined this ${tool.name} (${label}) for the second time. ` +
+          `Do not attempt it again. The turn is ending and control returns to the user — ` +
+          `wait for them to tell you what to change.`,
+        isError: true,
+      };
+    }
+    return {
+      output:
+        `The user declined this ${tool.name} (${label}). Do not retry the same call or a ` +
+        `trivial variation of it (e.g. a renamed path). Ask the user what they want changed ` +
+        `before trying again.`,
       isError: true,
     };
   }
@@ -334,13 +397,17 @@ export class Engine {
 
     cb.onToolStart(call, args);
     if (decision.kind === "prompt") {
-      const ans = await cb.requestPermission(buildBashPreview(String(args.command ?? ""), decision.reason));
-      if (ans === "no") return { output: "✗ denied by user", isError: true };
+      const preview =
+        tool.name === "http"
+          ? buildHttpPreview(args.method, String(args.url ?? ""), decision.dangerous)
+          : buildBashPreview(String(args.command ?? ""), decision.reason);
+      const ans = await cb.requestPermission(preview);
+      if (ans === "no") return this.rejectionResult(tool, args, cb);
       if (ans === "always" && !decision.dangerous) this.approvals.add(approvalKey(tool, args));
     }
 
     try {
-      return await tool.run(args, this.abortController?.signal);
+      return await tool.run(args, this.abortController?.signal, this.toolContext);
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }
@@ -362,7 +429,7 @@ export class Engine {
     const apply = async (): Promise<ToolResult> => {
       cb.onToolStart(call, args);
       try {
-        return await tool.run(args, this.abortController?.signal);
+        return await tool.run(args, this.abortController?.signal, this.toolContext);
       } catch (e) {
         return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
       }
@@ -399,10 +466,7 @@ export class Engine {
     );
     cb.onToolStart(call, args);
     const ans = await cb.requestPermission(preview);
-    if (ans === "no") {
-      const verb = tool.name === "edit" ? "edit" : "write";
-      return { output: `User rejected the ${verb} to ${plan.relPath}. No changes were made.`, isError: true };
-    }
+    if (ans === "no") return this.rejectionResult(tool, args, cb);
     // 'always' opts the session into auto-accepting edits — but never for a
     // dangerous target, which must keep prompting every time.
     if (ans === "always" && !forcePrompt) this.autoApproveEdits = true;

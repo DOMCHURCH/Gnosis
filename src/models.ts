@@ -33,12 +33,27 @@ function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// OpenRouter exposes variant suffixes (":free", ":nitro", ":batch", ...). Most
+// serve the standard /chat/completions path; ":batch" is the exception — it only
+// works through the async Batch API and 404s here with "only available through
+// the Batch API". Exclude those variants from the catalog entirely so /model can
+// never resolve to one.
+const NON_CHAT_SUFFIXES = [":batch"];
+
+/** True unless the id names a variant that isn't served by chat/completions. */
+export function isChatModelId(id: string): boolean {
+  const lower = id.toLowerCase();
+  return !NON_CHAT_SUFFIXES.some((s) => lower.endsWith(s));
+}
+
 function parse(raw: unknown): ModelEntry[] {
   const data = (raw as { data?: unknown[] })?.data;
   if (!Array.isArray(data)) return [];
   const out: ModelEntry[] = [];
   for (const m of data as any[]) {
     if (!m || typeof m.id !== "string") continue;
+    // Skip variants that don't serve the standard completions path (e.g. :batch).
+    if (!isChatModelId(m.id)) continue;
     const supported: string[] = Array.isArray(m.supported_parameters)
       ? m.supported_parameters.map(String)
       : [];
@@ -140,4 +155,51 @@ export async function fetchModels(force = false): Promise<ModelEntry[]> {
   const [openRouter, groq] = await Promise.all([fetchOpenRouterModels(force), fetchGroqModels(force)]);
   const merged = [...openRouter, ...groq];
   return merged.length ? merged : fallback();
+}
+
+// ---------------------------------------------------------------------------
+// /model argument resolution
+// ---------------------------------------------------------------------------
+
+export type ModelResolution =
+  | { kind: "exact"; id: string }
+  | { kind: "matches"; ids: string[] }
+  | { kind: "none" };
+
+/** The id after its provider prefix, e.g. "anthropic/claude-sonnet-4.6" → "claude-sonnet-4.6". */
+function basename(id: string): string {
+  const slash = id.lastIndexOf("/");
+  return slash === -1 ? id : id.slice(slash + 1);
+}
+
+/**
+ * Resolve a `/model <arg>` argument to a model id, preferring the most specific
+ * match. Tiers, best first: exact full id, exact basename (provider prefix
+ * dropped), prefix, then substring. An exact full id is applied directly; every
+ * other tier returns candidate ids so the caller can confirm the full resolved
+ * id in the picker before switching. Never resolves to a non-chat (:batch) id —
+ * those are already absent from the catalog.
+ */
+export function resolveModelQuery(models: ModelEntry[], query: string): ModelResolution {
+  const q = query.trim().toLowerCase();
+  if (!q) return { kind: "none" };
+  const ids = models.map((m) => m.id);
+
+  const exact = ids.find((id) => id.toLowerCase() === q);
+  if (exact) return { kind: "exact", id: exact };
+
+  const baseExact = ids.filter((id) => basename(id).toLowerCase() === q);
+  if (baseExact.length) return { kind: "matches", ids: baseExact };
+
+  const prefix = ids.filter(
+    (id) => id.toLowerCase().startsWith(q) || basename(id).toLowerCase().startsWith(q),
+  );
+  if (prefix.length) return { kind: "matches", ids: prefix };
+
+  const sub = models
+    .filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
+    .map((m) => m.id);
+  if (sub.length) return { kind: "matches", ids: sub };
+
+  return { kind: "none" };
 }

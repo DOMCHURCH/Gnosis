@@ -5,7 +5,10 @@ import {
   editSchema,
   globSchema,
   grepSchema,
+  httpSchema,
+  listTabsSchema,
   readSchema,
+  sendMessageSchema,
   toJsonSchema,
   writeSchema,
 } from "./schemas.js";
@@ -15,6 +18,8 @@ import { runEdit } from "./edit.js";
 import { runBash } from "./bash.js";
 import { runGlob } from "./glob.js";
 import { runGrep } from "./grep.js";
+import { runHttp } from "./http.js";
+import { runSendMessage, runListTabs } from "./tabs.js";
 
 export interface ToolResult {
   output: string;
@@ -24,14 +29,30 @@ export interface ToolResult {
   aborted?: boolean;
 }
 
+/** The calling tab's view of the multi-tab runtime — how send_message/list_tabs
+ * reach the controller. Bound per tab (selfName is fixed), so it is safe even
+ * when several tabs' turns run concurrently. Absent outside the multi-tab TUI. */
+export interface TabRuntime {
+  selfName(): string;
+  sendMessage(to: string, text: string): { ok: boolean; message: string };
+  listTabs(): { name: string; purpose: string; active: boolean; busy: boolean }[];
+}
+
+/** Per-turn context passed to tool.run. Most tools ignore it; the multi-tab
+ * tools use `tab`. */
+export interface ToolContext {
+  tab?: TabRuntime;
+}
+
 export interface ToolDef {
   name: string;
   description: string;
   schema: z.ZodTypeAny;
   /** Mutating tools go through the permission gate; read-only tools run free. */
   mutating: boolean;
-  /** `signal` aborts a long-running tool (only bash honours it today). */
-  run: (args: any, signal?: AbortSignal) => Promise<ToolResult>;
+  /** `signal` aborts a long-running tool (only bash honours it today); `ctx`
+   * carries multi-tab runtime access for send_message/list_tabs. */
+  run: (args: any, signal?: AbortSignal, ctx?: ToolContext) => Promise<ToolResult>;
 }
 
 export const TOOLS: Record<string, ToolDef> = {
@@ -77,6 +98,35 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: grepSchema,
     mutating: false,
     run: runGrep,
+  },
+  http: {
+    name: "http",
+    description:
+      "Make an HTTP(S) request and return the status, response headers, and body (JSON pretty-printed). " +
+      "Only http/https to public hosts — loopback, private, and cloud-metadata addresses are refused. " +
+      "Reference secrets by name as ${VAR_NAME} in the url, headers, or body; values come from ~/.dom/.env " +
+      "and are never stored. Authorization/api-key headers are shown as <redacted>.",
+    schema: httpSchema,
+    mutating: true,
+    run: runHttp,
+  },
+  send_message: {
+    name: "send_message",
+    description:
+      "Multi-tab sessions only: deliver a message to another tab (a separate agent) by name. It arrives " +
+      "in that tab as a user message tagged with your tab name and triggers a turn there. Use list_tabs " +
+      "to see targets. Bounded to prevent loops: max 3 hops, no replying to the tab a message just came " +
+      "from in the same turn, and 20 inter-agent messages per session.",
+    schema: sendMessageSchema,
+    mutating: false,
+    run: runSendMessage,
+  },
+  list_tabs: {
+    name: "list_tabs",
+    description: "Multi-tab sessions only: list the open tabs (agents) with each one's name and one-line purpose.",
+    schema: listTabsSchema,
+    mutating: false,
+    run: runListTabs,
   },
 };
 

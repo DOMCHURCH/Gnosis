@@ -85,6 +85,44 @@ interface ToolCallAccumulator {
 
 export class ProviderError extends Error {}
 
+// HTTP statuses worth retrying: rate limiting and transient gateway/server
+// errors. A 429 in particular must not kill the turn — we back off and retry.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const DEFAULT_MAX_RETRIES = 4;
+const DEFAULT_BASE_DELAY_MS = 500;
+const MAX_BACKOFF_MS = 30_000;
+
+/** setTimeout as an awaitable that rejects (AbortError) if the turn is aborted
+ * mid-wait, so Ctrl+C during a backoff still ends the turn promptly. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** How long to wait before retrying, from Retry-After (seconds or HTTP-date) or
+ * a provider hint in the body (Groq: "Please try again in 1.8s"); null if none. */
+function parseRetryDelay(retryAfter: string | null, body: string): number | null {
+  if (retryAfter) {
+    const secs = Number(retryAfter);
+    if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+    const when = Date.parse(retryAfter);
+    if (Number.isFinite(when)) return Math.max(0, when - Date.now());
+  }
+  const m = body.match(/try again in\s+([\d.]+)\s*s/i);
+  if (m) return Math.ceil(parseFloat(m[1]!) * 1000);
+  return null;
+}
+
 /**
  * Stream a chat completion. Text deltas are delivered via `onText` as they
  * arrive. Tool-call fragments are accumulated by index and their argument
@@ -97,6 +135,8 @@ export async function streamCompletion(
     messages: WireMessage[];
     tools: ToolSchema[];
     signal: AbortSignal;
+    /** Backoff tuning (defaults: 4 retries, 500ms base). Overridable for tests. */
+    retry?: { maxRetries?: number; baseDelayMs?: number };
   },
   onText: (delta: string) => void,
 ): Promise<CompletionResult> {
@@ -120,15 +160,27 @@ export async function streamCompletion(
     body.stream_options = { include_usage: true }; // OpenAI/Groq token usage in the final chunk
   }
 
-  const res = await fetch(route.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: opts.signal,
-  });
+  const payload = JSON.stringify(body);
+  const maxRetries = opts.retry?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const baseDelayMs = opts.retry?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
+
+  // A rate-limited (429) or transient (5xx) response is retried with exponential
+  // backoff + jitter — honouring the provider's suggested delay when present —
+  // rather than failing the turn. The request body is idempotent across attempts.
+  let res: Response;
+  let lastDetail = "";
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(route.url, { method: "POST", headers, body: payload, signal: opts.signal });
+    if (!RETRYABLE_STATUS.has(res.status) || attempt >= maxRetries) break;
+    lastDetail = await res.text().catch(() => "");
+    const suggested = parseRetryDelay(res.headers.get("retry-after"), lastDetail);
+    const backoff = Math.min(suggested ?? baseDelayMs * 2 ** attempt, MAX_BACKOFF_MS);
+    const jitter = Math.floor(Math.random() * 250);
+    await sleep(backoff + jitter, opts.signal);
+  }
 
   if (!res.ok || !res.body) {
-    const detail = await res.text().catch(() => "");
+    const detail = lastDetail || (await res.text().catch(() => ""));
     throw new ProviderError(`${route.label} ${res.status}: ${detail.slice(0, 500)}`);
   }
 

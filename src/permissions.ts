@@ -5,8 +5,9 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Mode } from "./config.js";
-import { domDir, skillsDir } from "./config.js";
+import { cacheDir, domDir, skillsDir } from "./config.js";
 import type { ToolDef } from "./tools/index.js";
+import { httpBlockReason, normalizeMethod, UNSAFE_METHODS } from "./tools/http.js";
 
 export type PermissionAnswer = "yes" | "no" | "always";
 
@@ -18,6 +19,7 @@ export interface DiffLine {
 
 export type Preview =
   | { kind: "bash"; command: string; dangerous: boolean; cwd: string; warning?: string }
+  | { kind: "http"; method: string; url: string; dangerous: boolean; warning?: string }
   | {
       kind: "diff";
       tool: "write" | "edit";
@@ -98,12 +100,14 @@ function isInside(child: string, parent: string): boolean {
  */
 export function domTarget(tool: ToolDef, args: any): string | null {
   const dom = domDir();
-  // ~/.dom/skills is the one readable/writable pocket of ~/.dom: skills are meant
-  // to be read on demand (and managed) via the tools. The API key (config.json)
-  // and session history stay blocked.
+  // ~/.dom/skills and ~/.dom/cache are the readable/writable pockets of ~/.dom:
+  // skills are read on demand, and cache holds skill data indexes (e.g. the
+  // public-apis list) that tools grep/read. The API key (config.json), the
+  // secrets file (.env), and session history stay blocked.
   const skills = skillsDir();
+  const cache = cacheDir();
   const target = resolveTarget(tool, args);
-  if (target && isInside(target, dom) && !isInside(target, skills)) return target;
+  if (target && isInside(target, dom) && !isInside(target, skills) && !isInside(target, cache)) return target;
   if (tool.name === "bash") {
     const cmd = String(args?.command ?? "");
     // Best-effort: a shell command that explicitly names the .dom directory.
@@ -150,6 +154,29 @@ export function approvalKey(tool: ToolDef, args: any): string {
   return tool.name;
 }
 
+/**
+ * Per-target key for counting rejections within a turn: tool name + the concrete
+ * thing it would touch (resolved path, http url, or full bash command). Two
+ * rejects of the SAME target collide (so we can stop retrying it); a different
+ * path — e.g. an "underscore variant" — is a distinct target with its own count.
+ */
+export function rejectionKey(tool: ToolDef, args: any): string {
+  const target = resolveTarget(tool, args);
+  if (target) return `${tool.name}:${target}`;
+  if (tool.name === "http") return `http:${String(args?.url ?? "")}`;
+  if (tool.name === "bash") return `bash:${String(args?.command ?? "")}`;
+  return tool.name;
+}
+
+/** Human-readable label for the target of a rejected call (for the model + user). */
+export function targetLabel(tool: ToolDef, args: any): string {
+  const target = resolveTarget(tool, args);
+  if (target) return path.relative(process.cwd(), target).split(path.sep).join("/") || target;
+  if (tool.name === "http") return `${String(args?.method ?? "GET")} ${String(args?.url ?? "")}`;
+  if (tool.name === "bash") return String(args?.command ?? "");
+  return tool.name;
+}
+
 export interface GateContext {
   mode: Mode;
   approvals: Set<string>;
@@ -170,6 +197,23 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   const dom = domTarget(tool, args);
   if (dom) {
     return { kind: "reject", reason: `blocked: ${dom} is inside ~/.dom, which dom must never touch.` };
+  }
+
+  // The http tool has bespoke gating: SSRF/scheme violations are hard rejects
+  // (never prompted); unsafe methods (POST/PUT/PATCH/DELETE) always prompt, even
+  // in yolo; a GET/HEAD may auto-approve in yolo or via a prior 'always'.
+  if (tool.name === "http") {
+    const block = httpBlockReason(args);
+    if (block) return { kind: "reject", reason: block };
+    const method = normalizeMethod(args?.method);
+    const unsafe = UNSAFE_METHODS.has(method);
+    if (ctx.mode === "plan" && unsafe) {
+      return { kind: "reject", reason: "plan mode is active — mutating HTTP methods are disabled." };
+    }
+    if (unsafe) return { kind: "prompt", dangerous: true, reason: `${method} ${String(args?.url ?? "")}` };
+    if (ctx.mode === "yolo") return { kind: "allow" };
+    if (ctx.approvals.has(approvalKey(tool, args))) return { kind: "allow" };
+    return { kind: "prompt", dangerous: false, reason: `${method} ${String(args?.url ?? "")}` };
   }
 
   // A call is dangerous if the command matches a dangerous pattern OR it lands
@@ -202,6 +246,12 @@ export function buildBashPreview(command: string, warning?: string): Preview {
     cwd: process.cwd(),
     warning,
   };
+}
+
+/** Preview for an http request: the method + full URL (with ${VAR} placeholders,
+ * never the substituted secret). `dangerous` drives the always-prompt banner. */
+export function buildHttpPreview(method: unknown, url: string, dangerous: boolean, warning?: string): Preview {
+  return { kind: "http", method: normalizeMethod(method), url, dangerous, warning };
 }
 
 /** Keep the prompt readable: cap the rendered diff at ~40 lines. */

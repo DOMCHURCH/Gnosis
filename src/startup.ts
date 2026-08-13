@@ -3,6 +3,7 @@
 import { Engine } from "./engine.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { loadSkills } from "./skills.js";
+import { ensurePublicApisCache } from "./publicapis.js";
 import { fetchModels } from "./models.js";
 import type { ModelInfo } from "./provider.js";
 import {
@@ -130,6 +131,13 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   const { skills, warnings: skillWarnings } = await loadSkills(cwd);
   const systemPrompt = await buildSystemPrompt(cwd, skills);
   const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills });
+
+  // Warm the public-apis index in the background when that skill is installed and
+  // we're interactive (skip in headless/CI). Best-effort, non-blocking, refreshes
+  // at most once every 30 days; ensurePublicApisCache never throws.
+  if (!flags.headless && skills.some((s) => s.name === "public-apis")) {
+    void ensurePublicApisCache().catch(() => {});
+  }
 
   return { engine, models, config, resumed, skillWarnings };
 }

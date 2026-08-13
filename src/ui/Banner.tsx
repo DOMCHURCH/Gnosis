@@ -6,24 +6,25 @@ import type { Caps } from "./terminal.js";
 interface Props {
   caps: Caps;
   width: number;
-  modelId: string;
   tools: string[];
   ghAuth: string;
 }
 
-export function Banner({ caps, width, modelId, tools, ghAuth }: Props) {
+export function Banner({ caps, width, tools, ghAuth }: Props) {
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
 
-  // <52 cols: flat "DOM" plus the model id.
+  // The active model is intentionally omitted here: the banner lives in <Static>
+  // and can't repaint after a mid-session /model switch, so it would go stale.
+  // The status bar (which reads live session state) is the single source of truth.
+
+  // <52 cols: flat "DOM".
   if (width < 52) {
     return (
       <Box>
         <Text color={col(C.cyan)} bold>
           DOM
         </Text>
-        <Text> </Text>
-        <Text color={col(C.model)}>{modelId}</Text>
       </Box>
     );
   }
@@ -47,10 +48,6 @@ export function Banner({ caps, width, modelId, tools, ghAuth }: Props) {
         <Text color={col(C.dim)}>{TAGLINE.replaceAll("·", g.mid)}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
-        <Row label="model">
-          <Text color={col(C.model)}>{modelId}</Text>
-          <Text color={col(C.dim)}> {g.mid} openrouter</Text>
-        </Row>
         <Row label="tools">
           <Text color={col(C.value)}>{tools.join(" ")}</Text>
         </Row>

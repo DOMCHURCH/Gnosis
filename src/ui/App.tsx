@@ -4,6 +4,7 @@ import path from "node:path";
 import { Box, Static, Text, useApp, useInput, useStdout } from "ink";
 import { Banner } from "./Banner.js";
 import { StatusBar } from "./StatusBar.js";
+import { TabBar } from "./TabBar.js";
 import { SPINNER_FRAMES, ASCII_SPINNER, pickWord, formatElapsed } from "./thinking.js";
 import { cycleApprovalMode } from "./modes.js";
 import { InputBar } from "./InputBar.js";
@@ -12,10 +13,11 @@ import { Picker, type PickItem } from "./Picker.js";
 import { C } from "./theme.js";
 import type { Caps } from "./terminal.js";
 import { Engine, type Callbacks } from "../engine.js";
+import { TabsController, type Tab } from "../tabs.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
 import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
-import { fetchModels, type ModelEntry } from "../models.js";
+import { fetchModels, resolveModelQuery, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
@@ -33,7 +35,7 @@ type Log =
 type Overlay =
   | { type: "none" }
   | { type: "permission"; preview: Preview }
-  | { type: "model"; items: PickItem[] }
+  | { type: "model"; items: PickItem[]; initial?: string }
   | { type: "file"; items: PickItem[]; prefix: string }
   | { type: "session"; items: PickItem[] };
 
@@ -51,6 +53,8 @@ const HELP = [
   "commands:",
   "  /model [id]   switch model (no arg opens the picker)",
   "  /mode <ask|plan|yolo>   change permission mode",
+  "  /new [name] [purpose]   open a new tab (its own history + engine)",
+  "  /tabs         list open tabs    /tab <n|name>  switch tabs    /close  close the active tab",
   "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
@@ -60,9 +64,9 @@ const HELP = [
   "  /vault [set <path>]   switch working root to your Obsidian vault",
   "  /undo         revert dom's most recent file edit",
   "  /checkpoints  list recent dom checkpoints",
-  "  /help         this help",
-  "  /exit         quit",
-  "  @             insert a file path    !cmd  run a shell command",
+  "  /help         this help    /exit  quit",
+  "  @  insert a file path    !cmd  run a shell command",
+  "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
 ].join("\n");
 
 // Per-1M-token price, from OpenRouter's per-token figures.
@@ -104,7 +108,7 @@ function useTermWidth(fallback: number): number {
   return cols;
 }
 
-export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }: Props) {
+export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings }: Props) {
   const { exit } = useApp();
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
@@ -117,33 +121,76 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
   const idRef = useRef(1);
   const nextId = () => idRef.current++;
 
-  const [log, setLog] = useState<Log[]>(() => {
+  // The single append-only transcript stream rendered in <Static>. Each tab keeps
+  // its OWN buffer of lines; only the active tab's lines are flushed here as they
+  // arrive. Switching tabs flushes that tab's un-shown backlog (see switchToTab).
+  const [screen, setScreen] = useState<Log[]>(() => {
     const seed: Log[] = [{ id: 0, kind: "banner" }];
     for (const w of skillWarnings) seed.push({ id: idRef.current++, kind: "system", text: `! ${w}` });
     return seed;
   });
+  // Per-tab transcript buffers + how many of each are already on screen.
+  const buffers = useRef<Map<number, { log: Log[]; shown: number }>>(new Map());
+  const tabBuf = (id: number) => {
+    let b = buffers.current.get(id);
+    if (!b) {
+      b = { log: [], shown: 0 };
+      buffers.current.set(id, b);
+    }
+    return b;
+  };
+
   const [input, setInput] = useState("");
-  // The transient in-progress line (the streaming owner commits finished lines
-  // straight to <Static>; this holds only the line still being typed).
+  // The transient in-progress line (streaming owner commits finished lines to the
+  // transcript; this holds only the line still being typed — active tab only).
   const [pending, setPending] = useState("");
   const [liveTool, setLiveTool] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // Interactive boot opens the model picker before the first message, defaulted
-  // to the config model (engine.modelId). Uses the catalog already fetched at
-  // boot, so there's no async gap. Esc keeps the default; select switches.
-  const [overlay, setOverlay] = useState<Overlay>({ type: "model", items: buildModelItems(engine.models) });
+  const [overlay, setOverlay] = useState<Overlay>({ type: "model", items: buildModelItems(rootEngine.models) });
   const [repo, setRepo] = useState(initialRepo);
-  // The working root all tools resolve against (== process.cwd()); /vault moves it.
-  const [root, setRoot] = useState(engine.cwd);
+  // The working root (== process.cwd()) of the active tab; /vault and tab switches move it.
+  const [root, setRoot] = useState(rootEngine.cwd);
+  // Bumped by the tabs controller (onChange) so busy/badge/tab-bar state repaints.
+  const [, setTabTick] = useState(0);
 
   const busyRef = useRef(false);
   const inputRef = useRef("");
   inputRef.current = input;
   const overlayRef = useRef<Overlay>(overlay);
   overlayRef.current = overlay;
+  // The live permission request: its resolver, preview, and which tab owns it (so a
+  // switch can re-park an unanswered prompt onto its tab instead of dropping it).
   const permResolveRef = useRef<((a: PermissionAnswer) => void) | null>(null);
+  const permPreviewRef = useRef<Preview | null>(null);
+  const permOwnerRef = useRef<number | null>(null);
   // Latest fetched catalog, for pricing lookups when confirming a switch.
-  const modelsRef = useRef<ModelEntry[]>(engine.models);
+  const modelsRef = useRef<ModelEntry[]>(rootEngine.models);
+  // Indirection so the controller (built once) always calls the latest closures.
+  const executorRef = useRef<(tab: Tab, text: string) => Promise<void>>(async () => {});
+  const onChangeRef = useRef<() => void>(() => {});
+
+  // The tabs controller owns every tab's Engine, the active tab, and inter-agent
+  // messaging with loop prevention. Built once; the root engine becomes tab 1.
+  const controllerRef = useRef<TabsController | null>(null);
+  if (!controllerRef.current) {
+    const rootName = path.basename(rootEngine.cwd) || "main";
+    controllerRef.current = new TabsController(
+      rootEngine,
+      rootName,
+      (tab, text) => executorRef.current(tab, text),
+      () => onChangeRef.current(),
+    );
+    tabBuf(controllerRef.current.active().id);
+  }
+  const controller = controllerRef.current;
+
+  // Everything below acts on the ACTIVE tab's engine — commands, status bar, and
+  // the busy/spinner all follow focus.
+  const activeTab = controller.active();
+  const engine = activeTab.engine;
+  const busy = activeTab.busy;
+  busyRef.current = busy;
+
+  const isActive = (tab: Tab) => controller.active().id === tab.id;
 
   // Thinking spinner: a random playful word + live timer for the current turn.
   const frames = caps.legacy ? ASCII_SPINNER : SPINNER_FRAMES;
@@ -155,7 +202,6 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
 
   // Ctrl+C is a two-step exit. The first press aborts the turn / clears state and
   // arms a 2-second window; a second press inside that window hard-exits (130).
-  // This guarantees a way out even if a turn is wedged and won't abort cleanly.
   const [ctrlCArmed, setCtrlCArmed] = useState(false);
   const ctrlCArmedRef = useRef(false);
   ctrlCArmedRef.current = ctrlCArmed;
@@ -174,8 +220,6 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
 
   const hardExit = () => {
     if (ctrlCTimer.current) clearTimeout(ctrlCTimer.current);
-    // Restore cooked input so the shell isn't left in raw mode, then exit now —
-    // deliberately skipping Ink's async teardown, which is the point of the hatch.
     try {
       process.stdin.setRawMode?.(false);
     } catch {
@@ -186,9 +230,17 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
 
   useEffect(() => () => clearTimeout(ctrlCTimer.current ?? undefined), []);
 
+  const refreshRepo = () => {
+    getRepoInfo(process.cwd()).then(setRepo).catch(() => {});
+  };
+
   useEffect(() => {
     if (!busy) {
       setThink(null);
+      // The active tab's turn ended: drop the transient region + refresh repo.
+      setPending("");
+      setLiveTool(null);
+      refreshRepo();
       return;
     }
     const start = Date.now();
@@ -202,12 +254,63 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
     return () => clearInterval(timer);
   }, [busy, frames.length]);
 
-  const pushLog = (item: DistributiveOmit<Log, "id">) => setLog((l) => [...l, { id: nextId(), ...item } as Log]);
-  const sysLog = (text: string) => pushLog({ kind: "system", text });
+  // --- transcript emission -------------------------------------------------
 
-  const refreshRepo = () => {
-    getRepoInfo(process.cwd()).then(setRepo).catch(() => {});
+  // Append one line to a tab's buffer. The active tab's lines also flush to the
+  // on-screen transcript immediately; a background tab's lines stay buffered and
+  // only badge the tab bar — they surface when the user switches to that tab.
+  const emitToTab = (tab: Tab, item: DistributiveOmit<Log, "id">) => {
+    const entry = { id: nextId(), ...item } as Log;
+    const buf = tabBuf(tab.id);
+    buf.log.push(entry);
+    if (isActive(tab)) {
+      buf.shown = buf.log.length;
+      setScreen((s) => [...s, entry]);
+    } else {
+      controller.markOutput(tab);
+    }
   };
+  const sysLog = (text: string) => emitToTab(controller.active(), { kind: "system", text });
+
+  // Callbacks for a turn running in `tab`. They check liveness on every call (a
+  // tab can be switched to/from mid-turn), so a background turn buffers + badges
+  // and, once foregrounded, streams to the screen.
+  const buildCb = (tab: Tab): Callbacks => ({
+    onLine: (line) =>
+      emitToTab(tab, line.kind === "rule" ? { kind: "rule", lang: line.lang } : { kind: "line", text: line.text }),
+    onPending: (text) => {
+      if (isActive(tab)) setPending(text);
+    },
+    onAssistant: () => {},
+    onToolStart: (call, args) => {
+      if (!isActive(tab)) return;
+      const a = JSON.stringify(args);
+      setLiveTool(`${call.name} ${a.length > 100 ? a.slice(0, 100) + "…" : a}`);
+    },
+    onToolResult: (call, result) => {
+      if (isActive(tab)) setLiveTool(null);
+      if (result.aborted) {
+        emitToTab(tab, { kind: "system", text: `⎿ ${call.name} aborted` });
+        return;
+      }
+      const summary = result.output.split("\n").slice(0, 6).join("\n");
+      emitToTab(tab, { kind: "tool", name: call.name, ok: !result.isError, summary });
+    },
+    onSystem: (text) => emitToTab(tab, { kind: "system", text }),
+    requestPermission: (preview) =>
+      new Promise<PermissionAnswer>((resolve) => {
+        // Active tab: prompt inline. Background tab: park it (badge amber, keep
+        // focus); it surfaces when the user switches over.
+        if (isActive(tab)) {
+          permResolveRef.current = resolve;
+          permPreviewRef.current = preview;
+          permOwnerRef.current = tab.id;
+          setOverlay({ type: "permission", preview });
+        } else {
+          controller.setPendingPermission(tab, { preview, resolve });
+        }
+      }),
+  });
 
   const stubCb = (): Callbacks => ({
     onLine: () => {},
@@ -219,65 +322,109 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
     requestPermission: async () => "no",
   });
 
-  const buildCb = (): Callbacks => ({
-    // Each finalized line commits straight to the <Static> transcript — that's the
-    // single owner. The line still being typed lives only in `pending`, which is
-    // at most one wrapped row tall, so Ink can always erase it.
-    onLine: (line) =>
-      pushLog(line.kind === "rule" ? { kind: "rule", lang: line.lang } : { kind: "line", text: line.text }),
-    onPending: (text) => setPending(text),
-    // Lines are already in the transcript; nothing more to render for the text.
-    onAssistant: () => {},
-    onToolStart: (call, args) => {
-      const a = JSON.stringify(args);
-      setLiveTool(`${call.name} ${a.length > 100 ? a.slice(0, 100) + "…" : a}`);
-    },
-    onToolResult: (call, result) => {
-      setLiveTool(null);
-      // A cancelled tool is aborted, not failed — render it dim, not as a red ✗.
-      if (result.aborted) {
-        pushLog({ kind: "system", text: `⎿ ${call.name} aborted` });
-        return;
-      }
-      const summary = result.output.split("\n").slice(0, 6).join("\n");
-      pushLog({ kind: "tool", name: call.name, ok: !result.isError, summary });
-    },
-    onSystem: sysLog,
-    requestPermission: (preview) =>
-      new Promise<PermissionAnswer>((resolve) => {
-        permResolveRef.current = resolve;
-        setOverlay({ type: "permission", preview });
-      }),
-  });
+  // The controller runs a tab's turn through here (engine.run + per-tab callbacks).
+  executorRef.current = (tab, text) => tab.engine.run(text, buildCb(tab));
+  onChangeRef.current = () => setTabTick((t) => t + 1);
 
   const resolvePerm = (ans: PermissionAnswer) => {
     const r = permResolveRef.current;
     permResolveRef.current = null;
+    permPreviewRef.current = null;
+    permOwnerRef.current = null;
     setOverlay({ type: "none" });
     r?.(ans);
   };
 
-  const runTurn = async (fn: (cb: Callbacks) => Promise<void>) => {
-    setBusy(true);
-    busyRef.current = true;
-    setPending("");
-    try {
-      await fn(buildCb());
-    } finally {
-      setBusy(false);
-      busyRef.current = false;
-      // Clear the transient region. On abort the finalized lines already committed
-      // to <Static> stay; only the unfinished partial (which lived here) is dropped.
-      setPending("");
-      setLiveTool(null);
-      refreshRepo();
+  // --- tab switching -------------------------------------------------------
+
+  // Bring `id` to the foreground: re-park any unanswered prompt on the outgoing
+  // tab, chdir to the target, and flush the target's un-shown backlog (headed by
+  // a divider) into the transcript. If the target parked a permission while in the
+  // background, surface it now.
+  const switchToTab = (id: number) => {
+    const cur = controller.active();
+    if (id === cur.id || !controller.byId(id)) return;
+
+    if (overlayRef.current.type === "permission" && permResolveRef.current && permOwnerRef.current === cur.id) {
+      controller.setPendingPermission(cur, { preview: permPreviewRef.current!, resolve: permResolveRef.current });
+      permResolveRef.current = null;
+      permPreviewRef.current = null;
+      permOwnerRef.current = null;
     }
+    if (overlayRef.current.type !== "none") setOverlay({ type: "none" });
+    setPending("");
+    setLiveTool(null);
+
+    controller.setActive(id); // clears the target badge + chdirs to its cwd
+    const tab = controller.byId(id)!;
+    setRoot(tab.engine.cwd);
+    refreshRepo();
+
+    const buf = tabBuf(id);
+    const tail = buf.log.slice(buf.shown);
+    const divider: Log = { id: nextId(), kind: "system", text: `${g.h.repeat(2)} ${tab.name} ${g.h.repeat(2)}` };
+    setScreen((s) => [...s, divider, ...tail]);
+    buf.shown = buf.log.length;
+
+    const pp = controller.takePendingPermission(tab);
+    if (pp) {
+      permResolveRef.current = pp.resolve;
+      permPreviewRef.current = pp.preview;
+      permOwnerRef.current = tab.id;
+      setOverlay({ type: "permission", preview: pp.preview });
+    }
+  };
+  const switchToIndex = (pos: number) => {
+    const t = controller.tabs[pos - 1];
+    if (t) switchToTab(t.id);
+  };
+
+  const newTab = (name: string | undefined, purpose: string) => {
+    const tab = controller.create(name, purpose);
+    tabBuf(tab.id);
+    switchToTab(tab.id);
+    sysLog(`new tab ${g.chevron} ${tab.name}${purpose ? ` — ${purpose}` : ""}`);
+  };
+
+  const closeActiveTab = () => {
+    if (controller.tabs.length <= 1) {
+      sysLog("can't close the last tab");
+      return;
+    }
+    const closing = controller.active();
+    const now = controller.close(closing.id); // aborts it + resolves any parked prompt
+    buffers.current.delete(closing.id);
+    setPending("");
+    setLiveTool(null);
+    setOverlay({ type: "none" });
+    permResolveRef.current = null;
+    permPreviewRef.current = null;
+    permOwnerRef.current = null;
+    setRoot(now.engine.cwd);
+    refreshRepo();
+    const buf = tabBuf(now.id);
+    const tail = buf.log.slice(buf.shown);
+    const divider: Log = { id: nextId(), kind: "system", text: `${g.h.repeat(2)} ${now.name} ${g.h.repeat(2)} (closed ${closing.name})` };
+    setScreen((s) => [...s, divider, ...tail]);
+    buf.shown = buf.log.length;
+  };
+
+  const listTabs = () => {
+    const rows = controller.tabs.map((t, i) => {
+      const flags = [
+        t.id === controller.activeId ? "active" : null,
+        t.busy ? "busy" : null,
+        t.badge !== "none" ? t.badge : null,
+      ].filter(Boolean);
+      return `  ${i + 1}. ${t.name}${flags.length ? ` [${flags.join(", ")}]` : ""}${t.purpose ? `  —  ${t.purpose}` : ""}`;
+    });
+    sysLog(["tabs:", ...rows].join("\n"));
   };
 
   // --- command handling ----------------------------------------------------
 
-  // Move the working root. Every tool resolves paths against process.cwd(), so a
-  // chdir is all that's needed — no tool changes.
+  // Move the active tab's working root. Every tool resolves paths against
+  // process.cwd(), so a chdir is all that's needed — no tool changes.
   const switchRoot = (abs: string) => {
     try {
       process.chdir(abs);
@@ -285,6 +432,7 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
       sysLog(`vault: cannot switch to ${abs} — ${(e as Error).message}`);
       return;
     }
+    engine.cwd = abs; // the active tab remembers its root across switches
     setRoot(abs);
     getRepoInfo(abs).then(setRepo).catch(() => {});
     sysLog(`vault ${g.chevron} ${abs}`);
@@ -348,20 +496,17 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
     sysLog(`model ${g.chevron} ${id}${m ? `  ${priceLabel(m)}` : ""}`);
   };
 
-  // /model <substring>: one match switches, several open the filtered picker,
-  // none reports no match.
+  // /model <arg>: an exact full id switches immediately; anything fuzzier opens
+  // the picker filtered to the matches with the best one preselected, so the full
+  // resolved id is shown and confirmed before switching (never a silent guess).
   const selectModelByArg = async (arg: string) => {
     const models = await fetchModels();
     modelsRef.current = models;
-    const q = arg.toLowerCase();
-    const exact = models.find((m) => m.id.toLowerCase() === q);
-    if (exact) return applyModel(exact.id);
-    const matches = models.filter(
-      (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
-    );
-    if (matches.length === 1) applyModel(matches[0]!.id);
-    else if (matches.length > 1) setOverlay({ type: "model", items: buildModelItems(matches) });
-    else sysLog(`no model matches "${arg}"`);
+    const res = resolveModelQuery(models, arg);
+    if (res.kind === "exact") return applyModel(res.id);
+    if (res.kind === "none") return sysLog(`no model matches "${arg}"`);
+    const matched = models.filter((m) => res.ids.includes(m.id));
+    setOverlay({ type: "model", items: buildModelItems(matched), initial: res.ids[0] });
   };
 
   const setModeCmd = (arg: string) => {
@@ -434,6 +579,32 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
       case "tools":
         sysLog("tools: " + TOOL_NAMES.join(", "));
         break;
+      case "new":
+        newTab(parts[1], parts.slice(2).join(" "));
+        break;
+      case "tabs":
+        listTabs();
+        break;
+      case "tab": {
+        if (!arg) {
+          sysLog("usage: /tab <number|name>");
+          break;
+        }
+        const n = Number(arg);
+        if (Number.isInteger(n) && n > 0) {
+          const t = controller.tabs[n - 1];
+          if (t) switchToTab(t.id);
+          else sysLog(`no tab ${n}`);
+        } else {
+          const t = controller.byName(arg);
+          if (t) switchToTab(t.id);
+          else sysLog(`no tab named "${arg}"`);
+        }
+        break;
+      }
+      case "close":
+        closeActiveTab();
+        break;
       case "skills": {
         const sk = engine.skills;
         if (!sk.length) {
@@ -451,10 +622,14 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
           `${engine.cost.promptTokens} in / ${engine.cost.completionTokens} out tokens · $${engine.cost.usd.toFixed(4)}`,
         );
         break;
-      case "clear":
+      case "clear": {
         engine.clear();
-        setLog([{ id: nextId(), kind: "banner" }, { id: nextId(), kind: "system", text: "conversation cleared" }]);
+        const buf = tabBuf(controller.active().id);
+        buf.log = [];
+        buf.shown = 0;
+        setScreen((s) => [...s, { id: nextId(), kind: "system", text: "conversation cleared" }]);
         break;
+      }
       case "compact":
         engine.forceCompact(stubCb());
         break;
@@ -496,15 +671,17 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
       const command = v.slice(1).trim();
       if (!command) return;
       sysLog(`! ${command}`);
-      void runTurn((cb) => engine.runBashDirect(command, cb));
+      const tab = controller.active();
+      controller.runForeground(tab, () => tab.engine.runBashDirect(command, buildCb(tab)));
       return;
     }
     if (v.startsWith("/")) {
       handleCommand(v.trim());
       return;
     }
-    pushLog({ kind: "user", text: v });
-    void runTurn((cb) => engine.run(v, cb));
+    const tab = controller.active();
+    emitToTab(tab, { kind: "user", text: v });
+    controller.submitUser(tab, v);
   };
 
   const handleChange = (v: string) => {
@@ -528,8 +705,7 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
         armCtrlCExit();
         return;
       }
-      // A turn (or a running tool) is in flight: abort it and kill the tool, then
-      // return to the prompt. The abort signal now reaches the spawned process.
+      // A turn (or a running tool) is in flight in the active tab: abort it.
       if (busyRef.current) {
         engine.abort();
         armCtrlCExit();
@@ -550,6 +726,13 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
       armCtrlCExit();
       return;
     }
+    // Ctrl+1..9 switches tabs — always available, even while a turn is running so
+    // you can leave a busy tab. Terminals that don't emit distinct Ctrl+digit
+    // codes can use /tab <n> instead.
+    if (key.ctrl && /^[1-9]$/.test(inp)) {
+      switchToIndex(Number(inp));
+      return;
+    }
     // shift+tab cycles the approval mode when the input bar is active.
     if (key.tab && key.shift && overlayRef.current.type === "none" && !busyRef.current) {
       cycleMode();
@@ -561,7 +744,7 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
   const renderLog = (item: Log): ReactNode => {
     switch (item.kind) {
       case "banner":
-        return <Banner caps={caps} width={width} modelId={engine.modelId} tools={TOOL_NAMES} ghAuth={ghAuth} />;
+        return <Banner caps={caps} width={width} tools={TOOL_NAMES} ghAuth={ghAuth} />;
       case "user":
         return (
           <Box>
@@ -606,7 +789,7 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
           width={inner}
           title="select model"
           items={overlay.items}
-          initialValue={engine.modelId}
+          initialValue={overlay.initial ?? engine.modelId}
           onSelect={(v) => {
             setOverlay({ type: "none" });
             applyModel(v);
@@ -646,8 +829,8 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
               return;
             }
             engine.adoptSession(s);
-            setLog([
-              { id: nextId(), kind: "banner" },
+            setScreen((prev) => [
+              ...prev,
               { id: nextId(), kind: "system", text: `resumed ${id} (${s.messages.length} messages)` },
             ]);
             refreshRepo();
@@ -658,9 +841,16 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
     );
   };
 
+  const tabInfos = controller.tabs.map((t) => ({
+    name: t.name,
+    active: t.id === controller.activeId,
+    badge: t.badge,
+    busy: t.busy,
+  }));
+
   return (
     <Box flexDirection="column">
-      <Static items={log}>{(item) => <Box key={item.id}>{renderLog(item)}</Box>}</Static>
+      <Static items={screen}>{(item) => <Box key={item.id}>{renderLog(item)}</Box>}</Static>
 
       {pending ? (
         <Box width={inner}>
@@ -677,7 +867,15 @@ export function App({ engine, caps, width, ghAuth, initialRepo, skillWarnings }:
         </Box>
       ) : null}
 
-      <Box marginTop={1}>
+      {/* Tab bar: one row above the status bar, bounded to cols-2. Only shown once
+          a second tab exists. */}
+      {controller.tabs.length > 1 ? (
+        <Box marginTop={1} width={inner}>
+          <TabBar caps={caps} width={inner} tabs={tabInfos} />
+        </Box>
+      ) : null}
+
+      <Box marginTop={controller.tabs.length > 1 ? 0 : 1}>
         <StatusBar
           caps={caps}
           width={inner}

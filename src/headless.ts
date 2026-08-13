@@ -20,6 +20,10 @@ function previewText(p: Preview): string {
     const warn = p.warning ? `\n${red("⚠ " + p.warning)}` : "";
     return `${p.dangerous ? red("⚠ ") : ""}$ ${p.command}\n${dim("in " + p.cwd)}${warn}`;
   }
+  if (p.kind === "http") {
+    const warn = p.warning ? `\n${red("⚠ " + p.warning)}` : "";
+    return `${p.dangerous ? red("⚠ ") : ""}${p.method} ${p.url}${warn}`;
+  }
   // diff — headless never prompts for file edits, but render for type completeness.
   const body = p.lines
     .map((l) => (l.kind === "add" ? green(l.text) : l.kind === "del" ? red(l.text) : l.text))
