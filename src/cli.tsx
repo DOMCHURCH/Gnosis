@@ -42,7 +42,7 @@ async function main() {
     }
     throw e;
   }
-  const { engine, resumed, skillWarnings } = bootResult;
+  const { engine, resumed, skillWarnings, defaultModel } = bootResult;
 
   // The TUI needs an interactive stdin (raw mode). Fall back to headless otherwise.
   if (flags.headless || !process.stdin.isTTY || !process.stdout.isTTY) {
@@ -70,6 +70,7 @@ async function main() {
       ghAuth={ghAuth}
       initialRepo={initialRepo}
       skillWarnings={skillWarnings}
+      defaultModel={defaultModel}
     />,
     { exitOnCtrlC: false },
   );

@@ -12,6 +12,8 @@ interface Props {
   branch: string | null;
   dirtyCount: number;
   modelName: string;
+  /** The live session model differs from the configured default (a dim `*` marker). */
+  divergent?: boolean;
   contextWindow: number;
   /** Running token estimate (engine.contextTokens) — same numerator as compaction. */
   tokens: number;
@@ -42,7 +44,7 @@ export function meterColor(pct: number): string {
   return C.removed;
 }
 
-export function StatusBar({ caps, width, cwd, branch, dirtyCount, modelName, contextWindow, tokens, cost }: Props) {
+export function StatusBar({ caps, width, cwd, branch, dirtyCount, modelName, divergent, contextWindow, tokens, cost }: Props) {
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
 
@@ -64,6 +66,8 @@ export function StatusBar({ caps, width, cwd, branch, dirtyCount, modelName, con
   const barOff = g.barEmpty.repeat(10 - filled);
   const pctStr = ` ${pct}%`;
   const gap2 = "  ";
+  // A dim `*` after the model id when the session model differs from the default.
+  const mark = divergent ? " *" : "";
 
   const fixed =
     cwdStr.length +
@@ -74,7 +78,8 @@ export function StatusBar({ caps, width, cwd, branch, dirtyCount, modelName, con
     barOff.length +
     pctStr.length +
     gap2.length +
-    costStr.length;
+    costStr.length +
+    mark.length;
 
   let model = modelName;
   const avail = width - fixed;
@@ -92,6 +97,7 @@ export function StatusBar({ caps, width, cwd, branch, dirtyCount, modelName, con
       )}
       <Text color={col(C.dim)} wrap="truncate">{gap}</Text>
       <Text color={col(C.model)} wrap="truncate">{model}</Text>
+      {mark && <Text color={col(C.dim)} wrap="truncate">{mark}</Text>}
       <Text color={col(C.dim)} wrap="truncate">{ctxStr}</Text>
       <Text color={col(barColor)} wrap="truncate">{barOn}</Text>
       <Text color={col(C.dim)} wrap="truncate">{barOff}</Text>

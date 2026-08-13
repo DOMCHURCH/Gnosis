@@ -81,6 +81,9 @@ export interface Boot {
   models: ModelInfo[];
   config: Config;
   resumed: boolean;
+  /** The configured default model (config.model ?? built-in default) — the status
+   * bar marks divergence when the live session model differs from this. */
+  defaultModel: string;
   /** Non-fatal skill-loading warnings (malformed SKILL.md, cap hit, ...). */
   skillWarnings: string[];
 }
@@ -139,5 +142,5 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
     void ensurePublicApisCache().catch(() => {});
   }
 
-  return { engine, models, config, resumed, skillWarnings };
+  return { engine, models, config, resumed, defaultModel, skillWarnings };
 }

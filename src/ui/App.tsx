@@ -35,7 +35,7 @@ type Log =
 type Overlay =
   | { type: "none" }
   | { type: "permission"; preview: Preview }
-  | { type: "model"; items: PickItem[]; initial?: string }
+  | { type: "model"; items: PickItem[]; initial?: string; save?: boolean }
   | { type: "file"; items: PickItem[]; prefix: string }
   | { type: "session"; items: PickItem[] };
 
@@ -47,6 +47,9 @@ interface Props {
   initialRepo: { branch: string | null; dirtyCount: number };
   /** Non-fatal skill-loading warnings, shown dim at the top of the transcript. */
   skillWarnings: string[];
+  /** Configured default model (config.model ?? built-in). The status bar marks a
+   * divergence when the live session model differs from this. */
+  defaultModel: string;
 }
 
 const HELP = [
@@ -108,7 +111,7 @@ function useTermWidth(fallback: number): number {
   return cols;
 }
 
-export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings }: Props) {
+export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings, defaultModel }: Props) {
   const { exit } = useApp();
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
@@ -145,7 +148,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // transcript; this holds only the line still being typed — active tab only).
   const [pending, setPending] = useState("");
   const [liveTool, setLiveTool] = useState<string | null>(null);
-  const [overlay, setOverlay] = useState<Overlay>({ type: "model", items: buildModelItems(rootEngine.models) });
+  // Boot goes straight to the prompt on the configured default model — no startup
+  // picker. `/model` opens the picker on demand.
+  const [overlay, setOverlay] = useState<Overlay>({ type: "none" });
+  // The configured default model. `/model` switches the SESSION only; only an
+  // explicit save (`/model --save`, or ctrl+s in the picker) rewrites this + config.
+  // The status bar shows a dim `*` whenever the active model differs from it.
+  const [savedModel, setSavedModel] = useState(defaultModel);
   const [repo, setRepo] = useState(initialRepo);
   // The working root (== process.cwd()) of the active tab; /vault and tab switches move it.
   const [root, setRoot] = useState(rootEngine.cwd);
@@ -487,50 +496,59 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     sysLog(["checkpoints (newest first):", ...rows].join("\n"));
   };
 
-  const applyModel = async (id: string) => {
+  // Switch the ACTIVE tab's model. Session-scoped by default; `save` also writes
+  // it to config.model as the new default (the only path that touches config).
+  const applyModel = async (id: string, save = false) => {
     engine.setModel(id);
     const m = modelsRef.current.find((x) => x.id === id);
-    sysLog(`model ${g.chevron} ${id}${m ? `  ${priceLabel(m)}` : ""}`);
-    // Persist durably (awaited, not fire-and-forget). A hard exit right after a
-    // switch must not leave config.json and the session file disagreeing about the
-    // model. saveConfig read-merges, so apiKey and other keys are preserved.
-    await saveConfig({ model: id });
+    sysLog(`model ${g.chevron} ${id}${save ? "  (saved as default)" : ""}${m ? `  ${priceLabel(m)}` : ""}`);
+    // Persist the session durably (awaited) so a hard exit can't lose the switch.
     await engine.persist();
+    if (save) {
+      setSavedModel(id); // clears the status-bar divergence marker
+      await saveConfig({ model: id }); // saveConfig read-merges, preserving other keys
+    }
   };
 
   // /model <arg>: an exact full id switches immediately; anything fuzzier opens
   // the picker filtered to the matches with the best one preselected, so the full
   // resolved id is shown and confirmed before switching (never a silent guess).
-  const selectModelByArg = async (arg: string) => {
+  // `save` carries the "make this the default" intent through the picker.
+  const selectModelByArg = async (arg: string, save = false) => {
     const models = await fetchModels();
     modelsRef.current = models;
     const res = resolveModelQuery(models, arg);
-    if (res.kind === "exact") return applyModel(res.id);
+    if (res.kind === "exact") return applyModel(res.id, save);
     if (res.kind === "none") return sysLog(`no model matches "${arg}"`);
     const matched = models.filter((m) => res.ids.includes(m.id));
-    setOverlay({ type: "model", items: buildModelItems(matched), initial: res.ids[0] });
+    setOverlay({ type: "model", items: buildModelItems(matched), initial: res.ids[0], save });
   };
 
+  // /mode <ask|plan|yolo> [--save]. Session-scoped by default; `--save` also writes
+  // it to config.mode as the new default (the only path that touches config).
   const setModeCmd = async (arg: string) => {
-    if (arg !== "ask" && arg !== "plan" && arg !== "yolo") {
-      sysLog(`usage: /mode <ask|plan|yolo>`);
+    const toks = arg.split(/\s+/).filter(Boolean);
+    const save = toks.includes("--save") || toks.includes("-s");
+    const modeArg = toks.find((t) => t === "ask" || t === "plan" || t === "yolo");
+    if (!modeArg) {
+      sysLog(`usage: /mode <ask|plan|yolo> [--save]`);
       return;
     }
-    engine.setMode(arg as Mode);
+    engine.setMode(modeArg as Mode);
     setModeTick((t) => t + 1);
-    sysLog(`mode ${g.chevron} ${arg}`);
-    await saveConfig({ mode: arg as Mode });
+    sysLog(`mode ${g.chevron} ${modeArg}${save ? "  (saved as default)" : ""}`);
     await engine.persist();
+    if (save) await saveConfig({ mode: modeArg as Mode });
   };
 
-  // shift+tab cycles: normal → auto-accept edits → yolo → normal.
-  const cycleMode = async () => {
+  // shift+tab cycles: normal → auto-accept edits → yolo → normal. Session-scoped —
+  // it never writes config (use `/mode <m> --save` to change the default).
+  const cycleMode = () => {
     const next = cycleApprovalMode(engine.mode, engine.autoApproveEdits);
     engine.setMode(next.mode);
     engine.autoApproveEdits = next.autoApproveEdits;
     setModeTick((t) => t + 1);
-    await saveConfig({ mode: next.mode });
-    await engine.persist();
+    void engine.persist();
   };
 
   const openModelPicker = async () => {
@@ -638,10 +656,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "mode":
         void setModeCmd(arg);
         break;
-      case "model":
-        if (arg) void selectModelByArg(arg);
+      case "model": {
+        // /model               → picker (session switch; ctrl+s saves as default)
+        // /model <id>          → switch the session only
+        // /model --save [<id>] → switch AND save as default (no id: save current)
+        const save = parts[1] === "--save" || parts[1] === "-s";
+        const modelArg = save ? parts.slice(2).join(" ") : arg;
+        if (save && !modelArg) void applyModel(engine.modelId, true);
+        else if (modelArg) void selectModelByArg(modelArg, save);
         else void openModelPicker();
         break;
+      }
       case "resume":
         void openSessionPicker();
         break;
@@ -737,7 +762,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     // shift+tab cycles the approval mode when the input bar is active.
     if (key.tab && key.shift && overlayRef.current.type === "none" && !busyRef.current) {
-      void cycleMode();
+      cycleMode();
     }
   });
 
@@ -785,17 +810,23 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       return <Permission caps={caps} width={inner} preview={overlay.preview} onDecide={resolvePerm} />;
     }
     if (overlay.type === "model") {
+      const save = overlay.save ?? false;
       return (
         <Picker
           caps={caps}
           width={inner}
-          title="select model"
+          title={save ? "select model (will save as default)" : "select model"}
           items={overlay.items}
           initialValue={overlay.initial ?? engine.modelId}
           onSelect={(v) => {
             setOverlay({ type: "none" });
-            applyModel(v);
+            void applyModel(v, save);
           }}
+          onSave={(v) => {
+            setOverlay({ type: "none" });
+            void applyModel(v, true);
+          }}
+          saveHint="save as default"
           onCancel={() => setOverlay({ type: "none" })}
         />
       );
@@ -885,6 +916,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           branch={repo.branch}
           dirtyCount={repo.dirtyCount}
           modelName={engine.currentModel()?.name ?? engine.modelId}
+          divergent={engine.modelId !== savedModel}
           contextWindow={engine.contextLength()}
           tokens={engine.contextTokens()}
           cost={engine.cost.usd}

@@ -21,11 +21,14 @@ interface Props {
   onCancel: () => void;
   /** Row highlighted on open (by value); falls back to the first row. */
   initialValue?: string;
+  /** Optional secondary action on Ctrl+S (e.g. "save as default"); shown in the footer. */
+  onSave?: (value: string) => void;
+  saveHint?: string;
 }
 
 const VISIBLE = 12;
 
-export function Picker({ caps, width, title, items, onSelect, onCancel, initialValue }: Props) {
+export function Picker({ caps, width, title, items, onSelect, onCancel, initialValue, onSave, saveHint }: Props) {
   const col = (hex: string) => (caps.color ? hex : undefined);
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(() => {
@@ -47,6 +50,12 @@ export function Picker({ caps, width, title, items, onSelect, onCancel, initialV
 
   useInput((input, key) => {
     if (key.escape) return onCancel();
+    // Ctrl+S: the secondary "save" action on the highlighted row (0x13 = DC3).
+    if (onSave && key.ctrl && (input === "s" || input === "")) {
+      const chosen = filtered[clampedSel];
+      if (chosen) onSave(chosen.value);
+      return;
+    }
     if (key.return) {
       const chosen = filtered[clampedSel];
       if (chosen) onSelect(chosen.value);
@@ -100,6 +109,7 @@ export function Picker({ caps, width, title, items, onSelect, onCancel, initialV
       <Box marginTop={1}>
         <Text color={col(C.dim)} wrap="truncate">
           {filtered.length} match{filtered.length === 1 ? "" : "es"} {g.mid} ↑↓ select {g.mid} enter confirm {g.mid} esc cancel
+          {onSave ? ` ${g.mid} ctrl+s ${saveHint ?? "save"}` : ""}
         </Text>
       </Box>
     </Box>

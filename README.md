@@ -41,6 +41,8 @@ dom --headless "message"  # one-shot, no TUI
 
 `/model [id]` · `/mode <ask|plan|yolo>` · `/clear` · `/compact` · `/tools` · `/cost` · `/resume` · `/help` · `/exit`
 
+dom boots straight onto your configured default (`config.model`) — no startup picker. `/model` and `/mode` are **session-scoped**: they change the current session only, never `config.json`. The status bar shows a dim `*` next to the model whenever the session model differs from the saved default. To change the default, use `/model --save [<id>]` (or press `ctrl+s` in the `/model` picker) and `/mode <ask|plan|yolo> --save`. `-m/--model` at launch is likewise session-only.
+
 **Tabs** — each tab is its own engine (own history, model, cwd, permission mode). `/new [name] [purpose]` opens one, `/tabs` lists them, `/tab <n|name>` switches, `/close` closes the active tab. `Ctrl+1..9` is a best-effort switch alias for `/tab` (some terminals don't emit those chords, so `/tab` is the reliable path). Only the active tab renders; background tabs keep running and badge the tab bar when they produce output (`•`) or need approval (amber `●`) — an approval never steals focus, it waits until you switch over. A tab's model can hand work to another tab with the `send_message` / `list_tabs` tools (loop-guarded: max 3 hops, no immediate reply to the sender, 20 messages/session).
 
 `@` opens a file picker that inserts a path. `!<command>` runs a shell command directly (still gated). `Ctrl+C` aborts the in-flight request and returns to the prompt.
