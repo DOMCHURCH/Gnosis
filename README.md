@@ -39,7 +39,9 @@ dom --headless "message"  # one-shot, no TUI
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/clear` · `/compact` · `/tools` · `/cost` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/resume` · `/help` · `/exit`
+
+Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
 dom boots straight onto your configured default (`config.model`) — no startup picker. `/model` and `/mode` are **session-scoped**: they change the current session only, never `config.json`. The status bar shows a dim `*` next to the model whenever the session model differs from the saved default. To change the default, use `/model --save [<id>]` (or press `ctrl+s` in the `/model` picker) and `/mode <ask|plan|yolo> --save`. `-m/--model` at launch is likewise session-only.
 

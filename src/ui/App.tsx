@@ -11,6 +11,7 @@ import { InputBar } from "./InputBar.js";
 import { Permission } from "./Permission.js";
 import { Picker, type PickItem } from "./Picker.js";
 import { C } from "./theme.js";
+import { callParts, callLine, resultLines, resultBody } from "./toolrender.js";
 import type { Caps } from "./terminal.js";
 import { Engine, type Callbacks } from "../engine.js";
 import { TabsController, type Tab } from "../tabs.js";
@@ -29,7 +30,7 @@ type Log =
   | { id: number; kind: "user"; text: string }
   | { id: number; kind: "line"; text: string }
   | { id: number; kind: "rule"; lang: string }
-  | { id: number; kind: "tool"; name: string; ok: boolean; summary: string }
+  | { id: number; kind: "tool"; tool: string; primary: string; secondary: string; ok: boolean; body: string }
   | { id: number; kind: "system"; text: string };
 
 type Overlay =
@@ -63,6 +64,7 @@ const HELP = [
   "  /compact      summarize and shrink history",
   "  /tools        list available tools",
   "  /cost         show token + dollar usage",
+  "  /verbose      toggle full (unsummarized) tool output",
   "  /resume       resume a past session",
   "  /vault [set <path>]   switch working root to your Obsidian vault",
   "  /undo         revert dom's most recent file edit",
@@ -148,6 +150,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // transcript; this holds only the line still being typed — active tab only).
   const [pending, setPending] = useState("");
   const [liveTool, setLiveTool] = useState<string | null>(null);
+  // /verbose: show full (unsummarized) tool output for the rest of the session.
+  const [verbose, setVerbose] = useState(false);
+  const verboseRef = useRef(false);
+  verboseRef.current = verbose;
   // Boot goes straight to the prompt on the configured default model — no startup
   // picker. `/model` opens the picker on demand.
   const [overlay, setOverlay] = useState<Overlay>({ type: "none" });
@@ -293,8 +299,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     onAssistant: () => {},
     onToolStart: (call, args) => {
       if (!isActive(tab)) return;
-      const a = JSON.stringify(args);
-      setLiveTool(`${call.name} ${a.length > 100 ? a.slice(0, 100) + "…" : a}`);
+      const p = callParts(call.name, args);
+      setLiveTool(`${p.tool}(${p.primary}${p.secondary})`); // transient "running" indicator
     },
     onToolResult: (call, result) => {
       if (isActive(tab)) setLiveTool(null);
@@ -302,8 +308,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         emitToTab(tab, { kind: "system", text: `⎿ ${call.name} aborted` });
         return;
       }
-      const summary = result.output.split("\n").slice(0, 6).join("\n");
-      emitToTab(tab, { kind: "tool", name: call.name, ok: !result.isError, summary });
+      let args: any = {};
+      try { args = call.args ? JSON.parse(call.args) : {}; } catch { /* keep {} */ }
+      const { tool, primary, secondary } = callParts(call.name, args);
+      const body = resultBody({ isError: result.isError, verbose: verboseRef.current, name: call.name, args, output: result.output });
+      emitToTab(tab, { kind: "tool", tool, primary, secondary, ok: !result.isError, body });
     },
     onSystem: (text) => emitToTab(tab, { kind: "system", text }),
     requestPermission: (preview) =>
@@ -645,6 +654,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         );
         break;
       }
+      case "verbose": {
+        const nv = !verboseRef.current;
+        setVerbose(nv);
+        verboseRef.current = nv;
+        sysLog(`verbose ${nv ? "on — full tool output" : "off — summarized tool output"}`);
+        break;
+      }
       case "clear": {
         engine.clear();
         const buf = tabBuf(controller.active().id);
@@ -794,15 +810,19 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
             {item.lang ? " " + item.lang : ""}
           </Text>
         );
-      case "tool":
+      case "tool": {
+        const call = callLine({ tool: item.tool, primary: item.primary, secondary: item.secondary }, inner);
+        const body = resultLines(item.body).join("\n");
         return (
           <Box flexDirection="column">
-            <Text color={col(item.ok ? C.ok : C.danger)}>
-              {item.ok ? "✓" : "✗"} {item.name}
+            <Text wrap="truncate">
+              <Text color={col(item.ok ? C.ok : C.danger)}>{call.slice(0, 1)}</Text>
+              <Text color={col(C.value)}>{call.slice(1)}</Text>
             </Text>
-            <Text color={col(C.dim)}>{item.summary.replace(/\n/g, "\n  ").replace(/^/, "  ")}</Text>
+            {body ? <Text color={col(item.ok ? C.dim : C.danger)}>{body}</Text> : null}
           </Box>
         );
+      }
       case "system":
         return <Text color={col(C.dim)}>{item.text}</Text>;
     }
