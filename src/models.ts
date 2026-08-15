@@ -21,8 +21,10 @@ const FALLBACK_IDS = [
 export interface ModelEntry {
   id: string;
   name: string;
-  /** USD per token (OpenRouter reports these as strings; parsed to numbers here). */
-  pricing: { prompt: number; completion: number };
+  /** USD per token (OpenRouter reports these as strings; parsed to numbers here).
+   * cacheRead/cacheWrite are the prompt-cache prices; a non-zero cacheWrite means
+   * the provider accepts explicit cache_control breakpoints (Anthropic, Gemini). */
+  pricing: { prompt: number; completion: number; cacheRead: number; cacheWrite: number };
   context_length: number;
   /** OpenRouter capability flags; a tool-capable model includes "tools". */
   supported_parameters: string[];
@@ -65,6 +67,8 @@ function parse(raw: unknown): ModelEntry[] {
       pricing: {
         prompt: toNum(m.pricing?.prompt),
         completion: toNum(m.pricing?.completion),
+        cacheRead: toNum(m.pricing?.input_cache_read),
+        cacheWrite: toNum(m.pricing?.input_cache_write),
       },
       context_length: toNum(m.context_length ?? m.top_provider?.context_length),
       supported_parameters: supported,
@@ -85,7 +89,7 @@ function parseGroq(raw: unknown): ModelEntry[] {
     out.push({
       id: `${GROQ_PREFIX}${m.id}`,
       name: m.id,
-      pricing: { prompt: 0, completion: 0 },
+      pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 },
       context_length: toNum(m.context_window ?? m.context_length),
       supported_parameters: ["tools"],
     });
@@ -98,7 +102,7 @@ function fallback(): ModelEntry[] {
   return FALLBACK_IDS.map((id) => ({
     id,
     name: id,
-    pricing: { prompt: 0, completion: 0 },
+    pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 },
     context_length: 0,
     supported_parameters: ["tools"],
   }));

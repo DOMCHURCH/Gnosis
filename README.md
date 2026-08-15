@@ -57,6 +57,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 Set `"fallbackModel"` in `~/.dom/config.json` to survive a dead primary. When the active model returns a **404**, or an **upstream/shared-pool 429** (`limit_source: upstream_provider_shared_pool` — common on `:free` models, and not clearable by retrying our own request), dom switches to the fallback for the rest of the session, re-runs the turn on it, and prints a dim notice naming both models. An ordinary 429 from *your own* rate limit still retries in place with exponential backoff.
 
+## Prompt caching
+
+For models whose provider supports explicit cache breakpoints (Anthropic, Gemini — detected from the catalog's cache-write price), dom sends `cache_control` breakpoints that OpenRouter forwards to the provider: after the tool definitions, after the system prompt (skill descriptions included), and on the last message (moved forward each turn as history grows). Within a multi-step turn, iterations after the first read the cached prefix. Models without cache-breakpoint support (OpenAI's automatic caching, DeepSeek, Groq) receive **no** `cache_control` at all. `/cost` shows cached vs uncached input tokens so the saving is visible.
+
 ## Tools
 
 `read` · `write` · `edit` · `bash` · `glob` · `grep` · `http` — zod schemas are the source of truth; JSON Schema (for the API) and TS types are both derived from them. In multi-tab sessions the model additionally gets `send_message` / `list_tabs`.

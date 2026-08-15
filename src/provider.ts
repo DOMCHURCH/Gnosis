@@ -50,14 +50,18 @@ export interface ModelInfo {
   id: string;
   name: string;
   context_length: number;
-  /** USD per token. */
-  pricing: { prompt: number; completion: number };
+  /** USD per token. cacheWrite > 0 means the provider supports explicit
+   * cache_control breakpoints (Anthropic/Gemini via OpenRouter). */
+  pricing: { prompt: number; completion: number; cacheRead: number; cacheWrite: number };
   supported_parameters: string[];
 }
 
 export interface Usage {
   prompt_tokens: number;
   completion_tokens: number;
+  /** Of prompt_tokens, how many were served from cache (read) vs written to it. */
+  cached_tokens: number;
+  cache_write_tokens: number;
   /** OpenRouter's computed dollar cost for the request, when usage.include is set. */
   cost: number;
 }
@@ -151,6 +155,37 @@ function parseRetryDelay(retryAfter: string | null, body: string): number | null
   return null;
 }
 
+// --- prompt caching (OpenRouter → Anthropic cache_control) ------------------
+
+const EPHEMERAL = { type: "ephemeral" } as const;
+type CacheBlock = { type: "text"; text: string; cache_control: typeof EPHEMERAL };
+
+/**
+ * Add cache_control breakpoints that OpenRouter forwards to Anthropic: after the
+ * tool definitions (last tool), after the system prompt (last system message),
+ * and on the last message — which moves forward each turn as history grows.
+ * Anthropic caches the prefix [tools, system, messages] up to each breakpoint, so
+ * within a multi-step turn iterations 2+ read the growing prefix. Called ONLY for
+ * models that support it; a non-caching model gets the untouched wire format with
+ * no cache_control anywhere. Stays within Anthropic's 4-breakpoint limit (3 used).
+ */
+function withCacheBreakpoints(
+  messages: WireMessage[],
+  tools: ToolSchema[],
+): { messages: unknown[]; tools: unknown[] } {
+  const lastSystem = messages.reduce((acc, m, i) => (m.role === "system" ? i : acc), -1);
+  const last = messages.length - 1;
+  const outMessages = messages.map((m, i) => {
+    if ((i === lastSystem || i === last) && typeof m.content === "string" && m.content.length > 0) {
+      const content: CacheBlock[] = [{ type: "text", text: m.content, cache_control: EPHEMERAL }];
+      return { ...m, content };
+    }
+    return m;
+  });
+  const outTools = tools.map((t, i) => (i === tools.length - 1 ? { ...t, cache_control: EPHEMERAL } : t));
+  return { messages: outMessages, tools: outTools };
+}
+
 /**
  * Stream a chat completion. Text deltas are delivered via `onText` as they
  * arrive. Tool-call fragments are accumulated by index and their argument
@@ -163,6 +198,8 @@ export async function streamCompletion(
     messages: WireMessage[];
     tools: ToolSchema[];
     signal: AbortSignal;
+    /** Apply cache_control breakpoints (only for cache-capable models). */
+    cache?: boolean;
     /** Backoff tuning (defaults: 4 retries, 500ms base). Overridable for tests. */
     retry?: { maxRetries?: number; baseDelayMs?: number };
   },
@@ -170,10 +207,17 @@ export async function streamCompletion(
 ): Promise<CompletionResult> {
   const route = await resolveRoute(opts.model, opts.apiKey);
 
+  // cache_control is an OpenRouter→Anthropic feature; only apply for a cache-capable
+  // model on the OpenRouter route, and never send it to Groq.
+  const useCache = !!opts.cache && route.isOpenRouter;
+  const wire = useCache
+    ? withCacheBreakpoints(opts.messages, opts.tools)
+    : { messages: opts.messages as unknown[], tools: opts.tools as unknown[] };
+
   const body: Record<string, unknown> = {
     model: route.model,
-    messages: opts.messages,
-    tools: opts.tools.length ? opts.tools : undefined,
+    messages: wire.messages,
+    tools: wire.tools.length ? wire.tools : undefined,
     tool_choice: opts.tools.length ? "auto" : undefined,
     stream: true,
   };
@@ -230,7 +274,7 @@ export async function streamCompletion(
 
   let text = "";
   const toolAcc = new Map<number, ToolCallAccumulator>();
-  let usage: Usage = { prompt_tokens: 0, completion_tokens: 0, cost: 0 };
+  let usage: Usage = { prompt_tokens: 0, completion_tokens: 0, cached_tokens: 0, cache_write_tokens: 0, cost: 0 };
 
   const handleData = (payload: string) => {
     if (payload === "[DONE]") return;
@@ -241,9 +285,14 @@ export async function streamCompletion(
       return; // ignore unparseable keep-alive noise
     }
     if (chunk.usage) {
+      // Cached input tokens: OpenRouter normalizes Anthropic's cache_read/creation
+      // into OpenAI-style prompt_tokens_details (cached_tokens = reads).
+      const details = chunk.usage.prompt_tokens_details ?? {};
       usage = {
         prompt_tokens: Number(chunk.usage.prompt_tokens ?? 0) || 0,
         completion_tokens: Number(chunk.usage.completion_tokens ?? 0) || 0,
+        cached_tokens: Number(details.cached_tokens ?? 0) || 0,
+        cache_write_tokens: Number(details.cache_write_tokens ?? details.cache_creation_tokens ?? 0) || 0,
         cost: Number(chunk.usage.cost ?? 0) || 0,
       };
     }

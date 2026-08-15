@@ -104,12 +104,18 @@ export class Engine {
     this.mode = deps.session.mode;
     this.summary = deps.session.summary;
     this.cost = deps.session.cost;
+    this.cost.cachedPromptTokens ??= 0; // older sessions predate the cached-token field
   }
 
   // --- state helpers -------------------------------------------------------
 
   currentModel(): ModelInfo | undefined {
     return this.models.find((m) => m.id === this.modelId);
+  }
+  /** True when the active model's provider accepts explicit cache_control
+   * breakpoints (a non-zero cache-write price in the catalog). */
+  supportsCache(): boolean {
+    return (this.currentModel()?.pricing.cacheWrite ?? 0) > 0;
   }
   contextLength(): number {
     return this.currentModel()?.context_length ?? 0;
@@ -163,6 +169,7 @@ export class Engine {
     this.mode = s.mode;
     this.summary = s.summary;
     this.cost = s.cost;
+    this.cost.cachedPromptTokens ??= 0;
     this.lastPromptTokens = 0;
     this.repairs.clear();
     this.rejections.clear();
@@ -199,6 +206,7 @@ export class Engine {
 
   private applyUsage(usage: Usage): void {
     this.cost.promptTokens += usage.prompt_tokens;
+    this.cost.cachedPromptTokens += usage.cached_tokens;
     this.cost.completionTokens += usage.completion_tokens;
     let dollars = usage.cost;
     if (!(dollars > 0)) {
@@ -243,6 +251,9 @@ export class Engine {
               messages: wire,
               tools: toolDefinitions(),
               signal: this.abortController.signal,
+              // Recomputed each iteration so a mid-turn fallback to a non-caching
+              // model correctly stops sending cache_control.
+              cache: this.supportsCache(),
             },
             // Each completed line commits to the transcript as it finalizes; the
             // still-forming line is shown transiently via onPending. Only text

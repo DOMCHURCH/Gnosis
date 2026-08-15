@@ -22,6 +22,9 @@ export interface Config {
 
 export interface CostState {
   promptTokens: number;
+  /** Of promptTokens, how many were served from the provider's prompt cache
+   * (billed at a fraction of the input price). Uncached = promptTokens - this. */
+  cachedPromptTokens: number;
   completionTokens: number;
   usd: number;
 }
@@ -110,7 +113,7 @@ export function createSession(cwd: string, model: string, mode: Mode): SessionDa
     updatedAt: now,
     model,
     mode,
-    cost: { promptTokens: 0, completionTokens: 0, usd: 0 },
+    cost: { promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0, usd: 0 },
     summary: null,
     messages: [],
   };

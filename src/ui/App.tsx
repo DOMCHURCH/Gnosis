@@ -637,11 +637,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         sysLog([`skills (${sk.length} loaded):`, ...rows].join("\n"));
         break;
       }
-      case "cost":
+      case "cost": {
+        const cached = engine.cost.cachedPromptTokens ?? 0;
+        const uncached = Math.max(0, engine.cost.promptTokens - cached);
         sysLog(
-          `${engine.cost.promptTokens} in / ${engine.cost.completionTokens} out tokens · $${engine.cost.usd.toFixed(4)}`,
+          `in: ${uncached} uncached + ${cached} cached · out: ${engine.cost.completionTokens} · $${engine.cost.usd.toFixed(4)}`,
         );
         break;
+      }
       case "clear": {
         engine.clear();
         const buf = tabBuf(controller.active().id);

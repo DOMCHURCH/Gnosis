@@ -106,7 +106,12 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
     id: e.id,
     name: e.name,
     context_length: e.context_length,
-    pricing: { prompt: e.pricing.prompt, completion: e.pricing.completion },
+    pricing: {
+      prompt: e.pricing.prompt,
+      completion: e.pricing.completion,
+      cacheRead: e.pricing.cacheRead,
+      cacheWrite: e.pricing.cacheWrite,
+    },
     supported_parameters: e.supported_parameters,
   }));
 
