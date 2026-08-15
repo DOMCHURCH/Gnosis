@@ -98,18 +98,27 @@ function buildModelItems(models: ModelEntry[]): PickItem[] {
 // in the dynamic region is sized from this so borders/rows never reach the last
 // column — reaching it makes the terminal auto-wrap a line Ink counts as one
 // row, so its cursor-up erase comes up short and orphans a row per repaint.
-function useTermWidth(fallback: number): number {
+function useTermWidth(fallback: number, regionRowsRef: { current: number }): number {
   const { stdout } = useStdout();
   const [cols, setCols] = useState(stdout?.columns || fallback);
   useEffect(() => {
     if (!stdout) return;
-    const onResize = () => setCols(stdout.columns || fallback);
+    const onResize = () => {
+      // Clear the previous dynamic region BEFORE re-rendering at the new width.
+      // Ink erases by logical line count, which under-counts once the terminal
+      // reflows the old (wider) rows — stranding the old status bar + input box,
+      // one per intermediate width. eraseDown (\x1b[J) is width-agnostic: move the
+      // cursor up over the region's tracked height, then clear to end of screen.
+      // Falls back to a bare eraseDown when the height isn't known.
+      const rows = regionRowsRef.current;
+      stdout.write(rows > 0 ? `\r\x1b[${rows}A\x1b[J` : "\x1b[J");
+      setCols(stdout.columns || fallback);
+    };
     stdout.on("resize", onResize);
-    onResize();
     return () => {
       stdout.off("resize", onResize);
     };
-  }, [stdout, fallback]);
+  }, [stdout, fallback, regionRowsRef]);
   return cols;
 }
 
@@ -118,9 +127,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
 
+  // Rows the dynamic region occupied at the last render — read by the resize
+  // handler to erase the stale frame before re-rendering (see useTermWidth).
+  const regionRowsRef = useRef(0);
   // The width every dynamic-region element is bounded by: two columns short of
   // the live terminal width, so nothing can touch the last column and wrap.
-  const cols = useTermWidth(width);
+  const cols = useTermWidth(width, regionRowsRef);
   const inner = Math.max(24, cols - 2);
 
   const idRef = useRef(1);
@@ -903,6 +915,28 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     badge: t.badge,
     busy: t.busy,
   }));
+
+  // Height (logical rows) of the dynamic region below <Static>, mirroring the JSX
+  // below. Read by the resize handler to erase the stale frame. Exact for the
+  // steady region (status bar + input); overlays use an at-or-under estimate so
+  // the erase never reaches up into scrollback.
+  const boxedInput = caps.isTTY && !caps.legacy;
+  const overlayRows =
+    overlay.type === "permission"
+      ? 8
+      : overlay.type === "model" || overlay.type === "file" || overlay.type === "session"
+        ? Math.min(overlay.items.length, 12) + 4
+        : 0;
+  let regionRows = 0;
+  if (pending) regionRows += 1;
+  if (liveTool) regionRows += 1;
+  if (controller.tabs.length > 1) regionRows += 2; // marginTop + tab bar
+  regionRows += (controller.tabs.length > 1 ? 0 : 1) + 1; // status bar (+ its marginTop)
+  if (ctrlCArmed) regionRows += 1;
+  if (overlay.type !== "none") regionRows += 1 + overlayRows; // marginTop + overlay
+  else if (busy) regionRows += 1; // thinking spinner
+  else regionRows += boxedInput ? 4 : 2; // input box (3 border rows + 1 hint) or bare (2)
+  regionRowsRef.current = regionRows;
 
   return (
     <Box flexDirection="column">
