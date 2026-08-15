@@ -149,13 +149,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     for (const w of skillWarnings) seed.push({ id: idRef.current++, kind: "system", text: `! ${w}` });
     return seed;
   });
-  // Per-tab transcript buffers + how many of each are already on screen.
-  type Buf = { log: Log[]; shown: number };
+  // Per-tab transcript buffers: the tab's lines, how many are already on screen,
+  // and one-step blank-line deferral state (see emitToTab).
+  type Buf = { log: Log[]; shown: number; pendingBlank: boolean; lastKind: string };
   const buffers = useRef<Map<number, Buf>>(new Map());
   const tabBuf = (id: number): Buf => {
     let b = buffers.current.get(id);
     if (!b) {
-      b = { log: [], shown: 0 };
+      b = { log: [], shown: 0, pendingBlank: false, lastKind: "" };
       buffers.current.set(id, b);
     }
     return b;
@@ -312,18 +313,18 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const rebuildScreen = (tab: Tab) => {
     const buf = tabBuf(tab.id);
     buf.shown = buf.log.length;
+    buf.pendingBlank = false;
     const header: Log = { id: nextId(), kind: "system", text: `${g.h.repeat(2)} ${tab.name} ${g.h.repeat(2)}` };
     resetScreen([header, ...buf.log]);
   };
 
-  // Append one line to a tab's buffer. The active tab's lines also flush to the
-  // on-screen transcript immediately; a background tab's lines stay buffered and
-  // only badge the tab bar. In split view nothing flushes to <Static> — the grid
-  // cells read the buffers directly, so we just re-render.
-  const emitToTab = (tab: Tab, item: DistributiveOmit<Log, "id">) => {
-    const entry = { id: nextId(), ...item } as Log;
+  // Flush a finished entry to the tab's buffer and, for the active tab in single
+  // view, to the on-screen transcript. In split view nothing flushes to <Static>;
+  // the grid cells read the buffers directly, so we just re-render.
+  const commit = (tab: Tab, entry: Log) => {
     const buf = tabBuf(tab.id);
     buf.log.push(entry);
+    buf.lastKind = entry.kind;
     if (altRef.current) {
       if (!isActive(tab)) controller.markOutput(tab);
       setTabTick((t) => t + 1);
@@ -335,6 +336,24 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     } else {
       controller.markOutput(tab);
     }
+  };
+
+  // A background tab's lines stay buffered (badge only); the active tab's surface
+  // immediately. Blank lines are deferred one step: a paragraph break that would
+  // hug a tool block (the model's "\n\n" before its one-line finding, then the
+  // call) is dropped instead of wasting a row, and runs of blanks collapse to one.
+  // A blank only survives between two ordinary prose lines.
+  const emitToTab = (tab: Tab, item: DistributiveOmit<Log, "id">) => {
+    const buf = tabBuf(tab.id);
+    if (item.kind === "line" && item.text === "") {
+      buf.pendingBlank = true;
+      return;
+    }
+    if (buf.pendingBlank) {
+      buf.pendingBlank = false;
+      if (item.kind !== "tool" && buf.lastKind !== "tool") commit(tab, { id: nextId(), kind: "line", text: "" });
+    }
+    commit(tab, { id: nextId(), ...item } as Log);
   };
   const sysLog = (text: string) => emitToTab(controller.active(), { kind: "system", text });
 
@@ -736,6 +755,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         const buf = tabBuf(controller.active().id);
         buf.log = [];
         buf.shown = 0;
+        buf.pendingBlank = false;
+        buf.lastKind = "";
         altRef.current = false;
         setAlt(false);
         resetScreen([{ id: nextId(), kind: "system", text: "conversation cleared" }]);
@@ -1037,7 +1058,6 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // steady region (status bar + input); overlays / the split grid use an at-or-
   // under estimate so the erase never reaches up into scrollback.
   const tabbarShown = controller.tabs.length > 1 && !alt;
-  const boxedInput = caps.isTTY && !caps.legacy;
   const overlayRows =
     overlay.type === "permission"
       ? 8
@@ -1055,7 +1075,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   if (ctrlCArmed) regionRows += 1;
   if (overlay.type !== "none") regionRows += 1 + overlayRows; // marginTop + overlay
   else if (busy) regionRows += 1; // thinking spinner
-  else regionRows += boxedInput ? 4 : 2; // input box (3 border rows + 1 hint) or bare (2)
+  else regionRows += 1 + (input === "" ? 1 : 0); // input line + hint (hint only when empty)
   regionRowsRef.current = regionRows;
 
   return (

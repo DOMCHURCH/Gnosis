@@ -6,9 +6,15 @@ import { withWorkingDir } from "./system-prompt.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
-function limitPhrase(detail: string): string {
+export function limitPhrase(detail: string): string {
   const m = detail.match(/"message"\s*:\s*"([^"]+)"/);
-  return (m ? m[1]! : detail).replace(/\s+/g, " ").trim().slice(0, 160);
+  const msg = (m ? m[1]! : detail).replace(/\s+/g, " ").trim();
+  if (msg.length <= 160) return msg;
+  // Truncate near 160, but never mid-number: if a digit run straddles the cut,
+  // extend past it so a real cap like "8000" can't be surfaced as "80".
+  let end = 160;
+  while (end < msg.length && /\d/.test(msg[end]!)) end++;
+  return msg.slice(0, end);
 }
 import { TOOLS, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";

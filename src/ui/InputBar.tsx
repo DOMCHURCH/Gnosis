@@ -17,53 +17,25 @@ interface Props {
 
 const PLACEHOLDER = "message · /command · !shell · @file";
 
-// Claude-Code-style compose field: a rounded frame (same C.frame border as the
-// banner) with the chevron and TextInput inside, and the mode hint on a dim line
-// below it. Purely presentational — every handler is passed straight through, so
-// Enter still submits, @file/!shell/commands and shift+tab behave identically.
+// Single-line compose field: a chevron prefix + TextInput, no border box — the
+// same one-line, prefix-led shape the tool calls use, to save vertical space.
+// The mode hint (which carries the shift+tab-to-cycle affordance) renders only
+// while the input is empty, so a line of typing doesn't drag a hint under it.
 export function InputBar({ caps, width, value, onChange, onSubmit, mode, autoApproveEdits }: Props) {
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
-  const boxed = caps.isTTY && !caps.legacy;
-
-  // ink-text-input swaps placeholder<->value itself: the grey placeholder shows
-  // only while value is empty, so hint text and typed text never render together.
-  const field = (
-    <TextInput value={value} onChange={onChange} onSubmit={onSubmit} placeholder={PLACEHOLDER} />
-  );
-
-  const hint = (
-    <Text color={col(C.dim)} wrap="truncate">
-      {modeHint(mode, autoApproveEdits)}
-    </Text>
-  );
-
-  // Legacy conhost / non-TTY renders round-border glyphs as mojibake (same reason
-  // the banner drops its frame there), so fall back to the bare chevron prompt.
-  if (!boxed) {
-    return (
-      <Box flexDirection="column">
-        <Box>
-          <Text color={col(C.chevron)}>{g.chevron} </Text>
-          {field}
-        </Box>
-        {hint}
-      </Box>
-    );
-  }
 
   return (
-    <Box flexDirection="column">
-      <Box borderStyle="round" borderColor={col(C.frame)} paddingX={1} width={width}>
+    <Box flexDirection="column" width={width}>
+      <Box width={width}>
         <Text color={col(C.chevron)}>{g.chevron} </Text>
-        {field}
+        <TextInput value={value} onChange={onChange} onSubmit={onSubmit} placeholder={PLACEHOLDER} />
       </Box>
-      <Box width={width} justifyContent="space-between">
-        {hint}
+      {value === "" ? (
         <Text color={col(C.dim)} wrap="truncate">
-          {g.chevron === ">" ? "enter to send" : "⏎ send"}
+          {modeHint(mode, autoApproveEdits)}
         </Text>
-      </Box>
+      ) : null}
     </Box>
   );
 }

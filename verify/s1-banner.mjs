@@ -30,9 +30,18 @@ await wait(80);
 const frame = strip(frames.join("\n"));
 try { app.unmount(); } catch {}
 
-ok("banner actually rendered (tools row present)", frame.includes("read") && frame.includes("bash"));
+ok("banner actually rendered (tools present)", frame.includes("read") && frame.includes("bash"));
 ok("banner shows NO active-model id/name", !/gemini|claude|gpt-|deepseek|openrouter/i.test(frame));
 ok("banner has no 'model' row label", !/\bmodel\b/i.test(frame));
+
+// Compressed to ~8 rows: the frame is gone (no long horizontal border rule) and
+// the tagline + tools + gh fold into ONE dim status line instead of three rows.
+ok("banner dropped the frame (no horizontal border rule)", !/─{20,}/.test(frame));
+ok("tagline + tools + gh folded into one status line", frame.includes("terminal coding agent") && /\bgh\b/.test(frame));
+{
+  const rows = frame.split("\n").filter((l) => l.trim().length > 0);
+  ok(`banner is ~8 content rows (got ${rows.length})`, rows.length <= 9);
+}
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

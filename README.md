@@ -85,6 +85,8 @@ The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis
 - `~/.dom/sessions/<id>.json` — history, cwd, cumulative cost (written after every turn)
 - `~/.dom/cache/` — code-maintained skill data (e.g. the public-apis index)
 - `~/.dom/skills/<name>/SKILL.md` — skills advertised in the system prompt (also `./.dom/skills/`)
+
+All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, which any tool (including `bash`) may read and write — that's where skill data lives. `config.json`, `.env`, and `sessions/` are always blocked, even from a read.
 - `AGENTS.md` in the working directory, if present, is appended to the system prompt.
 
 ## Build order
@@ -93,4 +95,4 @@ The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis
 
 ## Verify
 
-`npm run build && npm run verify` runs the offline regression suite in `verify/`: model resolution + `:batch` filtering, 429 backoff, the rejection-loop guard, the `http` gate + secret substitution/redaction, the multi-tab controller (loop guards + badging), the `/alltabs` split-view layout, a real `Banner` render (asserting no model line), and a headless Ink mount of the TUI driving `/new`, `/tabs`, `/tab`, and `/alltabs`. Each suite runs in its own process, mocks the network, and isolates `$USERPROFILE` — nothing touches your real `~/.dom`.
+`npm run build && npm run verify` runs the offline regression suite in `verify/`: model resolution + `:batch` filtering, 429 backoff, 413 (too-large) handling, the rejection-loop guard, the `http` gate + secret substitution/redaction, the `~/.dom` bash carve-out (cache/skills allowed, config/.env/sessions blocked), the multi-tab controller (loop guards + badging), the `/alltabs` split-view layout, a real `Banner` render (compact, no model line), and a headless Ink mount of the TUI driving `/new`, `/tabs`, `/tab`, and `/alltabs`. Each suite runs in its own process, mocks the network, and isolates `$USERPROFILE` — nothing touches your real `~/.dom`.

@@ -108,13 +108,27 @@ export function domTarget(tool: ToolDef, args: any): string | null {
   const cache = cacheDir();
   const target = resolveTarget(tool, args);
   if (target && isInside(target, dom) && !isInside(target, skills) && !isInside(target, cache)) return target;
-  if (tool.name === "bash") {
-    const cmd = String(args?.command ?? "");
-    // Best-effort: a shell command that explicitly names the .dom directory.
-    if (cmd.includes(dom)) return dom;
-    if (/(?:^|[\s"'=/\\~])\.dom(?:$|[/\\\s"'])/.test(cmd)) return dom;
-  }
+  if (tool.name === "bash" && bashTouchesBlockedDom(String(args?.command ?? ""))) return dom;
   return null;
+}
+
+/**
+ * Best-effort check of a raw bash command for a ~/.dom reference that must be
+ * blocked. cache/ and skills/ are the readable/writable pockets (a command may
+ * freely touch them); everything else under ~/.dom — config.json, .env,
+ * sessions/, or the bare directory — stays blocked. We can only inspect the
+ * command string, so: find every `.dom` path token and block the command if ANY
+ * of them descends anywhere other than cache/ or skills/.
+ */
+function bashTouchesBlockedDom(cmd: string): boolean {
+  // Normalize \ to / so absolute (C:\...\.dom\x) and ~/.dom/x forms match alike.
+  const norm = cmd.replace(/\\/g, "/");
+  const re = /(?:^|[\s"'=/~])\.dom(?=$|[/\s"'])/g;
+  for (let m = re.exec(norm); m; m = re.exec(norm)) {
+    const rest = norm.slice(m.index + m[0].length); // what follows ".dom", e.g. "/cache/x"
+    if (!/^\/(?:cache|skills)(?:[/\s"']|$)/.test(rest)) return true; // a blocked .dom path
+  }
+  return false;
 }
 
 /**

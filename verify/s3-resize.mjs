@@ -32,9 +32,9 @@ const app = render(
 );
 await wait(150);
 
-// Steady region at boot: status bar (marginTop 1 + row = 2) + input (bordered 4 / bare 2).
-const boxed = caps.isTTY && !caps.legacy;
-const expectedRows = 2 + (boxed ? 4 : 2);
+// Steady region at boot: status bar (marginTop 1 + row = 2) + the single-line
+// input (❯ prompt + mode hint shown while empty = 2). No box, no tabs.
+const expectedRows = 2 + 2;
 
 const before = writes.length;
 stdout.columns = 100;          // narrow the terminal
