@@ -98,6 +98,28 @@ await key(ENTER);
 await wait(200);
 ok("/tabs lists the second tab", /2\.\s*worker/.test(allText()));
 
+// --- /tab does a full-screen switch: clears the screen, shows only that tab ---
+{
+  const before = frames.length;
+  await type("/tab 1");
+  await key(ENTER);
+  await wait(200);
+  ok("/tab clears the screen for a full switch", frames.slice(before).join("").includes("\x1b[2J"));
+}
+
+// --- /alltabs tiles every tab (numbered read-only cells) ---
+{
+  const before = frames.length;
+  await type("/alltabs");
+  await key(ENTER);
+  await wait(200);
+  ok("/alltabs enters the split view (clears the screen)", frames.slice(before).join("").includes("\x1b[2J"));
+  ok("/alltabs tiles show numbered tab cells (2:worker)", /2:worker/.test(allText()));
+  await type("/alltabs");
+  await key(ENTER);
+  await wait(200); // toggle back to single view
+}
+
 try { app?.unmount(); } catch {}
 try { await fs.rm(process.env.USERPROFILE, { recursive: true, force: true }); } catch {}
 

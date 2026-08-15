@@ -12,6 +12,8 @@ import { Permission } from "./Permission.js";
 import { Picker, type PickItem } from "./Picker.js";
 import { C } from "./theme.js";
 import { callParts, callLine, resultLines, resultBody } from "./toolrender.js";
+import { AllTabs } from "./AllTabsView.js";
+import { layoutAllTabs, gridColumns } from "./alltabs.js";
 import type { Caps } from "./terminal.js";
 import { Engine, type Callbacks } from "../engine.js";
 import { TabsController, type Tab } from "../tabs.js";
@@ -59,6 +61,7 @@ const HELP = [
   "  /mode <ask|plan|yolo>   change permission mode",
   "  /new [name] [purpose]   open a new tab (its own history + engine)",
   "  /tabs         list open tabs    /tab <n|name>  switch tabs    /close  close the active tab",
+  "  /alltabs      tiled read-only overview of every tab (again, or /tab, exits)",
   "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
@@ -147,8 +150,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     return seed;
   });
   // Per-tab transcript buffers + how many of each are already on screen.
-  const buffers = useRef<Map<number, { log: Log[]; shown: number }>>(new Map());
-  const tabBuf = (id: number) => {
+  type Buf = { log: Log[]; shown: number };
+  const buffers = useRef<Map<number, Buf>>(new Map());
+  const tabBuf = (id: number): Buf => {
     let b = buffers.current.get(id);
     if (!b) {
       b = { log: [], shown: 0 };
@@ -156,6 +160,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     return b;
   };
+  // Bumped to remount <Static> so it re-emits from scratch (a full-screen switch /
+  // split-view toggle clears the terminal, then rebuilds the transcript).
+  const [screenKey, setScreenKey] = useState(0);
+  const { stdout } = useStdout();
 
   const [input, setInput] = useState("");
   // The transient in-progress line (streaming owner commits finished lines to the
@@ -178,6 +186,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const [root, setRoot] = useState(rootEngine.cwd);
   // Bumped by the tabs controller (onChange) so busy/badge/tab-bar state repaints.
   const [, setTabTick] = useState(0);
+  // /alltabs split view: a read-only tiled overview of every tab replaces the
+  // single-tab transcript. Input still routes to the active tab; any /tab switch
+  // (or /alltabs again) exits back to single view.
+  const [alt, setAlt] = useState(false);
+  const altRef = useRef(false);
+  altRef.current = alt;
 
   const busyRef = useRef(false);
   const inputRef = useRef("");
@@ -283,13 +297,38 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
   // --- transcript emission -------------------------------------------------
 
+  // Wipe the visible screen AND scrollback, home the cursor, then remount <Static>
+  // (new key) so it re-emits `items` from scratch. Ink's Static only ever appends
+  // the tail past its last write index, so a plain items swap would render nothing;
+  // the remount resets that index. Used to make a tab switch a clean full-screen
+  // replace (so each tab reads as its own session) and to toggle the split view.
+  const resetScreen = (items: Log[]) => {
+    stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+    setScreenKey((k) => k + 1);
+    setScreen(items);
+  };
+
+  // Clear the screen and render ONLY this tab's transcript, headed by a divider.
+  const rebuildScreen = (tab: Tab) => {
+    const buf = tabBuf(tab.id);
+    buf.shown = buf.log.length;
+    const header: Log = { id: nextId(), kind: "system", text: `${g.h.repeat(2)} ${tab.name} ${g.h.repeat(2)}` };
+    resetScreen([header, ...buf.log]);
+  };
+
   // Append one line to a tab's buffer. The active tab's lines also flush to the
   // on-screen transcript immediately; a background tab's lines stay buffered and
-  // only badge the tab bar — they surface when the user switches to that tab.
+  // only badge the tab bar. In split view nothing flushes to <Static> — the grid
+  // cells read the buffers directly, so we just re-render.
   const emitToTab = (tab: Tab, item: DistributiveOmit<Log, "id">) => {
     const entry = { id: nextId(), ...item } as Log;
     const buf = tabBuf(tab.id);
     buf.log.push(entry);
+    if (altRef.current) {
+      if (!isActive(tab)) controller.markOutput(tab);
+      setTabTick((t) => t + 1);
+      return;
+    }
     if (isActive(tab)) {
       buf.shown = buf.log.length;
       setScreen((s) => [...s, entry]);
@@ -373,7 +412,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // background, surface it now.
   const switchToTab = (id: number) => {
     const cur = controller.active();
-    if (id === cur.id || !controller.byId(id)) return;
+    if (!controller.byId(id)) return;
+    if (id === cur.id && !altRef.current) return; // already here (and not in split view)
 
     if (overlayRef.current.type === "permission" && permResolveRef.current && permOwnerRef.current === cur.id) {
       controller.setPendingPermission(cur, { preview: permPreviewRef.current!, resolve: permResolveRef.current });
@@ -384,17 +424,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (overlayRef.current.type !== "none") setOverlay({ type: "none" });
     setPending("");
     setLiveTool(null);
+    altRef.current = false; // any tab switch leaves the split view
+    setAlt(false);
 
     controller.setActive(id); // clears the target badge + chdirs to its cwd
     const tab = controller.byId(id)!;
     setRoot(tab.engine.cwd);
     refreshRepo();
 
-    const buf = tabBuf(id);
-    const tail = buf.log.slice(buf.shown);
-    const divider: Log = { id: nextId(), kind: "system", text: `${g.h.repeat(2)} ${tab.name} ${g.h.repeat(2)}` };
-    setScreen((s) => [...s, divider, ...tail]);
-    buf.shown = buf.log.length;
+    // Clear the screen and render only the target tab's transcript — each tab
+    // reads as its own session rather than a continuation of the previous one.
+    rebuildScreen(tab);
 
     const pp = controller.takePendingPermission(tab);
     if (pp) {
@@ -403,6 +443,22 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       permOwnerRef.current = tab.id;
       setOverlay({ type: "permission", preview: pp.preview });
     }
+  };
+
+  // Toggle the /alltabs split view. Entering clears the transcript (the grid shows
+  // each tab's live tail); exiting rebuilds the active tab's single-tab transcript.
+  const toggleAllTabs = () => {
+    if (altRef.current) {
+      altRef.current = false;
+      setAlt(false);
+      rebuildScreen(controller.active());
+      return;
+    }
+    altRef.current = true;
+    setAlt(true);
+    setPending("");
+    setLiveTool(null);
+    resetScreen([]);
   };
   const switchToIndex = (pos: number) => {
     const t = controller.tabs[pos - 1];
@@ -430,13 +486,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     permResolveRef.current = null;
     permPreviewRef.current = null;
     permOwnerRef.current = null;
+    altRef.current = false;
+    setAlt(false);
     setRoot(now.engine.cwd);
     refreshRepo();
-    const buf = tabBuf(now.id);
-    const tail = buf.log.slice(buf.shown);
-    const divider: Log = { id: nextId(), kind: "system", text: `${g.h.repeat(2)} ${now.name} ${g.h.repeat(2)} (closed ${closing.name})` };
-    setScreen((s) => [...s, divider, ...tail]);
-    buf.shown = buf.log.length;
+    rebuildScreen(now);
+    sysLog(`closed ${closing.name}`);
   };
 
   const listTabs = () => {
@@ -646,6 +701,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "close":
         closeActiveTab();
         break;
+      case "alltabs":
+        toggleAllTabs();
+        break;
       case "skills": {
         const sk = engine.skills;
         if (!sk.length) {
@@ -678,7 +736,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         const buf = tabBuf(controller.active().id);
         buf.log = [];
         buf.shown = 0;
-        setScreen((s) => [...s, { id: nextId(), kind: "system", text: "conversation cleared" }]);
+        altRef.current = false;
+        setAlt(false);
+        resetScreen([{ id: nextId(), kind: "system", text: "conversation cleared" }]);
         break;
       }
       case "compact":
@@ -916,10 +976,67 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     busy: t.busy,
   }));
 
+  // Plain-text preview of a tab's transcript for a split-view cell: drop blanks
+  // and flatten each entry to its display text (tool calls → the call line + the
+  // first result line). Only used while the split view is open.
+  const previewLines = (logs: Log[]): string[] => {
+    const out: string[] = [];
+    const push = (s: string) => {
+      for (const ln of s.split("\n")) out.push(ln);
+    };
+    for (const l of logs) {
+      switch (l.kind) {
+        case "banner":
+          break;
+        case "user":
+          out.push(`${g.chevron} ${l.text}`);
+          break;
+        case "line":
+          if (l.text) out.push(l.text);
+          break;
+        case "rule":
+          out.push(g.h.repeat(3) + (l.lang ? " " + l.lang : ""));
+          break;
+        case "tool": {
+          out.push(callLine({ tool: l.tool, primary: l.primary, secondary: l.secondary }, 200));
+          const b = resultLines(l.body);
+          if (b[0]) out.push(b[0].trimStart());
+          break;
+        }
+        case "system":
+          push(l.text);
+          break;
+      }
+    }
+    return out;
+  };
+
+  // Split-view layout (only computed while open). contentRows is trimmed to the
+  // terminal height so a many-tab grid can't overrun the screen.
+  const altColumns = gridColumns(controller.tabs.length);
+  const gridRowCount = Math.max(1, Math.ceil(controller.tabs.length / altColumns));
+  const contentRows = Math.max(3, Math.min(6, Math.floor(((stdout?.rows || 40) - 6) / gridRowCount) - 2));
+  const altLayout = alt
+    ? layoutAllTabs({
+        cells: controller.tabs.map((t) => ({
+          name: t.name,
+          active: t.id === controller.activeId,
+          badge: t.badge,
+          busy: t.busy,
+          lines: previewLines(tabBuf(t.id).log),
+        })),
+        width: inner,
+        glyphs: g,
+        contentRows,
+        stacked: cols < 100,
+      })
+    : null;
+
   // Height (logical rows) of the dynamic region below <Static>, mirroring the JSX
   // below. Read by the resize handler to erase the stale frame. Exact for the
-  // steady region (status bar + input); overlays use an at-or-under estimate so
-  // the erase never reaches up into scrollback.
+  // steady region (status bar + input); overlays / the split grid use an at-or-
+  // under estimate so the erase never reaches up into scrollback.
+  const tabbarShown = controller.tabs.length > 1 && !alt;
   const boxedInput = caps.isTTY && !caps.legacy;
   const overlayRows =
     overlay.type === "permission"
@@ -928,10 +1045,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         ? Math.min(overlay.items.length, 12) + 4
         : 0;
   let regionRows = 0;
-  if (pending) regionRows += 1;
-  if (liveTool) regionRows += 1;
-  if (controller.tabs.length > 1) regionRows += 2; // marginTop + tab bar
-  regionRows += (controller.tabs.length > 1 ? 0 : 1) + 1; // status bar (+ its marginTop)
+  if (alt && altLayout) regionRows += altLayout.rows; // the split grid replaces the transient region
+  else {
+    if (pending) regionRows += 1;
+    if (liveTool) regionRows += 1;
+  }
+  if (tabbarShown) regionRows += 2; // marginTop + tab bar
+  regionRows += (tabbarShown ? 0 : 1) + 1; // status bar (+ its marginTop)
   if (ctrlCArmed) regionRows += 1;
   if (overlay.type !== "none") regionRows += 1 + overlayRows; // marginTop + overlay
   else if (busy) regionRows += 1; // thinking spinner
@@ -940,16 +1060,24 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
   return (
     <Box flexDirection="column">
-      <Static items={screen}>{(item) => <Box key={item.id}>{renderLog(item)}</Box>}</Static>
+      <Static key={screenKey} items={screen}>{(item) => <Box key={item.id}>{renderLog(item)}</Box>}</Static>
 
-      {pending ? (
+      {/* Split view: a read-only tiled overview of every tab, live-updating in
+          place. Replaces the single-tab transient region + tab bar. */}
+      {alt && altLayout ? (
+        <Box width={inner}>
+          <AllTabs caps={caps} width={inner} layout={altLayout} />
+        </Box>
+      ) : null}
+
+      {!alt && pending ? (
         <Box width={inner}>
           <Text color={col(C.value)} wrap="truncate-start">
             {pending}
           </Text>
         </Box>
       ) : null}
-      {liveTool ? (
+      {!alt && liveTool ? (
         <Box width={inner}>
           <Text color={col(C.dim)} wrap="truncate">
             {g.mid} {liveTool}
@@ -958,14 +1086,15 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       ) : null}
 
       {/* Tab bar: one row above the status bar, bounded to cols-2. Only shown once
-          a second tab exists. */}
-      {controller.tabs.length > 1 ? (
+          a second tab exists — and not in the split view, where the grid already
+          shows every tab. */}
+      {tabbarShown ? (
         <Box marginTop={1} width={inner}>
           <TabBar caps={caps} width={inner} tabs={tabInfos} />
         </Box>
       ) : null}
 
-      <Box marginTop={controller.tabs.length > 1 ? 0 : 1}>
+      <Box marginTop={tabbarShown ? 0 : 1}>
         <StatusBar
           caps={caps}
           width={inner}
