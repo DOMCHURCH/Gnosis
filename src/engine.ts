@@ -3,7 +3,13 @@
 
 import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
-import { streamCompletion, ProviderError, FallbackNeededError, type ModelInfo, type Usage } from "./provider.js";
+import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
+
+/** Pull the human-readable limit phrase out of a 413 error body for the message. */
+function limitPhrase(detail: string): string {
+  const m = detail.match(/"message"\s*:\s*"([^"]+)"/);
+  return (m ? m[1]! : detail).replace(/\s+/g, " ").trim().slice(0, 160);
+}
 import { TOOLS, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
@@ -90,6 +96,8 @@ export class Engine {
   /** Set to break the tool loop after the current result and hand back to the
    * user (schema-repair limit or repeated rejection of the same target). */
   private stopTurn = false;
+  /** Whether this turn already compacted+retried in response to a 413 (too large). */
+  private sizeRetried = false;
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -227,6 +235,7 @@ export class Engine {
     this.repairs.clear();
     this.rejections.clear();
     this.stopTurn = false;
+    this.sizeRetried = false;
 
     let iter = 0;
     try {
@@ -281,6 +290,30 @@ export class Engine {
             this.setModel(this.fallbackModel);
             cb.onSystem(`↪ ${from} ${why} — falling back to ${this.fallbackModel} for this session`);
             continue; // retry this turn on the fallback model
+          }
+          // 413 (too large for the model's limit): retrying sends the same bytes, so
+          // compact + retry ONCE; if still too large, fall back to a larger model;
+          // else surface a clear, actionable error. Never a plain backoff retry.
+          if (e instanceof TooLargeError) {
+            if (!this.sizeRetried) {
+              this.sizeRetried = true;
+              cb.onSystem("⟳ request too large — compacting and retrying");
+              this.doCompact(cb);
+              continue;
+            }
+            if (this.fallbackModel && this.modelId !== this.fallbackModel) {
+              const from = this.modelId;
+              this.setModel(this.fallbackModel);
+              cb.onSystem(`↪ still too large for ${from} — falling back to ${this.fallbackModel} (larger capacity) for this session`);
+              continue;
+            }
+            const limit = limitPhrase(e.detail);
+            cb.onSystem(
+              `✗ request too large for ${this.modelId}'s token limit${limit ? ` (${limit})` : ""}. ` +
+                `Run /compact or /clear to shrink the conversation` +
+                (this.fallbackModel ? "." : ', or set a larger "fallbackModel" in ~/.dom/config.json.'),
+            );
+            break;
           }
           if (e instanceof ProviderError) {
             cb.onSystem(`✗ ${e.message}`);

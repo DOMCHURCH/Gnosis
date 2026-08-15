@@ -106,6 +106,17 @@ export class FallbackNeededError extends ProviderError {
 }
 
 /**
+ * The request exceeded the model's size / tokens-per-minute limit (HTTP 413).
+ * Retrying is pointless — the body won't shrink — so the engine compacts and, if
+ * still too large, falls back to a larger-capacity model instead of backing off.
+ */
+export class TooLargeError extends ProviderError {
+  constructor(message: string, readonly detail: string) {
+    super(message);
+  }
+}
+
+/**
  * Is this 429 attributable to the UPSTREAM provider / a shared free pool rather
  * than our own account? OpenRouter names it in the error body as
  * `limit_source: "upstream_provider_shared_pool"`. Only these get a fallback —
@@ -248,6 +259,11 @@ export async function streamCompletion(
 
     lastDetail = await res.text().catch(() => ""); // read the error body once, to classify
 
+    if (res.status === 413) {
+      // Too large for the model's limit — retrying sends the same bytes. The engine
+      // compacts / falls back instead.
+      throw new TooLargeError(`${route.label} 413: request too large`, lastDetail);
+    }
     if (res.status === 404) {
       throw new FallbackNeededError(`${route.label} 404: model "${route.model}" not found`, 404, false);
     }
