@@ -3,8 +3,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { truncateOutput } from "./truncate.js";
+import { jobs } from "../jobs.js";
 import type { BashArgs } from "./schemas.js";
-import type { ToolResult } from "./index.js";
+import type { ToolContext, ToolResult } from "./index.js";
 
 const GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
 
@@ -64,7 +65,7 @@ export function resolveShell(): ShellRunner {
  * (e.g. `sleep`) running. On Windows we taskkill the tree; on POSIX the child
  * is its own process-group leader (detached) so kill(-pid) takes the group.
  */
-function killTree(pid: number | undefined): void {
+export function killTree(pid: number | undefined): void {
   if (pid == null) return;
   if (process.platform === "win32") {
     spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
@@ -81,13 +82,26 @@ function killTree(pid: number | undefined): void {
   }
 }
 
-export async function runBash(args: BashArgs, signal?: AbortSignal): Promise<ToolResult> {
+export async function runBash(args: BashArgs, signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
   const shell = resolveShell();
   const timeout = (args.timeout ?? 120) * 1000;
   const aborted = (): ToolResult => ({ output: "■ aborted", isError: true, aborted: true });
 
   // Already cancelled before we even spawn (e.g. Ctrl+C during the prompt).
   if (signal?.aborted) return aborted();
+
+  // Background: hand off to the job manager and return immediately. The job is
+  // NOT tied to the turn's AbortSignal — it outlives the turn and dies only with
+  // the session or an explicit /kill.
+  if (args.run_in_background) {
+    const job = jobs.launch(args.command, process.cwd(), ctx?.tab?.selfName() ?? null);
+    return {
+      output:
+        `Started background job ${job.id}: ${args.command}\n` +
+        `It runs independently — keep working. Use /job ${job.id} to see output so far, /kill ${job.id} to stop it.`,
+      isError: false,
+    };
+  }
 
   const child = execa(shell.file, shell.args(args.command), {
     cwd: process.cwd(),

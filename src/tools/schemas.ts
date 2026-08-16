@@ -25,6 +25,13 @@ export const editSchema = z.object({
 export const bashSchema = z.object({
   command: z.string().describe("Shell command to run (POSIX syntax; runs in Git Bash on Windows)."),
   timeout: z.number().int().positive().optional().describe("Timeout in seconds (default 120)."),
+  run_in_background: z
+    .boolean()
+    .optional()
+    .describe(
+      "Run the command in the background and return immediately with a job id instead of waiting. Use for long-" +
+        "running processes (dev servers, watchers, long builds). Check it with /job <id>; stop it with /kill <id>.",
+    ),
 });
 
 export const globSchema = z.object({

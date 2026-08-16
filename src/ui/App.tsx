@@ -24,6 +24,7 @@ import { fetchModels, resolveModelQuery, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
+import { jobs, type Job } from "../jobs.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
@@ -73,6 +74,7 @@ const HELP = [
   "  /vault [set <path>]   switch working root to your Obsidian vault",
   "  /undo         revert dom's most recent commit (or checkpointed edit)",
   "  /checkpoints  list recent dom checkpoints",
+  "  /jobs         list background jobs    /job <id>  show output    /kill <id>  stop it",
   "  /help         this help    /exit  quit",
   "  @  insert a file path    !cmd  run a shell command",
   "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
@@ -194,6 +196,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const [alt, setAlt] = useState(false);
   const altRef = useRef(false);
   altRef.current = alt;
+  // Latest handler for a background job finishing — kept in a ref so the once-only
+  // subscription (below) always calls the current closure (emitToTab/controller).
+  const jobDoneRef = useRef<(j: Job) => void>(() => {});
 
   const busyRef = useRef(false);
   const inputRef = useRef("");
@@ -272,6 +277,15 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
 
   useEffect(() => () => clearTimeout(ctrlCTimer.current ?? undefined), []);
+
+  // Subscribe once to background-job completions; the handler ref stays current.
+  useEffect(() => {
+    const h = (j: Job) => jobDoneRef.current(j);
+    jobs.on("done", h);
+    return () => {
+      jobs.off("done", h);
+    };
+  }, []);
 
   const refreshRepo = () => {
     getRepoInfo(process.cwd()).then(setRepo).catch(() => {});
@@ -357,6 +371,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     commit(tab, { id: nextId(), ...item } as Log);
   };
   const sysLog = (text: string) => emitToTab(controller.active(), { kind: "system", text });
+
+  // A background job finished/was killed: append a dim line to the tab that
+  // launched it (or the active tab if that tab is gone).
+  jobDoneRef.current = (job: Job) => {
+    const tab = (job.owner ? controller.byName(job.owner) : null) ?? controller.active();
+    const label = job.status === "killed" ? "killed" : job.status === "error" ? `exited ${job.exitCode}` : "finished";
+    emitToTab(tab, { kind: "system", text: `⎿ background job ${job.id} ${label}: ${job.command}` });
+  };
 
   // Callbacks for a turn running in `tab`. They check liveness on every call (a
   // tab can be switched to/from mid-turn), so a background turn buffers + badges
@@ -590,6 +612,42 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
   };
 
+  const listJobs = () => {
+    const all = jobs.list();
+    if (!all.length) {
+      sysLog("no background jobs");
+      return;
+    }
+    const rows = all.map((j) => {
+      const secs = Math.floor((Date.now() - j.startedAt) / 1000);
+      const st = j.status === "running" ? `running ${secs}s` : j.status === "error" ? `exit ${j.exitCode}` : j.status;
+      return `  ${j.id}. [${st}] ${j.command}`;
+    });
+    sysLog(["background jobs:", ...rows].join("\n"));
+  };
+  const showJob = (id: string) => {
+    const out = jobs.output(id);
+    if (out === null) {
+      sysLog(`no job ${id}`);
+      return;
+    }
+    const j = jobs.get(id);
+    sysLog(`job ${id} (${j?.status ?? "?"}) — ${j?.command ?? ""}\n${out}`);
+  };
+  const killJob = (id: string) => {
+    const j = jobs.get(id);
+    if (!j) {
+      sysLog(`no job ${id}`);
+      return;
+    }
+    if (j.status !== "running") {
+      sysLog(`job ${id} is already ${j.status}`);
+      return;
+    }
+    jobs.kill(id);
+    sysLog(`killed job ${id}: ${j.command}`);
+  };
+
   const showCheckpoints = async () => {
     const cps = await listCheckpoints();
     if (!cps.length) {
@@ -801,6 +859,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "checkpoints":
         void showCheckpoints();
+        break;
+      case "jobs":
+        listJobs();
+        break;
+      case "job":
+        if (!arg) sysLog("usage: /job <id>");
+        else showJob(arg);
+        break;
+      case "kill":
+        if (!arg) sysLog("usage: /kill <id>");
+        else killJob(arg);
         break;
       case "exit":
       case "quit":
