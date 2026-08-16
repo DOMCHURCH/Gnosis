@@ -1,8 +1,10 @@
 // The agent engine: UI-agnostic. Drives the stream→tool loop and is wired to
 // either the headless runner or the Ink UI via a Callbacks object.
 
+import path from "node:path";
 import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
+import { autoCommitFile } from "./autocommit.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
@@ -64,6 +66,8 @@ export interface EngineDeps {
   /** Model to switch to (for the rest of the session) when the active model 404s
    * or hits an upstream/shared-pool 429 that won't clear on retry. */
   fallbackModel?: string;
+  /** Commit every successful write/edit to the repo (default true). */
+  autoCommit?: boolean;
 }
 
 export class Engine {
@@ -82,6 +86,8 @@ export class Engine {
   /** Fallback model for the rest of the session on an unrecoverable model error
    * (404 / upstream-pool 429). Undefined disables fallback. */
   fallbackModel?: string;
+  /** Commit each successful write/edit to the repo (session-scoped). */
+  autoCommit: boolean;
   mode: Mode;
   summary: string | null;
   cost: CostState;
@@ -113,6 +119,7 @@ export class Engine {
     this.session = deps.session;
     this.skills = deps.skills ?? [];
     this.fallbackModel = deps.fallbackModel;
+    this.autoCommit = deps.autoCommit ?? true;
     this.messages = deps.session.messages;
     this.modelId = deps.session.model;
     this.mode = deps.session.mode;
@@ -202,6 +209,7 @@ export class Engine {
       session,
       skills: this.skills,
       fallbackModel: this.fallbackModel,
+      autoCommit: this.autoCommit,
     });
     engine.interactive = this.interactive;
     return engine;
@@ -499,11 +507,7 @@ export class Engine {
   ): Promise<ToolResult> {
     const apply = async (): Promise<ToolResult> => {
       cb.onToolStart(call, args);
-      try {
-        return await tool.run(args, this.abortController?.signal, this.toolContext);
-      } catch (e) {
-        return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
-      }
+      return this.runAndCommit(tool, args);
     };
 
     // A dangerous target (home dir, non-project git, ...) ALWAYS prompts — neither
@@ -541,11 +545,23 @@ export class Engine {
     // 'always' opts the session into auto-accepting edits — but never for a
     // dangerous target, which must keep prompting every time.
     if (ans === "always" && !forcePrompt) this.autoApproveEdits = true;
+    return this.runAndCommit(tool, args);
+  }
+
+  /** Run a file tool and, on success, auto-commit the file it touched (write/edit
+   * only; no-op when autoCommit is off or the tool failed). */
+  private async runAndCommit(tool: ToolDef, args: any): Promise<ToolResult> {
+    let result: ToolResult;
     try {
-      return await tool.run(args, this.abortController?.signal);
+      result = await tool.run(args, this.abortController?.signal, this.toolContext);
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }
+    if (this.autoCommit && !result.isError && (tool.name === "write" || tool.name === "edit")) {
+      const abs = path.resolve(process.cwd(), String(args.path ?? ""));
+      await autoCommitFile(abs, tool.name).catch(() => {});
+    }
+    return result;
   }
 
   /** `!command` — run bash directly, bypassing the model but not the gate. */

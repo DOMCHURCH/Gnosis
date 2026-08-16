@@ -34,12 +34,13 @@ dom -c                    # resume the latest session for this directory
 dom -r <id>               # resume a specific session
 dom --model <id>          # start on a specific model
 dom --yolo                # allow all tools (dangerous commands still prompt)
+dom --no-auto-commit      # don't commit each successful write/edit to git
 dom --headless "message"  # one-shot, no TUI
 ```
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
@@ -54,6 +55,8 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 - **ask** (default) — read/glob/grep run free; write/edit/bash prompt with a preview (a colored diff for edits, the exact command for bash). Approve once with *always* to whitelist it for the session.
 - **plan** — every mutating tool is refused.
 - **yolo** — everything runs without prompting, except commands matching `rm -rf`, `git push --force`, `dd`, `mkfs`, `curl | sh`, `> /dev/…`, and mutating HTTP methods (`POST`/`PUT`/`PATCH`/`DELETE`), which always prompt.
+
+**Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
 ## Model fallback
 
@@ -79,7 +82,7 @@ The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis
 
 ## Storage
 
-- `~/.dom/config.json` — model, fallbackModel, mode, apiKey
+- `~/.dom/config.json` — model, fallbackModel, mode, apiKey, autoCommit
 - `~/.dom/.env` — `NAME=value` secrets, substituted into `http` requests as `${NAME}` (never logged)
 - `~/.dom/models.json` — model catalog cache (24h TTL)
 - `~/.dom/sessions/<id>.json` — history, cwd, cumulative cost (written after every turn)

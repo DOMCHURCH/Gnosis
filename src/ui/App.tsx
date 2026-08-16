@@ -23,6 +23,7 @@ import { runGlob } from "../tools/glob.js";
 import { fetchModels, resolveModelQuery, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
+import { undoLastDomCommit } from "../autocommit.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
@@ -70,7 +71,7 @@ const HELP = [
   "  /verbose      toggle full (unsummarized) tool output",
   "  /resume       resume a past session",
   "  /vault [set <path>]   switch working root to your Obsidian vault",
-  "  /undo         revert dom's most recent file edit",
+  "  /undo         revert dom's most recent commit (or checkpointed edit)",
   "  /checkpoints  list recent dom checkpoints",
   "  /help         this help    /exit  quit",
   "  @  insert a file path    !cmd  run a shell command",
@@ -572,6 +573,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
 
   const doUndo = async () => {
+    // Prefer reverting the last dom auto-commit; fall back to the checkpoint ref
+    // (used when auto-commit is off or the change was never committed).
+    const undoneCommit = await undoLastDomCommit(process.cwd());
+    if (undoneCommit) {
+      sysLog(`reverted last dom commit — ${undoneCommit.message}`);
+      refreshRepo();
+      return;
+    }
     const reverted = await undoLast();
     if (reverted) {
       sysLog(`reverted ${reverted}`);

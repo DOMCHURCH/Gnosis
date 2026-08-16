@@ -16,6 +16,7 @@ usage:
   dom -r <id>                resume a specific session
   dom --model <id>           start with a specific model
   dom --yolo                 allow all tools without prompting (dangerous commands still prompt)
+  dom --no-auto-commit       don't commit each successful write/edit to git
   dom --headless [message]   run without the TUI (plain stdout)
   dom --help | --version
 

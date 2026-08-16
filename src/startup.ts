@@ -26,16 +26,21 @@ export interface Flags {
   prompt?: string;
   help: boolean;
   version: boolean;
+  /** `--no-auto-commit`: disable per-edit git commits for this session. */
+  noAutoCommit: boolean;
 }
 
 export function parseArgs(argv: string[]): Flags {
-  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false };
+  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     switch (a) {
       case "--yolo":
         flags.yolo = true;
+        break;
+      case "--no-auto-commit":
+        flags.noAutoCommit = true;
         break;
       case "--headless":
         flags.headless = true;
@@ -138,7 +143,9 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // become warnings.
   const { skills, warnings: skillWarnings } = await loadSkills(cwd);
   const systemPrompt = await buildSystemPrompt(cwd, skills);
-  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel });
+  // Auto-commit is on by default; config.autoCommit=false or --no-auto-commit disables it.
+  const autoCommit = !flags.noAutoCommit && (config.autoCommit ?? true);
+  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel, autoCommit });
 
   // Warm the public-apis index in the background when that skill is installed and
   // we're interactive (skip in headless/CI). Best-effort, non-blocking, refreshes

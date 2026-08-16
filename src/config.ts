@@ -18,6 +18,9 @@ export interface Config {
   obsidianVault?: string;
   /** Groq API key; enables native routing for `groq/`-prefixed models. */
   groqApiKey?: string;
+  /** Commit every successful write/edit to the current repo (default true). The
+   * `--no-auto-commit` flag overrides this off for a session. */
+  autoCommit?: boolean;
 }
 
 export interface CostState {
