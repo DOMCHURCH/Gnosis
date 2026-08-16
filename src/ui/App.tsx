@@ -16,6 +16,7 @@ import { AllTabs } from "./AllTabsView.js";
 import { layoutAllTabs, gridColumns } from "./alltabs.js";
 import type { Caps } from "./terminal.js";
 import { Engine, type Callbacks } from "../engine.js";
+import type { Msg } from "../messages.js";
 import { TabsController, type Tab } from "../tabs.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
 import { TOOL_NAMES } from "../tools/index.js";
@@ -61,6 +62,8 @@ const HELP = [
   "commands:",
   "  /model [id]   switch model (no arg opens the picker)",
   "  /mode <ask|plan|yolo>   change permission mode",
+  "  /approve      (plan mode) switch to ask and execute the written plan",
+  "  /revise <text>  (plan mode) amend the plan without executing",
   "  /new [name] [purpose]   open a new tab (its own history + engine)",
   "  /tabs         list open tabs    /tab <n|name>  switch tabs    /close  close the active tab",
   "  /alltabs      tiled read-only overview of every tab (again, or /tab, exits)",
@@ -703,6 +706,38 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (save) await saveConfig({ mode: modeArg as Mode });
   };
 
+  // /approve (plan mode): switch to ask and execute the written plan. The plan is
+  // the model's last assistant message; it's fed back so execution is grounded in it.
+  const approvePlan = () => {
+    if (engine.mode !== "plan") {
+      sysLog("/approve only applies in plan mode");
+      return;
+    }
+    const plan = [...engine.messages]
+      .reverse()
+      .find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text;
+    engine.setMode("ask");
+    setModeTick((t) => t + 1);
+    void engine.persist();
+    sysLog("plan approved — switching to ask mode and executing");
+    const text = plan ? `The plan is approved. Implement it now:\n\n${plan}` : "The plan is approved. Implement it now.";
+    controller.submitUser(controller.active(), text);
+  };
+
+  // /revise <text> (plan mode): amend the plan without executing (stays read-only).
+  const revisePlan = (text: string) => {
+    if (engine.mode !== "plan") {
+      sysLog("/revise only applies in plan mode");
+      return;
+    }
+    if (!text.trim()) {
+      sysLog("usage: /revise <what to change>");
+      return;
+    }
+    sysLog(`revising the plan: ${text}`);
+    controller.submitUser(controller.active(), `Please revise the plan: ${text}`);
+  };
+
   // shift+tab cycles: normal → auto-accept edits → yolo → normal. Session-scoped —
   // it never writes config (use `/mode <m> --save` to change the default).
   const cycleMode = () => {
@@ -834,6 +869,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "mode":
         void setModeCmd(arg);
+        break;
+      case "approve":
+        approvePlan();
+        break;
+      case "revise":
+        revisePlan(arg);
         break;
       case "model": {
         // /model               → picker (session switch; ctrl+s saves as default)

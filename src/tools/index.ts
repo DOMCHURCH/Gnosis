@@ -132,9 +132,11 @@ export const TOOLS: Record<string, ToolDef> = {
 
 export const TOOL_NAMES = Object.keys(TOOLS);
 
-/** The tools array sent to the API, derived from the zod schemas. */
-export function toolDefinitions(): ToolSchema[] {
-  return Object.values(TOOLS).map((t) => ({
+/** The tools array sent to the API, derived from the zod schemas. Pass `names` to
+ * restrict the set (e.g. plan mode advertises only read-only tools). */
+export function toolDefinitions(names?: readonly string[]): ToolSchema[] {
+  const list = names ? names.map((n) => TOOLS[n]).filter((t): t is ToolDef => !!t) : Object.values(TOOLS);
+  return list.map((t) => ({
     type: "function",
     function: {
       name: t.name,

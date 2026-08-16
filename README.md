@@ -40,7 +40,7 @@ dom --headless "message"  # one-shot, no TUI
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
@@ -53,7 +53,7 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 ### Permission modes
 
 - **ask** (default) — read/glob/grep run free; write/edit/bash prompt with a preview (a colored diff for edits, the exact command for bash). Approve once with *always* to whitelist it for the session.
-- **plan** — every mutating tool is refused.
+- **plan** — write, edit, and bash are removed from the tool list entirely (only `read`/`glob`/`grep`/`http` remain), so the model researches and produces a written plan instead of acting. `/approve` switches to ask mode and executes the plan (feeding it back as context); `/revise <text>` amends the plan without executing. `shift+tab` still cycles modes.
 - **yolo** — everything runs without prompting, except commands matching `rm -rf`, `git push --force`, `dd`, `mkfs`, `curl | sh`, `> /dev/…`, and mutating HTTP methods (`POST`/`PUT`/`PATCH`/`DELETE`), which always prompt.
 
 **Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.

@@ -19,7 +19,7 @@ export function limitPhrase(detail: string): string {
   while (end < msg.length && /\d/.test(msg[end]!)) end++;
   return msg.slice(0, end);
 }
-import { TOOLS, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
+import { TOOLS, TOOL_NAMES, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -42,6 +42,18 @@ import { createSession, saveSession, type CostState, type Mode, type SessionData
 import type { LoadedSkill } from "./skills.js";
 
 const MAX_ITER = 100;
+
+// Plan mode has teeth: these tools are absent from the tool list entirely, so the
+// model can't write, run shell commands, or hand work to other tabs — it can only
+// read/search/fetch to research, then produce a written plan. Leaves {read, glob,
+// grep, http}.
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs"]);
+
+const PLAN_DIRECTIVE =
+  "\n\nYou are in PLAN MODE. You have only read-only tools (read, glob, grep, http) — " +
+  "write, edit, and bash are unavailable. Research as needed, then produce a clear, concrete written plan of the " +
+  "changes you would make (files to touch and what to change in each), and STOP. Do not claim you edited anything. " +
+  "The user will run /approve to execute the plan, or /revise to amend it.";
 
 export interface Callbacks {
   /** Commit a finalized transcript line as it streams in (the transcript owner). */
@@ -159,10 +171,18 @@ export class Engine {
     return this.session.id;
   }
 
+  /** Tools available for the current mode. Plan mode drops write/edit/bash (and the
+   * multi-tab meta-tools), leaving only read-only research tools. */
+  availableToolNames(): readonly string[] {
+    return this.mode === "plan" ? TOOL_NAMES.filter((n) => !PLAN_EXCLUDED.has(n)) : TOOL_NAMES;
+  }
+
   /** System prompt for the current turn, with the stated working directory
-   * tracking process.cwd() (so it matches where tools actually run after /vault). */
+   * tracking process.cwd() (so it matches where tools actually run after /vault).
+   * In plan mode a directive is appended telling the model to plan, not act. */
   currentSystemPrompt(): string {
-    return withWorkingDir(this.systemPrompt, process.cwd());
+    const base = withWorkingDir(this.systemPrompt, process.cwd());
+    return this.mode === "plan" ? base + PLAN_DIRECTIVE : base;
   }
 
   setModel(id: string): void {
@@ -278,7 +298,7 @@ export class Engine {
               apiKey: this.apiKey,
               model: this.modelId,
               messages: wire,
-              tools: toolDefinitions(),
+              tools: toolDefinitions(this.availableToolNames()),
               signal: this.abortController.signal,
               // Recomputed each iteration so a mid-turn fallback to a non-caching
               // model correctly stops sending cache_control.
@@ -455,6 +475,11 @@ export class Engine {
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {
     const tool = TOOLS[call.name];
     if (!tool) return { output: `unknown tool: ${call.name}`, isError: true };
+    // Belt-and-braces: the tool isn't even advertised in this mode, but if the model
+    // hallucinates one anyway, refuse it here too (plan mode has no write/edit/bash).
+    if (!this.availableToolNames().includes(call.name)) {
+      return { output: `${call.name} is not available in ${this.mode} mode`, isError: true };
+    }
 
     let raw: unknown;
     try {
