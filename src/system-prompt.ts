@@ -18,7 +18,7 @@ export function withWorkingDir(prompt: string, cwd: string): string {
     .join("\n");
 }
 
-export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = []): Promise<string> {
+export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [], mapTokens = 1024): Promise<string> {
   const shell = resolveShell();
   const lines = [
     "You are dom, a terminal coding agent operating in the user's shell.",
@@ -75,6 +75,15 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [])
   // Advertise loaded skills (names, descriptions, absolute paths — no bodies).
   const skillsSection = renderSkillsSection(skills);
   if (skillsSection) lines.push(skillsSection);
+
+  // Tree-sitter repo map (best-effort; skipped silently if it can't be built).
+  try {
+    const { buildRepoMap } = await import("./repomap.js");
+    const map = await buildRepoMap(cwd, mapTokens);
+    if (map.text) lines.push("", "--- Repo map ---", map.text);
+  } catch {
+    /* no repo map (no grammars / parse error) — not fatal */
+  }
 
   return lines.join("\n");
 }

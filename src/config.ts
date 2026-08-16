@@ -21,6 +21,8 @@ export interface Config {
   /** Commit every successful write/edit to the current repo (default true). The
    * `--no-auto-commit` flag overrides this off for a session. */
   autoCommit?: boolean;
+  /** Token budget for the repo map injected into the system prompt (default 1024). */
+  mapTokens?: number;
 }
 
 export interface CostState {

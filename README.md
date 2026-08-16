@@ -40,7 +40,7 @@ dom --headless "message"  # one-shot, no TUI
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
@@ -80,6 +80,10 @@ Set `"fallbackModel"` in `~/.dom/config.json` to survive a dead primary. When th
 
 For models whose provider supports explicit cache breakpoints (Anthropic, Gemini — detected from the catalog's cache-write price), dom sends `cache_control` breakpoints that OpenRouter forwards to the provider: after the tool definitions, after the system prompt (skill descriptions included), and on the last message (moved forward each turn as history grows). Within a multi-step turn, iterations after the first read the cached prefix. Models without cache-breakpoint support (OpenAI's automatic caching, DeepSeek, Groq) receive **no** `cache_control` at all. `/cost` shows cached vs uncached input tokens so the saving is visible.
 
+## Repo map
+
+At startup dom builds a tree-sitter-parsed, PageRank-ranked summary of the codebase's most-referenced **exported** symbols and injects it into the system prompt, so the model starts oriented instead of blind-searching. Grammars load as WebAssembly (`web-tree-sitter` + prebuilt `tree-sitter-wasms` — no native build); a language with no grammar is skipped rather than failing. Parses are cached in `~/.dom/cache/repomap.db` keyed by path + mtime, so a second run only reparses the files that changed. The serialization budget is `mapTokens` (default 1024). `/map` prints the current map and its token count.
+
 ## Tools
 
 `read` · `write` · `edit` · `bash` · `glob` · `grep` · `http` · `task` — zod schemas are the source of truth; JSON Schema (for the API) and TS types are both derived from them. In multi-tab sessions the model additionally gets `send_message` / `list_tabs`.
@@ -100,11 +104,11 @@ The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis
 
 ## Storage
 
-- `~/.dom/config.json` — model, fallbackModel, mode, apiKey, autoCommit
+- `~/.dom/config.json` — model, fallbackModel, mode, apiKey, autoCommit, mapTokens
 - `~/.dom/.env` — `NAME=value` secrets, substituted into `http` requests as `${NAME}` (never logged)
 - `~/.dom/models.json` — model catalog cache (24h TTL)
 - `~/.dom/sessions/<id>.json` — history, cwd, cumulative cost (written after every turn)
-- `~/.dom/cache/` — code-maintained skill data (e.g. the public-apis index)
+- `~/.dom/cache/` — code-maintained caches: the public-apis index and the repo-map parse DB
 - `~/.dom/skills/<name>/SKILL.md` — skills advertised in the system prompt (also `./.dom/skills/`)
 - `~/.dom/hooks/<event>` — lifecycle hook scripts (also `./.dom/hooks/`, which shadows global)
 
@@ -117,4 +121,4 @@ All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, wh
 
 ## Verify
 
-`npm run build && npm run verify` runs the offline regression suite in `verify/`: model resolution + `:batch` filtering, 429 backoff, 413 (too-large) handling, the rejection-loop guard, the `http` gate + secret substitution/redaction, the `~/.dom` bash carve-out (cache/skills allowed, config/.env/sessions blocked), the multi-tab controller (loop guards + badging), the `/alltabs` split-view layout, a real `Banner` render (compact, no model line), and a headless Ink mount of the TUI driving `/new`, `/tabs`, `/tab`, and `/alltabs`. Each suite runs in its own process, mocks the network, and isolates `$USERPROFILE` — nothing touches your real `~/.dom`.
+`npm run build && npm run verify` runs the offline regression suite in `verify/`: model resolution + `:batch` filtering, 429 backoff, 413 (too-large) handling, the rejection-loop guard, the `http` gate + secret substitution/redaction, the `~/.dom` bash carve-out (cache/skills allowed, config/.env/sessions blocked), the multi-tab controller (loop guards + badging), the `/alltabs` split-view layout, a compact `Banner` render (no model line), and a headless Ink mount driving `/new`, `/tabs`, `/tab`, and `/alltabs` — plus auto-commit + `/undo`, read-before-edit, background jobs, plan-mode teeth, hooks, `/init`, sub-agents (`task`), and the tree-sitter repo map. Each suite runs in its own process, mocks the network, and isolates `$USERPROFILE` — nothing touches your real `~/.dom`.

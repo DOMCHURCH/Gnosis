@@ -143,7 +143,7 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // model reads a SKILL.md body on demand. Loading never throws — malformed files
   // become warnings.
   const { skills, warnings: skillWarnings } = await loadSkills(cwd);
-  const systemPrompt = await buildSystemPrompt(cwd, skills);
+  const systemPrompt = await buildSystemPrompt(cwd, skills, config.mapTokens ?? 1024);
   // Auto-commit is on by default; config.autoCommit=false or --no-auto-commit disables it.
   const autoCommit = !flags.noAutoCommit && (config.autoCommit ?? true);
   const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel, autoCommit });

@@ -28,6 +28,7 @@ import { undoLastDomCommit } from "../autocommit.js";
 import { jobs, type Job } from "../jobs.js";
 import { listHooks } from "../hooks.js";
 import { writeAgentsMd } from "../init.js";
+import { buildRepoMap } from "../repomap.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
@@ -82,6 +83,7 @@ const HELP = [
   "  /jobs         list background jobs    /job <id>  show output    /kill <id>  stop it",
   "  /hooks        list registered lifecycle hooks",
   "  /init [--force]   scan the repo and write an AGENTS.md",
+  "  /map          print the repo map and its token count",
   "  /help         this help    /exit  quit",
   "  @  insert a file path    !cmd  run a shell command",
   "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
@@ -619,6 +621,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
   };
 
+  const runMap = async () => {
+    const cfg = await loadConfig();
+    const budget = cfg.mapTokens ?? 1024;
+    const m = await buildRepoMap(process.cwd(), budget);
+    if (!m.text) {
+      sysLog("repo map is empty (no supported source files, or no grammar installed)");
+      return;
+    }
+    sysLog(`${m.text}\n\n(${m.tokens} tokens · budget ${budget} · ${m.files} files, ${m.parsed} parsed / ${m.cached} cached)`);
+  };
+
   const runInit = async (force: boolean) => {
     const r = await writeAgentsMd(process.cwd(), force);
     if (!r.written) {
@@ -929,6 +942,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "init":
         void runInit(parts[1] === "--force" || parts[1] === "-f");
+        break;
+      case "map":
+        void runMap();
         break;
       case "hooks":
         void showHooks();
