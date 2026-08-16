@@ -6,6 +6,7 @@ import { promises as fs } from "node:fs";
 import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
+import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
@@ -399,6 +400,9 @@ export class Engine {
         if (stop) break;
       }
       if (iter >= MAX_ITER) cb.onSystem("✗ hit 100-iteration cap for this turn");
+      // Stop hook (non-blocking): the turn has ended.
+      const stopHook = await runNonBlockingHook(process.cwd(), "Stop", { sessionId: this.sessionId(), model: this.modelId });
+      if (stopHook.warn) cb.onSystem(`! ${stopHook.warn}`);
     } finally {
       this.abortController = null;
       await this.persist();
@@ -497,6 +501,13 @@ export class Engine {
     this.repairs.delete(tool.name); // parsed cleanly — reset repair counter
 
     const args = parsed.data;
+
+    // PreToolUse hook (blocking): a clean non-zero exit refuses the call with its
+    // stderr as the tool error; a timeout/crash warns and lets the call through.
+    const pre = await runPreToolUse(process.cwd(), tool.name, args);
+    if (pre.warn) cb.onSystem(`! ${pre.warn}`);
+    if (pre.block) return { output: pre.reason ?? "Blocked by PreToolUse hook.", isError: true };
+
     const decision = gate(tool, args, { mode: this.mode, approvals: this.approvals });
     if (decision.kind === "reject") return { output: decision.reason, isError: true };
 
@@ -529,7 +540,18 @@ export class Engine {
     // Reading a file records its mtime, so a later edit can require the model to
     // have seen the current content (see precheckStale).
     if (tool.name === "read" && !result.isError) await this.recordRead(String(args.path ?? ""));
+    await this.postHook(tool.name, args, result, cb);
     return result;
+  }
+
+  /** PostToolUse hook (non-blocking): fired after a tool actually executes. */
+  private async postHook(name: string, args: unknown, result: ToolResult, cb: Callbacks): Promise<void> {
+    const { warn } = await runNonBlockingHook(process.cwd(), "PostToolUse", {
+      tool: name,
+      args,
+      result: { output: result.output, isError: result.isError },
+    });
+    if (warn) cb.onSystem(`! ${warn}`);
   }
 
   /** Record that a file was read this session, at its current mtime. */
@@ -585,7 +607,7 @@ export class Engine {
   ): Promise<ToolResult> {
     const apply = async (): Promise<ToolResult> => {
       cb.onToolStart(call, args);
-      return this.runAndCommit(tool, args);
+      return this.runAndCommit(tool, args, cb);
     };
 
     // A dangerous target (home dir, non-project git, ...) ALWAYS prompts — neither
@@ -623,12 +645,12 @@ export class Engine {
     // 'always' opts the session into auto-accepting edits — but never for a
     // dangerous target, which must keep prompting every time.
     if (ans === "always" && !forcePrompt) this.autoApproveEdits = true;
-    return this.runAndCommit(tool, args);
+    return this.runAndCommit(tool, args, cb);
   }
 
   /** Run a file tool and, on success, auto-commit the file it touched (write/edit
-   * only; no-op when autoCommit is off or the tool failed). */
-  private async runAndCommit(tool: ToolDef, args: any): Promise<ToolResult> {
+   * only; no-op when autoCommit is off or the tool failed) + fire PostToolUse. */
+  private async runAndCommit(tool: ToolDef, args: any, cb: Callbacks): Promise<ToolResult> {
     let result: ToolResult;
     try {
       result = await tool.run(args, this.abortController?.signal, this.toolContext);
@@ -644,6 +666,7 @@ export class Engine {
         await autoCommitFile(abs, tool.name).catch(() => {});
       }
     }
+    await this.postHook(tool.name, args, result, cb);
     return result;
   }
 

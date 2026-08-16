@@ -40,7 +40,7 @@ dom --headless "message"  # one-shot, no TUI
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
@@ -63,6 +63,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 ## Background jobs
 
 Pass `run_in_background: true` to `bash` — for dev servers, watchers, or long builds — and the call returns immediately with a job id while the command keeps running, so the model can carry on. `/jobs` lists running jobs, `/job <id>` shows its output so far, and `/kill <id>` terminates the whole process tree. A finishing job appends a dim line to the transcript. Background jobs die with the session.
+
+## Hooks
+
+Executable lifecycle scripts in `~/.dom/hooks/` (global) and `./.dom/hooks/` (project — shadows global per event), each named after its event: `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`. Each hook receives the event as JSON on stdin (the extension picks the interpreter: `.mjs`/`.js` → node, `.py` → python, `.ps1` → powershell, `.sh`/none → shell). `PreToolUse` is the only **blocking** hook: a clean non-zero exit blocks the tool call and the script's stderr is returned to the model as the tool error. Every other event is fire-and-forget. All hooks have a 5s timeout — a timeout or crash logs a dim warning and never blocks. `/hooks` lists what's registered.
 
 ## Model fallback
 
@@ -94,6 +98,7 @@ The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis
 - `~/.dom/sessions/<id>.json` — history, cwd, cumulative cost (written after every turn)
 - `~/.dom/cache/` — code-maintained skill data (e.g. the public-apis index)
 - `~/.dom/skills/<name>/SKILL.md` — skills advertised in the system prompt (also `./.dom/skills/`)
+- `~/.dom/hooks/<event>` — lifecycle hook scripts (also `./.dom/hooks/`, which shadows global)
 
 All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, which any tool (including `bash`) may read and write — that's where skill data lives. `config.json`, `.env`, and `sessions/` are always blocked, even from a read.
 - `AGENTS.md` in the working directory, if present, is appended to the system prompt.

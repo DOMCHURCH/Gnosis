@@ -4,6 +4,7 @@ import { Engine } from "./engine.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { loadSkills } from "./skills.js";
 import { ensurePublicApisCache } from "./publicapis.js";
+import { runNonBlockingHook } from "./hooks.js";
 import { fetchModels } from "./models.js";
 import type { ModelInfo } from "./provider.js";
 import {
@@ -146,6 +147,9 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // Auto-commit is on by default; config.autoCommit=false or --no-auto-commit disables it.
   const autoCommit = !flags.noAutoCommit && (config.autoCommit ?? true);
   const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel, autoCommit });
+
+  // SessionStart hook (non-blocking, best-effort — never delays or blocks boot).
+  void runNonBlockingHook(cwd, "SessionStart", { sessionId: session.id, model: session.model, resumed }).catch(() => {});
 
   // Warm the public-apis index in the background when that skill is installed and
   // we're interactive (skip in headless/CI). Best-effort, non-blocking, refreshes

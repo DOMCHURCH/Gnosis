@@ -26,6 +26,7 @@ import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
 import { jobs, type Job } from "../jobs.js";
+import { listHooks } from "../hooks.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
@@ -78,6 +79,7 @@ const HELP = [
   "  /undo         revert dom's most recent commit (or checkpointed edit)",
   "  /checkpoints  list recent dom checkpoints",
   "  /jobs         list background jobs    /job <id>  show output    /kill <id>  stop it",
+  "  /hooks        list registered lifecycle hooks",
   "  /help         this help    /exit  quit",
   "  @  insert a file path    !cmd  run a shell command",
   "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
@@ -615,6 +617,16 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
   };
 
+  const showHooks = async () => {
+    const hs = await listHooks(process.cwd());
+    if (!hs.length) {
+      sysLog("no hooks registered — add scripts under ~/.dom/hooks/ or ./.dom/hooks/ (SessionStart, PreToolUse, PostToolUse, Stop)");
+      return;
+    }
+    const rows = hs.map((h) => `  ${h.event} [${h.scope}]  ${h.path}`);
+    sysLog(["hooks:", ...rows].join("\n"));
+  };
+
   const listJobs = () => {
     const all = jobs.list();
     if (!all.length) {
@@ -900,6 +912,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "checkpoints":
         void showCheckpoints();
+        break;
+      case "hooks":
+        void showHooks();
         break;
       case "jobs":
         listJobs();
