@@ -2,6 +2,7 @@
 // either the headless runner or the Ink UI via a Callbacks object.
 
 import path from "node:path";
+import { promises as fs } from "node:fs";
 import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
@@ -110,6 +111,9 @@ export class Engine {
   private stopTurn = false;
   /** Whether this turn already compacted+retried in response to a 413 (too large). */
   private sizeRetried = false;
+  /** Files read this session → the file's mtimeMs at read time. Gates edit/overwrite
+   * so the model can't edit a file it hasn't seen, or one that changed since it read. */
+  private readFiles = new Map<string, number>();
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -174,6 +178,7 @@ export class Engine {
     this.lastPromptTokens = 0;
     this.repairs.clear();
     this.rejections.clear();
+    this.readFiles.clear();
   }
   abort(): void {
     this.abortController?.abort();
@@ -194,6 +199,7 @@ export class Engine {
     this.lastPromptTokens = 0;
     this.repairs.clear();
     this.rejections.clear();
+    this.readFiles.clear();
   }
 
   /** Create a sibling Engine for a new tab: same provider key, system prompt,
@@ -469,8 +475,12 @@ export class Engine {
     const decision = gate(tool, args, { mode: this.mode, approvals: this.approvals });
     if (decision.kind === "reject") return { output: decision.reason, isError: true };
 
-    // File edits get a unified-diff preview + confirm before applying.
+    // File edits get a unified-diff preview + confirm before applying — but first
+    // enforce read-before-edit (edit, and overwrite of an existing file, require a
+    // fresh prior read this session).
     if (tool.name === "write" || tool.name === "edit") {
+      const stale = await this.precheckStale(tool.name, args);
+      if (stale) return { output: stale, isError: true };
       return this.gatedFileEdit(tool, args, call, cb, decision);
     }
 
@@ -485,11 +495,54 @@ export class Engine {
       if (ans === "always" && !decision.dangerous) this.approvals.add(approvalKey(tool, args));
     }
 
+    let result: ToolResult;
     try {
-      return await tool.run(args, this.abortController?.signal, this.toolContext);
+      result = await tool.run(args, this.abortController?.signal, this.toolContext);
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }
+    // Reading a file records its mtime, so a later edit can require the model to
+    // have seen the current content (see precheckStale).
+    if (tool.name === "read" && !result.isError) await this.recordRead(String(args.path ?? ""));
+    return result;
+  }
+
+  /** Record that a file was read this session, at its current mtime. */
+  private async recordRead(p: string): Promise<void> {
+    try {
+      const abs = path.resolve(process.cwd(), p);
+      const st = await fs.stat(abs);
+      this.readFiles.set(abs, st.mtimeMs);
+    } catch {
+      /* unreadable — nothing to record */
+    }
+  }
+
+  /**
+   * Read-before-edit guard. Returns an error string when the call must be refused:
+   * editing (or overwriting) a file the model hasn't read this session, or one that
+   * changed on disk since it read it. Creating a NEW file with write is exempt.
+   */
+  private async precheckStale(tool: "write" | "edit", args: any): Promise<string | null> {
+    const abs = path.resolve(process.cwd(), String(args.path ?? ""));
+    let st: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    try {
+      st = await fs.stat(abs);
+    } catch {
+      st = null;
+    }
+    // No file on disk: creating a new file with write is exempt; a missing edit
+    // target is left to the tool to report the real ENOENT.
+    if (!st) return null;
+    const readAt = this.readFiles.get(abs);
+    if (readAt === undefined) {
+      return `Refusing to ${tool} ${args.path}: you haven't read it this session. Read it first, then ${tool} it.`;
+    }
+    if (st.mtimeMs !== readAt) {
+      this.readFiles.delete(abs); // force a fresh read before any edit
+      return `Refusing to ${tool} ${args.path}: it changed on disk since you read it. Read it again to see the current content, then ${tool} it.`;
+    }
+    return null;
   }
 
   /**
@@ -557,9 +610,14 @@ export class Engine {
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }
-    if (this.autoCommit && !result.isError && (tool.name === "write" || tool.name === "edit")) {
-      const abs = path.resolve(process.cwd(), String(args.path ?? ""));
-      await autoCommitFile(abs, tool.name).catch(() => {});
+    if (!result.isError && (tool.name === "write" || tool.name === "edit")) {
+      // Dom just wrote the file — treat that as having "read" the current content,
+      // so consecutive edits work and only EXTERNAL changes force a re-read.
+      await this.recordRead(String(args.path ?? ""));
+      if (this.autoCommit) {
+        const abs = path.resolve(process.cwd(), String(args.path ?? ""));
+        await autoCommitFile(abs, tool.name).catch(() => {});
+      }
     }
     return result;
   }
