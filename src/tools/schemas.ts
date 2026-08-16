@@ -82,6 +82,11 @@ export const sendMessageSchema = z.object({
 
 export const listTabsSchema = z.object({});
 
+export const taskSchema = z.object({
+  description: z.string().describe("Short label for the sub-task (3–6 words), shown in the transcript."),
+  prompt: z.string().describe("The full instruction for the sub-agent: what to find or investigate, and what to report back."),
+});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
@@ -91,6 +96,7 @@ export type GrepArgs = z.infer<typeof grepSchema>;
 export type HttpArgs = z.infer<typeof httpSchema>;
 export type SendMessageArgs = z.infer<typeof sendMessageSchema>;
 export type ListTabsArgs = z.infer<typeof listTabsSchema>;
+export type TaskArgs = z.infer<typeof taskSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

@@ -864,8 +864,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "cost": {
         const cached = engine.cost.cachedPromptTokens ?? 0;
         const uncached = Math.max(0, engine.cost.promptTokens - cached);
+        const sub = engine.cost.subAgentUsd ?? 0;
         sysLog(
-          `in: ${uncached} uncached + ${cached} cached · out: ${engine.cost.completionTokens} · $${engine.cost.usd.toFixed(4)}`,
+          `in: ${uncached} uncached + ${cached} cached · out: ${engine.cost.completionTokens} · $${engine.cost.usd.toFixed(4)}` +
+            (sub > 0 ? ` (incl. $${sub.toFixed(4)} sub-agents)` : ""),
         );
         break;
       }

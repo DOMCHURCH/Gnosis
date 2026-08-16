@@ -30,6 +30,8 @@ export interface CostState {
   cachedPromptTokens: number;
   completionTokens: number;
   usd: number;
+  /** Of usd, the portion spent by `task` sub-agents (shown separately in /cost). */
+  subAgentUsd?: number;
 }
 
 export interface SessionData {
@@ -116,7 +118,7 @@ export function createSession(cwd: string, model: string, mode: Mode): SessionDa
     updatedAt: now,
     model,
     mode,
-    cost: { promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0, usd: 0 },
+    cost: { promptTokens: 0, cachedPromptTokens: 0, completionTokens: 0, usd: 0, subAgentUsd: 0 },
     summary: null,
     messages: [],
   };

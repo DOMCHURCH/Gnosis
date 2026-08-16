@@ -57,6 +57,9 @@ export function callParts(name: string, args: any): CallParts {
     case "send_message":
       primary = String(a.tab ?? "");
       break;
+    case "task":
+      primary = String(a.description ?? "");
+      break;
     default: {
       const first = Object.values(a).find((v) => typeof v === "string");
       primary = first ? String(first) : "";
@@ -144,6 +147,9 @@ export function summarizeResult(name: string, args: any, output: string): string
     }
     case "http":
       return summarizeHttp(output);
+    case "task":
+      // Already "<n> tools · <n> tokens\n<summary>" — show it whole, not truncated.
+      return output;
     default:
       return firstLines(output);
   }

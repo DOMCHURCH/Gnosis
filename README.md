@@ -82,7 +82,7 @@ For models whose provider supports explicit cache breakpoints (Anthropic, Gemini
 
 ## Tools
 
-`read` · `write` · `edit` · `bash` · `glob` · `grep` · `http` — zod schemas are the source of truth; JSON Schema (for the API) and TS types are both derived from them. In multi-tab sessions the model additionally gets `send_message` / `list_tabs`.
+`read` · `write` · `edit` · `bash` · `glob` · `grep` · `http` · `task` — zod schemas are the source of truth; JSON Schema (for the API) and TS types are both derived from them. In multi-tab sessions the model additionally gets `send_message` / `list_tabs`.
 
 ### `http`
 
@@ -91,6 +91,10 @@ Make an outbound HTTP(S) request: `{ url, method?, headers?, body?, timeout? }` 
 - **Permission** — `GET`/`HEAD` may auto-approve in yolo; `POST`/`PUT`/`PATCH`/`DELETE` always prompt with the full URL, in every mode.
 - **SSRF guard** (hard block, never prompted) — `localhost`, `127.0.0.1`, `0.0.0.0`, `::1`, the private ranges (`10.x`, `192.168.x`, `172.16–31.x`), the cloud-metadata address `169.254.169.254`, and any non-`http(s)` scheme (`file://`, `ftp://`, …). Redirect targets are re-checked on every hop.
 - **Secrets** — reference a key by name as `${VAR_NAME}` in the url, a header value, or the body. The value is read from `~/.dom/.env` (`NAME=value` lines, `#` comments, optional quotes) at request time and substituted in. Keys never enter message history, session files, or the transcript: the echoed request shows the `${VAR}` verbatim, and `Authorization` / `api-key`-style headers render as `<redacted>`. A missing key errors with the variable name and the file to add it to.
+
+### `task` (sub-agents)
+
+`task(description, prompt)` delegates an open-ended search or investigation to a fresh read-only sub-agent — "find where X is handled", "which files touch Y". The sub-agent has its own history and context budget (it inherits your cwd, model, and repo map) but only `read`/`glob`/`grep`/`http` — no writing, no shell, and no recursion — and is capped at 15 iterations / 50k tokens (on exceed it returns what it has with a truncation note). It runs to completion and returns only its final summary; its intermediate turns never enter your history. The transcript shows one line: `● Task(description)` then `⎿ N tools · N tokens` and the summary. Its cost is folded into the session and shown separately in `/cost`. Prefer it over grepping large output into your own context.
 
 The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis](https://github.com/public-apis/public-apis) index to `~/.dom/cache/public-apis.md` (refreshed at most every 30 days), greps it by category, reports the Auth column honestly (many "free" entries still need a key), HEAD-checks links before recommending them, then calls `http`.
 

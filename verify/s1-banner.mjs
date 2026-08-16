@@ -16,14 +16,14 @@ const strip = (s) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b[()][
 
 const frames = [];
 const stdout = new EventEmitter();
-stdout.columns = 100; stdout.rows = 40; stdout.isTTY = true;
+stdout.columns = 120; stdout.rows = 40; stdout.isTTY = true;
 stdout.write = (s) => { frames.push(s); return true; };
 const stdin = new EventEmitter();
 stdin.isTTY = true; stdin.setRawMode = () => {}; stdin.setEncoding = () => {};
 stdin.resume = () => {}; stdin.pause = () => {}; stdin.ref = () => {}; stdin.unref = () => {}; stdin.read = () => null;
 
 const app = render(
-  React.createElement(Banner, { caps: detectCaps(), width: 100, tools: TOOL_NAMES, ghAuth: "you (gh ok)" }),
+  React.createElement(Banner, { caps: detectCaps(), width: 120, tools: TOOL_NAMES, ghAuth: "you (gh ok)" }),
   { stdout, stdin, exitOnCtrlC: false, patchConsole: false },
 );
 await wait(80);

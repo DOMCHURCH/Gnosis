@@ -20,7 +20,7 @@ export function limitPhrase(detail: string): string {
   while (end < msg.length && /\d/.test(msg[end]!)) end++;
   return msg.slice(0, end);
 }
-import { TOOLS, TOOL_NAMES, toolDefinitions, type ToolDef, type ToolResult, type ToolContext } from "./tools/index.js";
+import { TOOLS, TOOL_NAMES, toolDefinitions, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -48,7 +48,16 @@ const MAX_ITER = 100;
 // model can't write, run shell commands, or hand work to other tabs — it can only
 // read/search/fetch to research, then produce a written plan. Leaves {read, glob,
 // grep, http}.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs"]);
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task"]);
+
+// A sub-agent's tools: read-only research only, and no `task` (no recursion).
+const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
+const SUBAGENT_MAX_ITER = 15;
+const SUBAGENT_TOKEN_BUDGET = 50_000;
+const SUBAGENT_DIRECTIVE =
+  "\n\nYou are a READ-ONLY research sub-agent. You have only read, glob, grep, and http. Investigate the task " +
+  "thoroughly, then reply with a concise, self-contained summary of what you found (name the files/lines that matter). " +
+  "You cannot write, edit, or run commands. Return your answer as plain text — it becomes the result the caller sees.";
 
 const PLAN_DIRECTIVE =
   "\n\nYou are in PLAN MODE. You have only read-only tools (read, glob, grep, http) — " +
@@ -127,6 +136,16 @@ export class Engine {
   /** Files read this session → the file's mtimeMs at read time. Gates edit/overwrite
    * so the model can't edit a file it hasn't seen, or one that changed since it read. */
   private readFiles = new Map<string, number>();
+  /** When set, restricts the advertised/allowed tools to exactly this list (used by
+   * sub-agents to enforce a read-only set). Overrides mode-based filtering. */
+  toolAllowList?: string[];
+  /** Per-turn caps (sub-agents lower these); parents keep the generous defaults. */
+  maxIterations = MAX_ITER;
+  tokenBudget = Infinity;
+  /** Why the last run stopped early ("iteration"/"token"), or null. */
+  capped: string | null = null;
+  /** Sub-agent sessions are ephemeral — don't write them to ~/.dom/sessions. */
+  private noPersist = false;
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -143,6 +162,7 @@ export class Engine {
     this.summary = deps.session.summary;
     this.cost = deps.session.cost;
     this.cost.cachedPromptTokens ??= 0; // older sessions predate the cached-token field
+    this.cost.subAgentUsd ??= 0;
   }
 
   // --- state helpers -------------------------------------------------------
@@ -175,6 +195,7 @@ export class Engine {
   /** Tools available for the current mode. Plan mode drops write/edit/bash (and the
    * multi-tab meta-tools), leaving only read-only research tools. */
   availableToolNames(): readonly string[] {
+    if (this.toolAllowList) return this.toolAllowList;
     return this.mode === "plan" ? TOOL_NAMES.filter((n) => !PLAN_EXCLUDED.has(n)) : TOOL_NAMES;
   }
 
@@ -217,6 +238,7 @@ export class Engine {
     this.summary = s.summary;
     this.cost = s.cost;
     this.cost.cachedPromptTokens ??= 0;
+    this.cost.subAgentUsd ??= 0;
     this.lastPromptTokens = 0;
     this.repairs.clear();
     this.rejections.clear();
@@ -243,6 +265,7 @@ export class Engine {
   }
 
   async persist(): Promise<void> {
+    if (this.noPersist) return; // ephemeral sub-agent session
     this.session.messages = this.messages;
     this.session.model = this.modelId;
     this.session.mode = this.mode;
@@ -277,10 +300,16 @@ export class Engine {
     this.rejections.clear();
     this.stopTurn = false;
     this.sizeRetried = false;
+    this.capped = null;
 
     let iter = 0;
     try {
-      for (; iter < MAX_ITER; iter++) {
+      for (; iter < this.maxIterations; iter++) {
+        // Sub-agent context budget: stop cleanly once the cap is reached.
+        if (this.cost.promptTokens + this.cost.completionTokens >= this.tokenBudget) {
+          this.capped = "token";
+          break;
+        }
         if (shouldCompact(this.messages, this.contextTokens(), this.contextLength())) {
           this.doCompact(cb);
         }
@@ -399,7 +428,10 @@ export class Engine {
         }
         if (stop) break;
       }
-      if (iter >= MAX_ITER) cb.onSystem("✗ hit 100-iteration cap for this turn");
+      if (iter >= this.maxIterations) {
+        this.capped ??= "iteration";
+        cb.onSystem(`✗ hit ${this.maxIterations}-iteration cap for this turn`);
+      }
       // Stop hook (non-blocking): the turn has ended.
       const stopHook = await runNonBlockingHook(process.cwd(), "Stop", { sessionId: this.sessionId(), model: this.modelId });
       if (stopHook.warn) cb.onSystem(`! ${stopHook.warn}`);
@@ -476,13 +508,73 @@ export class Engine {
     };
   }
 
+  /** Context handed to tools: multi-tab access + the sub-agent runner for `task`. */
+  private toolCtx(): ToolContext {
+    return { tab: this.toolContext?.tab, subagent: (d, p, sig) => this.runSubAgent(d, p, sig) };
+  }
+
+  /**
+   * Run a read-only sub-agent to completion and return only its final text. The
+   * sub-agent is a fresh, ephemeral Engine with its own history and context budget,
+   * restricted to read/glob/grep/http (no recursion) and hard-capped at 15
+   * iterations / 50k tokens. Its intermediate turns never enter this engine's
+   * history; its cost folds into ours and is tracked separately for /cost.
+   */
+  async runSubAgent(description: string, prompt: string, signal?: AbortSignal): Promise<SubAgentResult> {
+    void description;
+    const session = createSession(this.cwd, this.modelId, "yolo"); // read-only tools; yolo only avoids prompts
+    const sub = new Engine({
+      apiKey: this.apiKey,
+      cwd: this.cwd,
+      systemPrompt: this.systemPrompt + SUBAGENT_DIRECTIVE, // inherits the repo map baked into systemPrompt
+      models: this.models,
+      session,
+      skills: this.skills,
+      autoCommit: false,
+    });
+    sub.toolAllowList = SUBAGENT_TOOLS;
+    sub.maxIterations = SUBAGENT_MAX_ITER;
+    sub.tokenBudget = SUBAGENT_TOKEN_BUDGET;
+    sub.interactive = false;
+    sub.noPersist = true;
+    if (signal) signal.addEventListener("abort", () => sub.abort(), { once: true });
+
+    let tools = 0;
+    const cb: Callbacks = {
+      onLine() {},
+      onPending() {},
+      onAssistant() {},
+      onToolStart() {
+        tools++;
+      },
+      onToolResult() {},
+      onSystem() {},
+      requestPermission: async () => "no", // never prompt; unsafe calls are simply refused
+    };
+    await sub.run(prompt, cb);
+
+    const text =
+      [...sub.messages].reverse().find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text ??
+      "(sub-agent produced no summary)";
+    const tokens = sub.cost.promptTokens + sub.cost.completionTokens;
+    // Fold the sub-agent's spend into this session; keep the sub-agent slice for /cost.
+    this.cost.promptTokens += sub.cost.promptTokens;
+    this.cost.cachedPromptTokens += sub.cost.cachedPromptTokens;
+    this.cost.completionTokens += sub.cost.completionTokens;
+    this.cost.usd += sub.cost.usd;
+    this.cost.subAgentUsd = (this.cost.subAgentUsd ?? 0) + sub.cost.usd;
+    return { text, tools, tokens, capped: sub.capped };
+  }
+
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {
     const tool = TOOLS[call.name];
     if (!tool) return { output: `unknown tool: ${call.name}`, isError: true };
-    // Belt-and-braces: the tool isn't even advertised in this mode, but if the model
-    // hallucinates one anyway, refuse it here too (plan mode has no write/edit/bash).
+    // Belt-and-braces: the tool isn't even advertised here, but if the model
+    // hallucinates one anyway, refuse it. Sub-agents (allow-list) see it as an
+    // unknown tool; plan mode explains the restriction.
     if (!this.availableToolNames().includes(call.name)) {
-      return { output: `${call.name} is not available in ${this.mode} mode`, isError: true };
+      const why = this.toolAllowList ? `unknown tool: ${call.name}` : `${call.name} is not available in ${this.mode} mode`;
+      return { output: why, isError: true };
     }
 
     let raw: unknown;
@@ -533,7 +625,7 @@ export class Engine {
 
     let result: ToolResult;
     try {
-      result = await tool.run(args, this.abortController?.signal, this.toolContext);
+      result = await tool.run(args, this.abortController?.signal, this.toolCtx());
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }
@@ -653,7 +745,7 @@ export class Engine {
   private async runAndCommit(tool: ToolDef, args: any, cb: Callbacks): Promise<ToolResult> {
     let result: ToolResult;
     try {
-      result = await tool.run(args, this.abortController?.signal, this.toolContext);
+      result = await tool.run(args, this.abortController?.signal, this.toolCtx());
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }

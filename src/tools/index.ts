@@ -9,6 +9,7 @@ import {
   listTabsSchema,
   readSchema,
   sendMessageSchema,
+  taskSchema,
   toJsonSchema,
   writeSchema,
 } from "./schemas.js";
@@ -20,6 +21,7 @@ import { runGlob } from "./glob.js";
 import { runGrep } from "./grep.js";
 import { runHttp } from "./http.js";
 import { runSendMessage, runListTabs } from "./tabs.js";
+import { runTask } from "./task.js";
 
 export interface ToolResult {
   output: string;
@@ -38,10 +40,21 @@ export interface TabRuntime {
   listTabs(): { name: string; purpose: string; active: boolean; busy: boolean }[];
 }
 
-/** Per-turn context passed to tool.run. Most tools ignore it; the multi-tab
- * tools use `tab`. */
+/** Result of a sub-agent run: its final text plus accounting for the transcript. */
+export interface SubAgentResult {
+  text: string;
+  tools: number;
+  tokens: number;
+  capped: string | null;
+}
+/** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
+export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
+
+/** Per-turn context passed to tool.run. Most tools ignore it; the multi-tab tools
+ * use `tab`; the `task` tool uses `subagent`. */
 export interface ToolContext {
   tab?: TabRuntime;
+  subagent?: SubAgentRunner;
 }
 
 export interface ToolDef {
@@ -127,6 +140,17 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: listTabsSchema,
     mutating: false,
     run: runListTabs,
+  },
+  task: {
+    name: "task",
+    description:
+      "Delegate an open-ended search or investigation to a fresh read-only sub-agent (\"find where X is handled\", " +
+      "\"which files touch Y\"). It has its own context and only read/glob/grep/http — it explores, then returns a " +
+      "concise summary as the result. Its intermediate steps never enter your history, so prefer it over grepping " +
+      "large amounts of output into your own context. Cannot write, run commands, or spawn further sub-agents.",
+    schema: taskSchema,
+    mutating: false,
+    run: runTask,
   },
 };
 
