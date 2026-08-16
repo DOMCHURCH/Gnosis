@@ -27,6 +27,7 @@ import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
 import { jobs, type Job } from "../jobs.js";
 import { listHooks } from "../hooks.js";
+import { writeAgentsMd } from "../init.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
@@ -80,6 +81,7 @@ const HELP = [
   "  /checkpoints  list recent dom checkpoints",
   "  /jobs         list background jobs    /job <id>  show output    /kill <id>  stop it",
   "  /hooks        list registered lifecycle hooks",
+  "  /init [--force]   scan the repo and write an AGENTS.md",
   "  /help         this help    /exit  quit",
   "  @  insert a file path    !cmd  run a shell command",
   "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
@@ -617,6 +619,16 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
   };
 
+  const runInit = async (force: boolean) => {
+    const r = await writeAgentsMd(process.cwd(), force);
+    if (!r.written) {
+      sysLog(r.reason ?? "could not write AGENTS.md");
+      return;
+    }
+    sysLog(`wrote ${path.relative(process.cwd(), r.path).split(path.sep).join("/") || "AGENTS.md"} (${r.lineCount} lines) — it's appended to the system prompt next session`);
+    refreshRepo();
+  };
+
   const showHooks = async () => {
     const hs = await listHooks(process.cwd());
     if (!hs.length) {
@@ -912,6 +924,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "checkpoints":
         void showCheckpoints();
+        break;
+      case "init":
+        void runInit(parts[1] === "--force" || parts[1] === "-f");
         break;
       case "hooks":
         void showHooks();

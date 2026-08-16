@@ -40,7 +40,7 @@ dom --headless "message"  # one-shot, no TUI
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
@@ -67,6 +67,10 @@ Pass `run_in_background: true` to `bash` — for dev servers, watchers, or long 
 ## Hooks
 
 Executable lifecycle scripts in `~/.dom/hooks/` (global) and `./.dom/hooks/` (project — shadows global per event), each named after its event: `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`. Each hook receives the event as JSON on stdin (the extension picks the interpreter: `.mjs`/`.js` → node, `.py` → python, `.ps1` → powershell, `.sh`/none → shell). `PreToolUse` is the only **blocking** hook: a clean non-zero exit blocks the tool call and the script's stderr is returned to the model as the tool error. Every other event is fire-and-forget. All hooks have a 5s timeout — a timeout or crash logs a dim warning and never blocks. `/hooks` lists what's registered.
+
+## /init
+
+`/init` scans the repo and writes an `AGENTS.md`: the detected language and framework, the build/test/lint commands (from `package.json` or the equivalent), a one-line-per-top-level-directory layout, and observed conventions (module style, test framework, formatter). It's prose, under 60 lines, and refuses to overwrite an existing `AGENTS.md` without `--force`. `AGENTS.md` is appended to the system prompt each session.
 
 ## Model fallback
 
