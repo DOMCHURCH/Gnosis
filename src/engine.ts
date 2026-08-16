@@ -55,9 +55,12 @@ const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
 const SUBAGENT_MAX_ITER = 15;
 const SUBAGENT_TOKEN_BUDGET = 50_000;
 const SUBAGENT_DIRECTIVE =
-  "\n\nYou are a READ-ONLY research sub-agent. You have only read, glob, grep, and http. Investigate the task " +
-  "thoroughly, then reply with a concise, self-contained summary of what you found (name the files/lines that matter). " +
-  "You cannot write, edit, or run commands. Return your answer as plain text — it becomes the result the caller sees.";
+  "\n\nYou are a READ-ONLY research sub-agent answering ONE question for another agent. You have only read, glob, " +
+  "grep, and http. Work in as FEW tool calls as possible: search once with a good query, read only the files that " +
+  "matter, and STOP the moment you can answer — do not keep exploring to be exhaustive, and never burn through your " +
+  "tool budget. Then reply with ONLY the answer: a few sentences naming the specific files, lines, or symbols that " +
+  "matter. Do NOT narrate your steps, restate the tools you ran, or explain your process — just the finding. Your " +
+  "reply is the entire result the caller sees.";
 
 const PLAN_DIRECTIVE =
   "\n\nYou are in PLAN MODE. You have only read-only tools (read, glob, grep, http) — " +
@@ -551,7 +554,24 @@ export class Engine {
       onSystem() {},
       requestPermission: async () => "no", // never prompt; unsafe calls are simply refused
     };
-    await sub.run(prompt, cb);
+    // Tools resolve paths against process.cwd(), not engine.cwd — pin it to this
+    // engine's working root for the duration so the sub-agent searches the same
+    // tree the parent does (not wherever process.cwd() happens to have drifted).
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(this.cwd);
+    } catch {
+      /* the working root vanished — search from wherever we are */
+    }
+    try {
+      await sub.run(prompt, cb);
+    } finally {
+      try {
+        process.chdir(prevCwd);
+      } catch {
+        /* ignore */
+      }
+    }
 
     const text =
       [...sub.messages].reverse().find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text ??

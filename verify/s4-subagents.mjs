@@ -76,7 +76,33 @@ globalThis.fetch = async (_u, init) => {
   const toolMsgs = engine.messages.filter((m) => m.role === "tool");
   ok("parent history has the task result", toolMsgs.some((m) => m.name === "task"));
   ok("parent history does NOT contain the sub-agent's own tool calls (grep)", !toolMsgs.some((m) => m.name === "grep"));
+  ok("the parent transcript only ever sees the task call, never the sub-agent's tool calls", results.every((x) => x.name === "task"));
   ok("sub-agent cost is folded into the session and tracked separately", (engine.cost.subAgentUsd ?? 0) > 0 && engine.cost.usd >= engine.cost.subAgentUsd);
+}
+
+// --- (bug 2) the sub-agent searches the PARENT's cwd, even if process.cwd drifted
+{
+  const saved = globalThis.fetch;
+  let gc = 0;
+  let pc = 0;
+  let grepOut = "";
+  globalThis.fetch = async (_u, init) => {
+    const msgs = JSON.parse(init.body).messages;
+    if (/research sub-agent/i.test(String(msgs?.[0]?.content ?? ""))) {
+      gc++;
+      if (gc === 1) return sse(toolSSE("grep", { pattern: "gate" }));
+      grepOut = String([...msgs].reverse().find((m) => m.role === "tool")?.content ?? "");
+      return sse(textSSE("reported"));
+    }
+    pc++;
+    return pc === 1 ? sse(toolSSE("task", { description: "x", prompt: "find gate" })) : sse(textSSE("done"));
+  };
+  const engine = mkEngine("ask"); // engine.cwd = dir (has src/permissions.ts with gate())
+  process.chdir(fake); // drift process.cwd away from the engine's working root
+  await turn(engine);
+  process.chdir(dir);
+  ok("the sub-agent grep searched the parent's cwd, not the drifted process.cwd", /permissions\.ts/.test(grepOut) && !/No matches/.test(grepOut));
+  globalThis.fetch = saved;
 }
 
 // --- (4) the iteration cap terminates cleanly with a truncation note -----------
