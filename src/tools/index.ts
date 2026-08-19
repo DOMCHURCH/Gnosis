@@ -14,6 +14,7 @@ import {
   taskSchema,
   todoSchema,
   viewImageSchema,
+  webSearchSchema,
   toJsonSchema,
   writeSchema,
 } from "./schemas.js";
@@ -28,6 +29,7 @@ import { runSendMessage, runListTabs } from "./tabs.js";
 import { runTask } from "./task.js";
 import { runTodo } from "./todo.js";
 import { runViewImage } from "./viewimage.js";
+import { runWebSearch } from "./websearch.js";
 
 export interface ToolResult {
   output: string;
@@ -188,6 +190,16 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: viewImageSchema,
     mutating: false,
     run: runViewImage,
+  },
+  web_search: {
+    name: "web_search",
+    description:
+      "Search the web via the Brave Search API and return the top results (title, URL, snippet). Use it to find " +
+      "current information or the right page, then fetch a specific result with the http tool. Needs BRAVE_API_KEY " +
+      "in ~/.dom/.env.",
+    schema: webSearchSchema,
+    mutating: false,
+    run: runWebSearch,
   },
 };
 

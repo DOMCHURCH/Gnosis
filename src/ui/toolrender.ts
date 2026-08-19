@@ -61,6 +61,9 @@ export function callParts(name: string, args: any): CallParts {
     case "task":
       primary = String(a.description ?? "");
       break;
+    case "web_search":
+      primary = String(a.query ?? "");
+      break;
     case "todo": {
       const count = Array.isArray(a.items) ? a.items.length : 0;
       primary = `${count} task${count === 1 ? "" : "s"}`;
@@ -166,6 +169,11 @@ export function summarizeResult(name: string, args: any, output: string): string
     }
     case "http":
       return summarizeHttp(output);
+    case "web_search": {
+      if (/^No results/.test(output)) return "No results";
+      const m = output.match(/^(\d+) result/);
+      return m ? `${Number(m[1])} result${Number(m[1]) === 1 ? "" : "s"}` : firstLines(output);
+    }
     case "task":
       // Already "<n> tools · <n> tokens\n<summary>" — show it whole, not truncated.
       return output;

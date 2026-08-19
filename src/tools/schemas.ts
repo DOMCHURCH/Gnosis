@@ -127,6 +127,11 @@ export const viewImageSchema = z.object({
   path: z.string().describe("Path to an image file (png, jpg, jpeg, gif, or webp) to load so you can see it."),
 });
 
+export const webSearchSchema = z.object({
+  query: z.string().describe("The web search query."),
+  count: z.number().int().positive().optional().describe("How many results to return (default 8, capped at 20)."),
+});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
@@ -139,6 +144,7 @@ export type ListTabsArgs = z.infer<typeof listTabsSchema>;
 export type TaskArgs = z.infer<typeof taskSchema>;
 export type TodoArgs = z.infer<typeof todoSchema>;
 export type ViewImageArgs = z.infer<typeof viewImageSchema>;
+export type WebSearchArgs = z.infer<typeof webSearchSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

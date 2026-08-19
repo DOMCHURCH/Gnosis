@@ -18,6 +18,14 @@ eq("bash → Bash(command)", callParts("bash", { command: "npm run build" }).pri
   const h = callParts("http", { method: "get", url: "https://api.example.com/v1/x" });
   eq("http → METHOD host/path, scheme stripped", `${h.tool}(${h.primary})`, "Http(GET api.example.com/v1/x)");
 }
+eq("web_search → query as primary", callParts("web_search", { query: "brave api" }).primary, "brave api");
+eq("view_image → path as primary", callParts("view_image", { path: "shots/a.png" }).primary, "shots/a.png");
+{
+  const t = callParts("todo", { items: [{ text: "a", status: "done" }, { text: "b", status: "active" }] });
+  eq("todo → N tasks", `${t.tool}(${t.primary})`, "Todo(2 tasks)");
+  const e = callParts("edit", { path: "f.ts", edits: [{ old_str: "a", new_str: "b" }, { old_str: "c", new_str: "d" }] });
+  eq("edit batch → shows edit count", e.primary + e.secondary, "f.ts, 2 edits");
+}
 
 // --- left-truncation of long paths ------------------------------------------
 {
@@ -40,6 +48,9 @@ eq("glob summary", summarizeResult("glob", {}, ["a.ts\t10", "b.ts\t20", "c.ts\t3
   const httpOut = ["GET api.example.com/x", "> user-agent: dom", "", "200 OK", "< content-type: application/json; charset=utf-8", "< content-length: 4300", "", '{"a":1}'].join("\n");
   eq("http summary → status · size type", summarizeResult("http", {}, httpOut), "200 OK · 4.2KB json");
 }
+eq("web_search summary → N results", summarizeResult("web_search", {}, `3 results for "x":\n\n1. A\n   https://a`), "3 results");
+eq("web_search summary → no results", summarizeResult("web_search", {}, 'No results for "zzz".'), "No results");
+eq("edit batch summary → prefixed with edit count", summarizeResult("edit", { edits: [{ old_str: "a", new_str: "A" }, { old_str: "b", new_str: "B" }] }, "Edited f — 2 edits, 2 replacements"), "2 edits · Added 2 lines, removed 2 lines");
 {
   const bashOut = "l1\nl2\nl3\nl4\nl5";
   eq("bash summary → first 3 lines + marker", summarizeResult("bash", {}, bashOut), "l1\nl2\nl3\n+2 lines");

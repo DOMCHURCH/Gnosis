@@ -31,7 +31,10 @@ export function Banner({ caps, width, tools, ghAuth }: Props) {
   // Compact 8-row banner: the six art rows + one dim status line. No frame (it
   // cost two rows and the boot screen only shows once) and no separate tagline /
   // tools / gh rows — they fold into the single status line to save vertical space.
-  const status = `${TAGLINE} · ${tools.join(" ")} · gh ${ghAuth}`.replaceAll("·", g.mid);
+  // gh sits before the tool list so that, as the tool set grows and the line is
+  // truncated to width, the (fixed) tagline + gh survive and only the tool tail is
+  // dropped — rather than losing gh off the end.
+  const status = `${TAGLINE} · gh ${ghAuth} · ${tools.join(" ")}`.replaceAll("·", g.mid);
   return (
     <Box flexDirection="column" width={width}>
       {ART.map((line, i) => (

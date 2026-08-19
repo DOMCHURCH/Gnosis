@@ -95,7 +95,7 @@ export function httpBlockReason(args: { url?: unknown }): string | null {
 const VAR_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 /** Parse ~/.dom/.env (KEY=value lines, # comments, optional quotes). */
-async function loadEnv(): Promise<Record<string, string>> {
+export async function loadEnv(): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
   let txt: string;
   try {
