@@ -42,6 +42,7 @@ export function callParts(name: string, args: any): CallParts {
     case "read":
     case "write":
     case "edit":
+    case "view_image":
       primary = String(a.path ?? "");
       break;
     case "glob":

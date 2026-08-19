@@ -82,7 +82,7 @@ function expandHome(p: string): string {
 function resolveTarget(tool: ToolDef, args: any): string | null {
   const raw = args?.path;
   if (typeof raw !== "string" || !raw) return null;
-  if (["read", "write", "edit", "glob", "grep"].includes(tool.name)) {
+  if (["read", "write", "edit", "glob", "grep", "view_image"].includes(tool.name)) {
     return path.resolve(process.cwd(), expandHome(raw));
   }
   return null;

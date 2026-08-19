@@ -3,7 +3,7 @@
 
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { serialize, estimateTokens, type Msg, type ToolCall } from "./messages.js";
+import { serialize, estimateTokens, type Msg, type ToolCall, type ImagePart } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
@@ -48,7 +48,7 @@ const MAX_ITER = 100;
 // model can't write, run shell commands, hand work to other tabs, or track
 // execution — it can only read/search/fetch to research, then produce a written
 // plan. Leaves {read, glob, grep, http}.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo"]);
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
@@ -153,6 +153,12 @@ export class Engine {
   /** Ephemeral sessions (sub-agents, `-p` pipe mode without --save) aren't
    * written to ~/.dom/sessions. */
   noPersist = false;
+  /** Images attached to the NEXT user turn (an @image in TUI input). Consumed and
+   * cleared when run() pushes the user message. */
+  private nextUserImages: ImagePart[] = [];
+  /** Images loaded by view_image during the current turn; flushed into a synthetic
+   * user message after the tool calls so the model sees them the next iteration. */
+  private pendingImages: ImagePart[] = [];
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -182,6 +188,14 @@ export class Engine {
    * breakpoints (a non-zero cache-write price in the catalog). */
   supportsCache(): boolean {
     return (this.currentModel()?.pricing.cacheWrite ?? 0) > 0;
+  }
+  /** True when the active model accepts image input (view_image / @image work). */
+  supportsImageInput(): boolean {
+    return this.currentModel()?.input_modalities?.includes("image") ?? false;
+  }
+  /** Attach images to the next user turn (an @image reference typed in the TUI). */
+  setNextUserImages(images: ImagePart[]): void {
+    this.nextUserImages = images;
   }
   contextLength(): number {
     return this.currentModel()?.context_length ?? 0;
@@ -305,7 +319,11 @@ export class Engine {
   // --- the loop ------------------------------------------------------------
 
   async run(userText: string, cb: Callbacks): Promise<void> {
-    this.messages.push({ role: "user", text: userText });
+    // Attach any images queued for this turn (an @image typed in the TUI).
+    const images = this.nextUserImages;
+    this.nextUserImages = [];
+    this.pendingImages = [];
+    this.messages.push({ role: "user", text: userText, images: images.length ? images : undefined });
     this.abortController = new AbortController();
     this.repairs.clear();
     this.rejections.clear();
@@ -325,7 +343,7 @@ export class Engine {
           this.doCompact(cb);
         }
 
-        const wire = serialize(this.messages, this.currentSystemPrompt(), this.summary);
+        const wire = serialize(this.messages, this.currentSystemPrompt(), this.summary, { images: this.supportsImageInput() });
         // Markdown is stripped from the visible text as it streams (never a
         // post-hoc pass), so the output can't flash raw markdown then correct
         // itself. Only text flows through here — tool-call args are on a separate
@@ -437,6 +455,13 @@ export class Engine {
             break;
           }
         }
+        // Images loaded by view_image this turn ride in on a synthetic user message
+        // right after the tool results, so the model sees them the next iteration.
+        // (OpenAI-format images live in user messages, not tool results.)
+        if (this.pendingImages.length) {
+          this.messages.push({ role: "user", text: "", images: this.pendingImages });
+          this.pendingImages = [];
+        }
         if (stop) break;
       }
       if (iter >= this.maxIterations) {
@@ -520,13 +545,17 @@ export class Engine {
   }
 
   /** Context handed to tools: multi-tab access, the sub-agent runner for `task`,
-   * and the task-list setter for `todo`. */
+   * the task-list setter for `todo`, and image input/attach for `view_image`. */
   private toolCtx(): ToolContext {
     return {
       tab: this.toolContext?.tab,
       subagent: (d, p, sig) => this.runSubAgent(d, p, sig),
       setTodos: (items) => {
         this.todos = items;
+      },
+      imageInput: this.supportsImageInput(),
+      attachImage: (img) => {
+        this.pendingImages.push(img);
       },
     };
   }

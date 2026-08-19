@@ -54,6 +54,8 @@ export interface ModelInfo {
    * cache_control breakpoints (Anthropic/Gemini via OpenRouter). */
   pricing: { prompt: number; completion: number; cacheRead: number; cacheWrite: number };
   supported_parameters: string[];
+  /** Accepted input types; a vision model includes "image". */
+  input_modalities: string[];
 }
 
 export interface Usage {

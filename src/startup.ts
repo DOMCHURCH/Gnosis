@@ -131,6 +131,7 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
       cacheWrite: e.pricing.cacheWrite,
     },
     supported_parameters: e.supported_parameters,
+    input_modalities: e.input_modalities,
   }));
 
   const defaultModel = pickDefaultModel(config);

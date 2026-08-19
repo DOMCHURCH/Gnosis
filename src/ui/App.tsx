@@ -21,6 +21,7 @@ import { TabsController, type Tab } from "../tabs.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
 import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
+import { loadImage, isImagePath } from "../tools/viewimage.js";
 import { fetchModels, resolveModelQuery, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
@@ -88,6 +89,18 @@ const HELP = [
   "  @  insert a file path    !cmd  run a shell command",
   "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
 ].join("\n");
+
+// Image @references in a submitted message: `@path` tokens that name an existing
+// image file. These get loaded and attached to the message for a vision model.
+function imageRefsIn(text: string): string[] {
+  const out: string[] = [];
+  const re = /@(\S+)/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const p = m[1]!;
+    if (isImagePath(p) && existsSync(path.resolve(process.cwd(), p))) out.push(p);
+  }
+  return out;
+}
 
 // Per-1M-token price, from OpenRouter's per-token figures.
 function priceLabel(m: ModelEntry): string {
@@ -1052,6 +1065,28 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       return;
     }
     const tab = controller.active();
+    // @image references: on a vision model, load them and attach to this message.
+    const imagePaths = imageRefsIn(v);
+    if (imagePaths.length && tab.engine.supportsImageInput()) {
+      emitToTab(tab, { kind: "user", text: v });
+      void (async () => {
+        const imgs = [];
+        for (const p of imagePaths) {
+          const r = await loadImage(path.resolve(process.cwd(), p));
+          if ("error" in r) sysLog(r.error);
+          else imgs.push({ source: r.source, mime: r.mime, data: r.data });
+        }
+        if (imgs.length) {
+          tab.engine.setNextUserImages(imgs);
+          sysLog(`${g.mid} attached ${imgs.length} image${imgs.length === 1 ? "" : "s"}`);
+        }
+        controller.submitUser(tab, v);
+      })();
+      return;
+    }
+    if (imagePaths.length) {
+      sysLog(`current model (${tab.engine.modelId}) can't view images — switch to a vision model with /model. Sending as text.`);
+    }
     emitToTab(tab, { kind: "user", text: v });
     controller.submitUser(tab, v);
   };

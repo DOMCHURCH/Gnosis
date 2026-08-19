@@ -12,15 +12,28 @@ export interface ToolCall {
   args: string;
 }
 
+/** An image attached to a user message (view_image tool, or an @image in input). */
+export interface ImagePart {
+  /** Original path (or source label) — shown to the user, used as a fallback note. */
+  source: string;
+  /** MIME type, e.g. "image/png". */
+  mime: string;
+  /** Base64-encoded image bytes (no data: prefix). */
+  data: string;
+}
+
 export type Msg =
-  | { role: "user"; text: string }
+  | { role: "user"; text: string; images?: ImagePart[] }
   | { role: "assistant"; text?: string; calls?: ToolCall[] }
   | { role: "tool"; callId: string; name: string; result: string; isError: boolean };
+
+/** An OpenAI content part: plain text, or an image referenced by a data URL. */
+export type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 /** A wire message in OpenAI chat-completions format. */
 export interface WireMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | ContentPart[] | null;
   tool_calls?: {
     id: string;
     type: "function";
@@ -33,16 +46,34 @@ export interface WireMessage {
 /**
  * Serialize internal history to OpenAI wire format. `system` is the system
  * prompt; `summary` is an optional compaction note injected as a second system
- * message.
+ * message. `opts.images` gates whether attached images are emitted as image_url
+ * content blocks — false (the current model can't view images) degrades them to a
+ * text note so the request stays valid across a runtime model switch.
  */
-export function serialize(messages: Msg[], system: string, summary?: string | null): WireMessage[] {
+export function serialize(
+  messages: Msg[],
+  system: string,
+  summary?: string | null,
+  opts?: { images?: boolean },
+): WireMessage[] {
   const wire: WireMessage[] = [{ role: "system", content: system }];
   if (summary) {
     wire.push({ role: "system", content: `[Earlier conversation summary]\n${summary}` });
   }
   for (const m of messages) {
     if (m.role === "user") {
-      wire.push({ role: "user", content: m.text });
+      if (m.images?.length && opts?.images) {
+        const parts: ContentPart[] = [];
+        if (m.text) parts.push({ type: "text", text: m.text });
+        for (const img of m.images) parts.push({ type: "image_url", image_url: { url: `data:${img.mime};base64,${img.data}` } });
+        wire.push({ role: "user", content: parts });
+      } else if (m.images?.length) {
+        // The active model can't view images — keep the turn but note them.
+        const note = `[${m.images.length} image(s) not shown — the current model can't view images: ${m.images.map((i) => i.source).join(", ")}]`;
+        wire.push({ role: "user", content: m.text ? `${m.text}\n${note}` : note });
+      } else {
+        wire.push({ role: "user", content: m.text });
+      }
     } else if (m.role === "assistant") {
       const wm: WireMessage = { role: "assistant", content: m.text ?? null };
       if (m.calls && m.calls.length > 0) {
@@ -70,8 +101,11 @@ export function serialize(messages: Msg[], system: string, summary?: string | nu
 export function estimateTokens(messages: Msg[], system = ""): number {
   let chars = system.length;
   for (const m of messages) {
-    if (m.role === "user") chars += m.text.length;
-    else if (m.role === "assistant") {
+    if (m.role === "user") {
+      chars += m.text.length;
+      // Rough flat cost per attached image so the context meter isn't way off.
+      chars += (m.images?.length ?? 0) * 4000;
+    } else if (m.role === "assistant") {
       chars += (m.text ?? "").length;
       for (const c of m.calls ?? []) chars += c.name.length + c.args.length;
     } else {

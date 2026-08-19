@@ -123,6 +123,10 @@ export const taskSchema = z.object({
   prompt: z.string().describe("The full instruction for the sub-agent: what to find or investigate, and what to report back."),
 });
 
+export const viewImageSchema = z.object({
+  path: z.string().describe("Path to an image file (png, jpg, jpeg, gif, or webp) to load so you can see it."),
+});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
@@ -134,6 +138,7 @@ export type SendMessageArgs = z.infer<typeof sendMessageSchema>;
 export type ListTabsArgs = z.infer<typeof listTabsSchema>;
 export type TaskArgs = z.infer<typeof taskSchema>;
 export type TodoArgs = z.infer<typeof todoSchema>;
+export type ViewImageArgs = z.infer<typeof viewImageSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

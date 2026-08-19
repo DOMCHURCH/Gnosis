@@ -28,7 +28,18 @@ export interface ModelEntry {
   context_length: number;
   /** OpenRouter capability flags; a tool-capable model includes "tools". */
   supported_parameters: string[];
+  /** Accepted input types from architecture.input_modalities; a vision model
+   * includes "image". Defaults to ["text"] when the catalog doesn't say. */
+  input_modalities: string[];
 }
+
+// A few of the built-in fallback models are vision-capable; tag them so
+// view_image / @image still work offline when the live catalog is unreachable.
+const VISION_FALLBACK = new Set([
+  "google/gemini-2.5-flash-lite",
+  "anthropic/claude-sonnet-4.6",
+  "openai/gpt-4o-mini",
+]);
 
 function toNum(v: unknown): number {
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
@@ -61,6 +72,9 @@ function parse(raw: unknown): ModelEntry[] {
       : [];
     // Only tool-capable models are usable by the agent.
     if (!supported.includes("tools")) continue;
+    const inputModalities: string[] = Array.isArray(m.architecture?.input_modalities)
+      ? m.architecture.input_modalities.map(String)
+      : ["text"];
     out.push({
       id: m.id,
       name: typeof m.name === "string" ? m.name : m.id,
@@ -72,6 +86,7 @@ function parse(raw: unknown): ModelEntry[] {
       },
       context_length: toNum(m.context_length ?? m.top_provider?.context_length),
       supported_parameters: supported,
+      input_modalities: inputModalities,
     });
   }
   out.sort((a, b) => a.id.localeCompare(b.id));
@@ -92,6 +107,7 @@ function parseGroq(raw: unknown): ModelEntry[] {
       pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 },
       context_length: toNum(m.context_window ?? m.context_length),
       supported_parameters: ["tools"],
+      input_modalities: ["text"], // Groq's /models exposes no modality flags
     });
   }
   out.sort((a, b) => a.id.localeCompare(b.id));
@@ -105,6 +121,7 @@ function fallback(): ModelEntry[] {
     pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 },
     context_length: 0,
     supported_parameters: ["tools"],
+    input_modalities: VISION_FALLBACK.has(id) ? ["text", "image"] : ["text"],
   }));
 }
 

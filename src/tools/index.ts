@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { ToolSchema } from "../provider.js";
 import type { TodoItem } from "../config.js";
+import type { ImagePart } from "../messages.js";
 import {
   bashSchema,
   editSchema,
@@ -12,6 +13,7 @@ import {
   sendMessageSchema,
   taskSchema,
   todoSchema,
+  viewImageSchema,
   toJsonSchema,
   writeSchema,
 } from "./schemas.js";
@@ -25,6 +27,7 @@ import { runHttp } from "./http.js";
 import { runSendMessage, runListTabs } from "./tabs.js";
 import { runTask } from "./task.js";
 import { runTodo } from "./todo.js";
+import { runViewImage } from "./viewimage.js";
 
 export interface ToolResult {
   output: string;
@@ -54,13 +57,18 @@ export interface SubAgentResult {
 export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
 
 /** Per-turn context passed to tool.run. Most tools ignore it; the multi-tab tools
- * use `tab`; the `task` tool uses `subagent`; the `todo` tool uses `setTodos`. */
+ * use `tab`; the `task` tool uses `subagent`; the `todo` tool uses `setTodos`; the
+ * `view_image` tool uses `imageInput` + `attachImage`. */
 export interface ToolContext {
   tab?: TabRuntime;
   subagent?: SubAgentRunner;
   /** Replace the session's task list (rendered live above the input). Absent
    * headless / in sub-agents, where the tool simply returns its summary. */
   setTodos?: (items: TodoItem[]) => void;
+  /** Whether the active model accepts image input — view_image refuses if false. */
+  imageInput?: boolean;
+  /** Attach a loaded image to the next message (view_image). */
+  attachImage?: (img: ImagePart) => void;
 }
 
 export interface ToolDef {
@@ -170,6 +178,16 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: todoSchema,
     mutating: false,
     run: runTodo,
+  },
+  view_image: {
+    name: "view_image",
+    description:
+      "Load an image file (png, jpg, jpeg, gif, webp) so you can see it — the image is attached to the next message. " +
+      "Only works when the active model accepts image input; otherwise it errors and you should ask the user to " +
+      "switch to a vision model.",
+    schema: viewImageSchema,
+    mutating: false,
+    run: runViewImage,
   },
 };
 
