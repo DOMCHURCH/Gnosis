@@ -179,6 +179,16 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const { stdout } = useStdout();
 
   const [input, setInput] = useState("");
+  // Type-ahead: lines submitted while a turn is running are queued (not dropped)
+  // and shown dimly below the input, then sent as the next user message at the
+  // turn boundary. Stored per tab so switching tabs preserves each tab's queue;
+  // `queued` mirrors the ACTIVE tab's queue for rendering.
+  const queuesRef = useRef<Map<number, string[]>>(new Map());
+  const [queued, setQueued] = useState<string[]>([]);
+  // Set when a ctrl+c abort ends the turn: the queue is KEPT (not auto-fired) at
+  // that boundary. Normal completion auto-fires the queue; an abort preserves it
+  // for the user to send (empty enter), edit, or drop (esc).
+  const flushSuppressedRef = useRef(false);
   // The transient in-progress line (streaming owner commits finished lines to the
   // transcript; this holds only the line still being typed — active tab only).
   const [pending, setPending] = useState("");
@@ -381,6 +391,47 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
   const sysLog = (text: string) => emitToTab(controller.active(), { kind: "system", text });
 
+  // --- queued input (type-ahead while a turn runs) -------------------------
+
+  const activeQueue = (): string[] => queuesRef.current.get(controller.active().id) ?? [];
+  const syncQueued = () => setQueued([...activeQueue()]);
+  const enqueueInput = (text: string) => {
+    const id = controller.active().id;
+    const arr = queuesRef.current.get(id) ?? [];
+    arr.push(text);
+    queuesRef.current.set(id, arr);
+    syncQueued();
+  };
+  const clearQueue = () => {
+    queuesRef.current.delete(controller.active().id);
+    syncQueued();
+  };
+  // Send the active tab's queued lines as a single next user message.
+  const flushQueue = () => {
+    const tab = controller.active();
+    const arr = queuesRef.current.get(tab.id);
+    if (!arr || !arr.length) return;
+    queuesRef.current.delete(tab.id);
+    syncQueued();
+    const text = arr.join("\n");
+    emitToTab(tab, { kind: "user", text });
+    controller.submitUser(tab, text);
+  };
+
+  // At a turn boundary (the active tab goes idle) auto-send any queued input —
+  // unless a ctrl+c abort ended the turn, in which case the queue is kept for the
+  // user. Fires on every busy→false transition; a no-op when the queue is empty.
+  useEffect(() => {
+    if (busy) return;
+    if (flushSuppressedRef.current) {
+      flushSuppressedRef.current = false;
+      return;
+    }
+    flushQueue();
+    // flushQueue reads live refs; re-running only on the busy edge is intended.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy]);
+
   // A background job finished/was killed: append a dim line to the tab that
   // launched it (or the active tab if that tab is gone).
   jobDoneRef.current = (job: Job) => {
@@ -486,6 +537,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     // Clear the screen and render only the target tab's transcript — each tab
     // reads as its own session rather than a continuation of the previous one.
     rebuildScreen(tab);
+    syncQueued(); // show the target tab's own type-ahead queue
 
     const pp = controller.takePendingPermission(tab);
     if (pp) {
@@ -531,6 +583,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     const closing = controller.active();
     const now = controller.close(closing.id); // aborts it + resolves any parked prompt
     buffers.current.delete(closing.id);
+    queuesRef.current.delete(closing.id);
     setPending("");
     setLiveTool(null);
     setOverlay({ type: "none" });
@@ -542,6 +595,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     setRoot(now.engine.cwd);
     refreshRepo();
     rebuildScreen(now);
+    syncQueued();
     sysLog(`closed ${closing.name}`);
   };
 
@@ -900,6 +954,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         buf.lastKind = "";
         altRef.current = false;
         setAlt(false);
+        clearQueue();
         resetScreen([{ id: nextId(), kind: "system", text: "conversation cleared" }]);
         break;
       }
@@ -972,7 +1027,18 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const handleSubmit = (value: string) => {
     const v = value;
     setInput("");
-    if (!v.trim() || busyRef.current) return;
+    if (busyRef.current) {
+      // A turn is running: queue non-empty text as the next message. Commands and
+      // shell are for the idle prompt; while busy everything is a queued message.
+      if (v.trim()) enqueueInput(v);
+      return;
+    }
+    // Idle: an empty submit flushes a queue the user is holding (e.g. one kept
+    // after a ctrl+c abort); otherwise there's nothing to send.
+    if (!v.trim()) {
+      if (activeQueue().length) flushQueue();
+      return;
+    }
     if (v.startsWith("!")) {
       const command = v.slice(1).trim();
       if (!command) return;
@@ -1004,15 +1070,19 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         hardExit();
         return;
       }
-      // A permission prompt is open: decline it and abort the turn.
+      // A permission prompt is open: decline it and abort the turn. Keep the
+      // queue (the turn is still "busy" here) rather than firing it on the abort.
       if (overlayRef.current.type === "permission") {
+        flushSuppressedRef.current = true;
         resolvePerm("no");
         engine.abort();
         armCtrlCExit();
         return;
       }
-      // A turn (or a running tool) is in flight in the active tab: abort it.
+      // A turn (or a running tool) is in flight in the active tab: abort it, and
+      // keep any queued input (ctrl+c preserves; esc is the discard gesture).
       if (busyRef.current) {
+        flushSuppressedRef.current = true;
         engine.abort();
         armCtrlCExit();
         return;
@@ -1030,6 +1100,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       }
       // Idle at an empty prompt: arm; the next press exits.
       armCtrlCExit();
+      return;
+    }
+    // Esc discards the type-ahead queue (only when no overlay owns Esc, and only
+    // when there's actually a queue — otherwise let it fall through).
+    if (key.escape && overlayRef.current.type === "none" && activeQueue().length) {
+      clearQueue();
       return;
     }
     // Ctrl+1..9 switches tabs — always available, even while a turn is running so
@@ -1240,9 +1316,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   if (tabbarShown) regionRows += 2; // marginTop + tab bar
   regionRows += (tabbarShown ? 0 : 1) + 1; // status bar (+ its marginTop)
   if (ctrlCArmed) regionRows += 1;
-  if (overlay.type !== "none") regionRows += 1 + overlayRows; // marginTop + overlay
-  else if (busy) regionRows += 1; // thinking spinner
-  else regionRows += 1 + (input === "" ? 1 : 0); // input line + hint (hint only when empty)
+  if (overlay.type !== "none") {
+    regionRows += 1 + overlayRows; // marginTop + overlay
+  } else {
+    if (busy) regionRows += 1; // thinking spinner status line (above the input)
+    regionRows += 1; // input line
+    if (busy || input === "") regionRows += 1; // hint line (busy hint, or mode hint when empty)
+    regionRows += queued.length; // dim queued-input lines
+  }
   regionRowsRef.current = regionRows;
 
   return (
@@ -1306,29 +1387,46 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
       {overlay.type !== "none" ? (
         <Box marginTop={1}>{renderOverlay()}</Box>
-      ) : busy ? (
-        <Box width={inner}>
-          <Text color={col(C.cyan)} wrap="truncate">
-            {frames[spin % frames.length]}{" "}
-          </Text>
-          <Text color={col(C.value)} wrap="truncate">
-            {think?.word ?? "Thinking"}
-          </Text>
-          <Text color={col(C.dim)} wrap="truncate">
-            {" "}
-            for {formatElapsed(elapsed)} · ctrl+c to interrupt
-          </Text>
-        </Box>
       ) : (
-        <InputBar
-          caps={caps}
-          width={inner}
-          value={input}
-          onChange={handleChange}
-          onSubmit={handleSubmit}
-          mode={engine.mode}
-          autoApproveEdits={engine.autoApproveEdits}
-        />
+        <>
+          {/* A running turn shows the spinner as a status line ABOVE the input,
+              which stays live so a follow-up can be typed and queued. */}
+          {busy ? (
+            <Box width={inner}>
+              <Text color={col(C.cyan)} wrap="truncate">
+                {frames[spin % frames.length]}{" "}
+              </Text>
+              <Text color={col(C.value)} wrap="truncate">
+                {think?.word ?? "Thinking"}
+              </Text>
+              <Text color={col(C.dim)} wrap="truncate">
+                {" "}
+                for {formatElapsed(elapsed)} · ctrl+c to interrupt
+              </Text>
+            </Box>
+          ) : null}
+          <InputBar
+            caps={caps}
+            width={inner}
+            value={input}
+            onChange={handleChange}
+            onSubmit={handleSubmit}
+            mode={engine.mode}
+            autoApproveEdits={engine.autoApproveEdits}
+            busy={busy}
+          />
+          {/* Queued type-ahead lines, dim, below the input. Present while a turn
+              runs and (after a ctrl+c abort) until sent or cleared. */}
+          {queued.length ? (
+            <Box flexDirection="column" width={inner}>
+              {queued.map((q, i) => (
+                <Text key={i} color={col(C.dim)} wrap="truncate">
+                  {g.mid} {q}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+        </>
       )}
     </Box>
   );
