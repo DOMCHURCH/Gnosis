@@ -70,7 +70,10 @@ export function callParts(name: string, args: any): CallParts {
       primary = first ? String(first) : "";
     }
   }
-  if (name === "edit" && a.replace_all) secondary = ", replace_all";
+  if (name === "edit") {
+    if (Array.isArray(a.edits) && a.edits.length) secondary = `, ${a.edits.length} edit${a.edits.length === 1 ? "" : "s"}`;
+    else if (a.replace_all) secondary = ", replace_all";
+  }
   return { tool: capitalize(name), primary, secondary };
 }
 
@@ -131,13 +134,23 @@ export function summarizeResult(name: string, args: any, output: string): string
       return m ? `Wrote ${n(Number(m[1]), "line")} to ${basename(m[2]!)}` : (output.split("\n")[0] ?? "");
     }
     case "edit": {
+      const list =
+        Array.isArray(a.edits) && a.edits.length
+          ? a.edits
+          : [{ old_str: a.old_str, new_str: a.new_str, replace_all: a.replace_all }];
       let added = 0, removed = 0;
-      for (const p of diffLines(String(a.old_str ?? ""), String(a.new_str ?? ""))) {
-        if (p.added) added += p.count ?? 0;
-        else if (p.removed) removed += p.count ?? 0;
+      for (const ed of list) {
+        for (const p of diffLines(String(ed.old_str ?? ""), String(ed.new_str ?? ""))) {
+          if (p.added) added += p.count ?? 0;
+          else if (p.removed) removed += p.count ?? 0;
+        }
       }
+      // A single replace_all edit hit N occurrences — scale the per-edit diff by
+      // the reported replacement count (matches the pre-batch behavior).
       const reps = Number((output.match(/— (\d+) replacement/) ?? [])[1] ?? 1) || 1;
-      return `Added ${n(added * reps, "line")}, removed ${n(removed * reps, "line")}`;
+      const scale = list.length === 1 && list[0]?.replace_all && reps > 0 ? reps : 1;
+      const prefix = list.length > 1 ? `${list.length} edits · ` : "";
+      return `${prefix}Added ${n(added * scale, "line")}, removed ${n(removed * scale, "line")}`;
     }
     case "grep": {
       if (/^No matches/.test(output)) return "No matches";

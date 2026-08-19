@@ -17,9 +17,29 @@ export const writeSchema = z.object({
 
 export const editSchema = z.object({
   path: z.string().describe("File to edit."),
-  old_str: z.string().describe("Exact string to replace. Must be unique unless replace_all is true."),
-  new_str: z.string().describe("Replacement string."),
-  replace_all: z.boolean().optional().describe("Replace every occurrence instead of requiring a unique match."),
+  old_str: z
+    .string()
+    .optional()
+    .describe("Single-edit form: exact string to replace. Must be unique unless replace_all is true."),
+  new_str: z.string().optional().describe("Single-edit form: the replacement string."),
+  replace_all: z
+    .boolean()
+    .optional()
+    .describe("Single-edit form: replace every occurrence instead of requiring a unique match."),
+  edits: z
+    .array(
+      z.object({
+        old_str: z.string().describe("Exact string to replace. Must be unique in the file unless replace_all is true."),
+        new_str: z.string().describe("Replacement string."),
+        replace_all: z.boolean().optional().describe("Replace every occurrence instead of requiring a unique match."),
+      }),
+    )
+    .optional()
+    .describe(
+      "Batch form (alternative to old_str/new_str): several edits applied to `path` in order, atomically — either " +
+        "all apply or none do, and you get ONE permission prompt showing the combined diff. Each edit's uniqueness is " +
+        "checked against the file as left by the previous edits.",
+    ),
 });
 
 export const bashSchema = z.object({

@@ -92,7 +92,9 @@ export const TOOLS: Record<string, ToolDef> = {
   edit: {
     name: "edit",
     description:
-      "Replace an exact string in a file. old_str must match exactly once unless replace_all is true.",
+      "Replace exact strings in a file. Single edit: old_str (unique in the file unless replace_all) → new_str. " +
+      "Or pass `edits: [{old_str, new_str, replace_all?}]` to apply several edits to the same file atomically — all " +
+      "apply or none do, with one confirmation showing the combined diff.",
     schema: editSchema,
     mutating: true,
     run: runEdit,
