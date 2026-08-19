@@ -150,8 +150,9 @@ export class Engine {
   tokenBudget = Infinity;
   /** Why the last run stopped early ("iteration"/"token"), or null. */
   capped: string | null = null;
-  /** Sub-agent sessions are ephemeral — don't write them to ~/.dom/sessions. */
-  private noPersist = false;
+  /** Ephemeral sessions (sub-agents, `-p` pipe mode without --save) aren't
+   * written to ~/.dom/sessions. */
+  noPersist = false;
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;

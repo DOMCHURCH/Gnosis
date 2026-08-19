@@ -2,6 +2,7 @@
 import { render } from "ink";
 import { parseArgs, boot, BootError } from "./startup.js";
 import { runHeadless } from "./headless.js";
+import { runPipe } from "./pipe.js";
 import { App } from "./ui/App.js";
 import { detectCaps, termWidth } from "./ui/terminal.js";
 import { getGhAuth, getRepoInfo } from "./gitinfo.js";
@@ -18,7 +19,11 @@ usage:
   dom --yolo                 allow all tools without prompting (dangerous commands still prompt)
   dom --no-auto-commit       don't commit each successful write/edit to git
   dom --headless [message]   run without the TUI (plain stdout)
+  dom -p "prompt"            pipe mode: read stdin, run one turn, print the result, exit
+  dom -p "prompt" --save     ...and persist the one-shot turn as a session
   dom --help | --version
+
+Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
 
 Set OPENROUTER_API_KEY in your environment, or put { "apiKey": "sk-or-..." } in ~/.dom/config.json.`;
 
@@ -44,6 +49,15 @@ async function main() {
     throw e;
   }
   const { engine, resumed, skillWarnings, defaultModel } = bootResult;
+
+  // Pipe mode: one non-interactive turn, result to stdout, exit. Checked BEFORE the
+  // TTY-based headless fallback so `git diff | dom -p "…"` (stdin not a TTY) hits it.
+  if (flags.print) {
+    if (resumed) process.stderr.write(`resumed session ${engine.sessionId()}\n`);
+    for (const w of skillWarnings) process.stderr.write(`\x1b[2m! ${w}\x1b[0m\n`);
+    const code = await runPipe(engine, { prompt: flags.prompt, save: flags.save });
+    process.exit(code);
+  }
 
   // The TUI needs an interactive stdin (raw mode). Fall back to headless otherwise.
   if (flags.headless || !process.stdin.isTTY || !process.stdout.isTTY) {

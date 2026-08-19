@@ -29,10 +29,15 @@ export interface Flags {
   version: boolean;
   /** `--no-auto-commit`: disable per-edit git commits for this session. */
   noAutoCommit: boolean;
+  /** `-p`/`--print`: one-shot pipe mode — read stdin, run one turn, print the
+   * result to stdout, exit. No TUI. */
+  print: boolean;
+  /** `--save`: in pipe mode, persist the one-shot turn as a session (default off). */
+  save: boolean;
 }
 
 export function parseArgs(argv: string[]): Flags {
-  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false };
+  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false, print: false, save: false };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -45,6 +50,13 @@ export function parseArgs(argv: string[]): Flags {
         break;
       case "--headless":
         flags.headless = true;
+        break;
+      case "-p":
+      case "--print":
+        flags.print = true;
+        break;
+      case "--save":
+        flags.save = true;
         break;
       case "-c":
       case "--continue":
