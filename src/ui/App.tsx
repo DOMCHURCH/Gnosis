@@ -1240,6 +1240,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     busy: t.busy,
   }));
 
+  // The active tab's task list (the `todo` tool), rendered live above the input.
+  // ○ pending, ◐ active, ● done — ASCII fallbacks on legacy terminals.
+  const todos = engine.todos;
+  const todoGlyph = (status: string) =>
+    status === "done" ? (caps.legacy ? "[x]" : "●") : status === "active" ? (caps.legacy ? "[~]" : "◐") : caps.legacy ? "[ ]" : "○";
+  const todoColor = (status: string) => (status === "done" ? C.dim : status === "active" ? C.cyan : C.value);
+
   // Plain-text preview of a tab's transcript for a split-view cell: drop blanks
   // and flatten each entry to its display text (tool calls → the call line + the
   // first result line). Only used while the split view is open.
@@ -1314,6 +1321,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (liveTool) regionRows += 1;
   }
   if (tabbarShown) regionRows += 2; // marginTop + tab bar
+  regionRows += todos.length; // the todo panel (one row per task, above the status bar)
   regionRows += (tabbarShown ? 0 : 1) + 1; // status bar (+ its marginTop)
   if (ctrlCArmed) regionRows += 1;
   if (overlay.type !== "none") {
@@ -1359,6 +1367,18 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       {tabbarShown ? (
         <Box marginTop={1} width={inner}>
           <TabBar caps={caps} width={inner} tabs={tabInfos} />
+        </Box>
+      ) : null}
+
+      {/* The model's task list (todo tool): one row per task, above the status
+          bar so it stays in view while a multi-step job runs. */}
+      {todos.length ? (
+        <Box flexDirection="column" width={inner}>
+          {todos.map((t, i) => (
+            <Text key={i} color={col(todoColor(t.status))} wrap="truncate">
+              {todoGlyph(t.status)} {t.text}
+            </Text>
+          ))}
         </Box>
       ) : null}
 

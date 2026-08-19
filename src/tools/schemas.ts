@@ -82,6 +82,22 @@ export const sendMessageSchema = z.object({
 
 export const listTabsSchema = z.object({});
 
+export const todoSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        text: z.string().describe("Short description of the task (imperative, a few words)."),
+        status: z
+          .enum(["pending", "active", "done"])
+          .describe("pending (not started), active (in progress — keep exactly one), or done (finished)."),
+      }),
+    )
+    .describe(
+      "The COMPLETE task list, replacing whatever was there before. Send every task each call with its current " +
+        "status — this is the whole list, not a delta.",
+    ),
+});
+
 export const taskSchema = z.object({
   description: z.string().describe("Short label for the sub-task (3–6 words), shown in the transcript."),
   prompt: z.string().describe("The full instruction for the sub-agent: what to find or investigate, and what to report back."),
@@ -97,6 +113,7 @@ export type HttpArgs = z.infer<typeof httpSchema>;
 export type SendMessageArgs = z.infer<typeof sendMessageSchema>;
 export type ListTabsArgs = z.infer<typeof listTabsSchema>;
 export type TaskArgs = z.infer<typeof taskSchema>;
+export type TodoArgs = z.infer<typeof todoSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

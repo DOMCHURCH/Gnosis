@@ -39,16 +39,16 @@ import {
 } from "./permissions.js";
 import { shouldCompact, compact } from "./compaction.js";
 import { MarkdownStripper, type StreamLine } from "./strip.js";
-import { createSession, saveSession, type CostState, type Mode, type SessionData } from "./config.js";
+import { createSession, saveSession, type CostState, type Mode, type SessionData, type TodoItem } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 
 const MAX_ITER = 100;
 
 // Plan mode has teeth: these tools are absent from the tool list entirely, so the
-// model can't write, run shell commands, or hand work to other tabs — it can only
-// read/search/fetch to research, then produce a written plan. Leaves {read, glob,
-// grep, http}.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task"]);
+// model can't write, run shell commands, hand work to other tabs, or track
+// execution — it can only read/search/fetch to research, then produce a written
+// plan. Leaves {read, glob, grep, http}.
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
@@ -117,6 +117,9 @@ export class Engine {
   mode: Mode;
   summary: string | null;
   cost: CostState;
+  /** The model's task list (the `todo` tool). Persisted per session; the UI
+   * renders it live above the input. Replaced wholesale on each todo call. */
+  todos: TodoItem[];
   approvals = new Set<string>();
   /** Set true only by the interactive TUI; enables the file-edit diff prompt. */
   interactive = false;
@@ -166,6 +169,7 @@ export class Engine {
     this.cost = deps.session.cost;
     this.cost.cachedPromptTokens ??= 0; // older sessions predate the cached-token field
     this.cost.subAgentUsd ??= 0;
+    this.todos = deps.session.todos ?? [];
   }
 
   // --- state helpers -------------------------------------------------------
@@ -220,6 +224,7 @@ export class Engine {
   clear(): void {
     this.messages.length = 0;
     this.summary = null;
+    this.todos = [];
     this.lastPromptTokens = 0;
     this.repairs.clear();
     this.rejections.clear();
@@ -242,6 +247,7 @@ export class Engine {
     this.cost = s.cost;
     this.cost.cachedPromptTokens ??= 0;
     this.cost.subAgentUsd ??= 0;
+    this.todos = s.todos ?? [];
     this.lastPromptTokens = 0;
     this.repairs.clear();
     this.rejections.clear();
@@ -274,6 +280,7 @@ export class Engine {
     this.session.mode = this.mode;
     this.session.summary = this.summary;
     this.session.cost = this.cost;
+    this.session.todos = this.todos;
     await saveSession(this.session);
   }
 
@@ -511,9 +518,16 @@ export class Engine {
     };
   }
 
-  /** Context handed to tools: multi-tab access + the sub-agent runner for `task`. */
+  /** Context handed to tools: multi-tab access, the sub-agent runner for `task`,
+   * and the task-list setter for `todo`. */
   private toolCtx(): ToolContext {
-    return { tab: this.toolContext?.tab, subagent: (d, p, sig) => this.runSubAgent(d, p, sig) };
+    return {
+      tab: this.toolContext?.tab,
+      subagent: (d, p, sig) => this.runSubAgent(d, p, sig),
+      setTodos: (items) => {
+        this.todos = items;
+      },
+    };
   }
 
   /**

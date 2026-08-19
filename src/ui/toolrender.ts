@@ -60,6 +60,11 @@ export function callParts(name: string, args: any): CallParts {
     case "task":
       primary = String(a.description ?? "");
       break;
+    case "todo": {
+      const count = Array.isArray(a.items) ? a.items.length : 0;
+      primary = `${count} task${count === 1 ? "" : "s"}`;
+      break;
+    }
     default: {
       const first = Object.values(a).find((v) => typeof v === "string");
       primary = first ? String(first) : "";

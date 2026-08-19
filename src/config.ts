@@ -36,6 +36,14 @@ export interface CostState {
   subAgentUsd?: number;
 }
 
+export type TodoStatus = "pending" | "active" | "done";
+
+/** One entry in the model-maintained task list (the `todo` tool). */
+export interface TodoItem {
+  text: string;
+  status: TodoStatus;
+}
+
 export interface SessionData {
   id: string;
   cwd: string;
@@ -46,6 +54,8 @@ export interface SessionData {
   cost: CostState;
   summary: string | null;
   messages: Msg[];
+  /** The model's current task list, persisted per session (the `todo` tool). */
+  todos?: TodoItem[];
 }
 
 export function domDir(): string {

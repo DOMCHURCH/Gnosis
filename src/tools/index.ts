@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { ToolSchema } from "../provider.js";
+import type { TodoItem } from "../config.js";
 import {
   bashSchema,
   editSchema,
@@ -10,6 +11,7 @@ import {
   readSchema,
   sendMessageSchema,
   taskSchema,
+  todoSchema,
   toJsonSchema,
   writeSchema,
 } from "./schemas.js";
@@ -22,6 +24,7 @@ import { runGrep } from "./grep.js";
 import { runHttp } from "./http.js";
 import { runSendMessage, runListTabs } from "./tabs.js";
 import { runTask } from "./task.js";
+import { runTodo } from "./todo.js";
 
 export interface ToolResult {
   output: string;
@@ -51,10 +54,13 @@ export interface SubAgentResult {
 export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
 
 /** Per-turn context passed to tool.run. Most tools ignore it; the multi-tab tools
- * use `tab`; the `task` tool uses `subagent`. */
+ * use `tab`; the `task` tool uses `subagent`; the `todo` tool uses `setTodos`. */
 export interface ToolContext {
   tab?: TabRuntime;
   subagent?: SubAgentRunner;
+  /** Replace the session's task list (rendered live above the input). Absent
+   * headless / in sub-agents, where the tool simply returns its summary. */
+  setTodos?: (items: TodoItem[]) => void;
 }
 
 export interface ToolDef {
@@ -151,6 +157,17 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: taskSchema,
     mutating: false,
     run: runTask,
+  },
+  todo: {
+    name: "todo",
+    description:
+      "Maintain a visible task list for a multi-step job. Call it with the COMPLETE list each time (every task with " +
+      "its status: pending, active, or done) — each call replaces the previous list. Use it for any task that needs " +
+      "3+ steps: lay out the plan up front, mark exactly one task active when you start it, and mark it done the " +
+      "moment it's finished. It renders above the input so the user can follow along.",
+    schema: todoSchema,
+    mutating: false,
+    run: runTodo,
   },
 };
 
