@@ -93,31 +93,42 @@ async function main() {
     return;
   }
 
-  // `dom serve`: start the localhost web server (TUI + browser view over the same
-  // engines). Needs a TTY for the TUI, which drives the shared controller.
+  // `dom serve`: start the localhost web server. The tokenized URL is the FIRST
+  // stdout output (so it can't be lost), then either the TUI mounts (attached
+  // terminal) or the server runs headless (browser-driven). Both share the bus.
   let bridge: AppBridge | undefined;
   if (flags.serve) {
-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
-      console.error("dom serve needs an interactive terminal (the TUI drives the shared engines).");
-      process.exit(1);
-    }
     bridge = createBridge(new EventBus());
     let server;
     try {
       server = await startServer(bridge, { port: flags.port });
     } catch (e) {
-      console.error(`failed to start server on port ${flags.port ?? 7777}: ${(e as Error).message}`);
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === "EADDRINUSE") {
+        console.error(`dom serve: port ${flags.port ?? 7777} is already in use. Pick another with --port <n>.`);
+      } else {
+        console.error(`dom serve: could not start the server — ${(e as Error).message}`);
+      }
       process.exit(1);
     }
-    process.stderr.write(`\ndom serve — open in your browser:\n  ${server.url}\n(bound to 127.0.0.1 only · token required · Ctrl+C in the terminal to stop)\n\n`);
+    // First output, on STDOUT, before the banner/TUI so it's always visible.
+    process.stdout.write(`dom serve — open in your browser:\n  ${server.url}\n(127.0.0.1 only · token required · Ctrl+C to stop)\n\n`);
+
+    // No terminal attached → run the server headlessly (the browser drives it).
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      const { runServeHeadless } = await import("./servehost.js");
+      await runServeHeadless(engine, bridge);
+      return;
+    }
   }
 
   // Interactive: file edits get a diff preview + confirm prompt (headless applies directly).
   engine.interactive = true;
 
-  // Interactive boot only: wipe the screen + scrollback so the banner opens at
-  // the top of a clean terminal. Never do this in headless mode.
-  process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+  // Interactive boot wipes the screen + scrollback so the banner opens at the top
+  // of a clean terminal — but NOT under `dom serve`, where that would erase the URL
+  // printed just above. Never do this in headless mode.
+  if (!flags.serve) process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
 
   const caps = detectCaps();
   const [ghAuth, initialRepo] = await Promise.all([getGhAuth(), getRepoInfo(engine.cwd)]);
