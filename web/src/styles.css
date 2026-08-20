@@ -135,3 +135,16 @@ body {
 .minichat .transcript { padding: 10px 12px; }
 .mini-close { margin-left: auto; background: transparent; border: none; color: var(--dim); cursor: pointer; font: inherit; }
 .mini-close:hover { color: var(--red); }
+
+/* --- responsive: under 900px the building collapses to the sidebar+chat layout --- */
+@media (max-width: 900px) {
+  .app { flex-direction: column; }
+  .sidebar { width: 100%; flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--border); padding: 4px 8px; gap: 8px; }
+  .brand { border-bottom: none; padding: 6px 8px; }
+  .viewtabs { padding: 0; width: auto; }
+  .viewtabs button[disabled] { opacity: 0.35; cursor: default; }
+  .agents { display: flex; flex-direction: row; overflow-x: auto; padding: 0; flex: 1; }
+  .agent { width: auto; margin: 0 4px 0 0; white-space: nowrap; }
+  .new-agent { margin: 0; padding: 8px 12px; }
+  .minichat { right: 8px; left: 8px; width: auto; }
+}

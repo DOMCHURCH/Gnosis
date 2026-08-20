@@ -128,29 +128,61 @@ export function reducer(state: State, action: Action): State {
 export function useDomSocket() {
   const [state, dispatch] = useReducer(reducer, initial);
   const wsRef = useRef<WebSocket | null>(null);
+  // Highest server seq seen; sent as ?since on reconnect to replay missed events.
+  const lastSeqRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const token = new URLSearchParams(location.search).get("token") ?? "";
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
-    wsRef.current = ws;
-    ws.onopen = () => dispatch({ type: "@connected", value: true });
-    ws.onclose = () => dispatch({ type: "@connected", value: false });
-    ws.onmessage = (e) => {
-      let ev: Action;
-      try {
-        ev = JSON.parse(e.data) as Action;
-      } catch {
-        return; // ignore malformed frame
-      }
-      dispatch(ev);
-      // A tab-to-tab message draws a link; fade it after a moment.
-      if (ev.type === "message.sent") {
-        const key = `${ev.from}->${ev.to}`;
-        setTimeout(() => dispatch({ type: "@clearLink", key }), 1600);
-      }
+    let closed = false;
+    let retry = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const connect = () => {
+      const token = new URLSearchParams(location.search).get("token") ?? "";
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const since = lastSeqRef.current != null ? `&since=${lastSeqRef.current}` : "";
+      const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}${since}`);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        retry = 0;
+        dispatch({ type: "@connected", value: true });
+      };
+      ws.onclose = () => {
+        dispatch({ type: "@connected", value: false });
+        if (closed) return;
+        retry = Math.min(retry + 1, 6);
+        timer = setTimeout(connect, Math.min(200 * 2 ** retry, 5000)); // capped backoff
+      };
+      ws.onerror = () => {
+        try {
+          ws.close();
+        } catch {
+          /* already closing */
+        }
+      };
+      ws.onmessage = (e) => {
+        let ev: (Action | { type: "@sync" }) & { seq?: number };
+        try {
+          ev = JSON.parse(e.data);
+        } catch {
+          return; // ignore malformed frame
+        }
+        if (typeof ev.seq === "number") lastSeqRef.current = ev.seq;
+        if (ev.type === "@sync") return; // control frame: only advances lastSeq
+        dispatch(ev);
+        // A tab-to-tab message draws a link; fade it after a moment.
+        if (ev.type === "message.sent") {
+          const key = `${ev.from}->${ev.to}`;
+          setTimeout(() => dispatch({ type: "@clearLink", key }), 1600);
+        }
+      };
     };
-    return () => ws.close();
+
+    connect();
+    return () => {
+      closed = true;
+      clearTimeout(timer);
+      wsRef.current?.close();
+    };
   }, []);
 
   const send = useCallback((msg: ClientMessage) => {

@@ -8,6 +8,14 @@ export function App() {
   const { state, send, select } = useDomSocket();
   const [view, setView] = useState<"chat" | "building">("chat");
   const [miniId, setMiniId] = useState<number | null>(null);
+  // Under 900px the building collapses to the sidebar+chat layout (it needs width).
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 900);
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 900);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const effectiveView = narrow ? "chat" : view;
   const selected = state.selected;
   const agent = selected != null ? state.agents[selected] : undefined;
   const items = selected != null ? state.transcripts[selected] ?? [] : [];
@@ -23,13 +31,14 @@ export function App() {
         agents={state.agents}
         selected={selected}
         connected={state.connected}
-        view={view}
+        view={effectiveView}
+        narrow={narrow}
         onView={setView}
         onSelect={select}
         onCreate={() => send({ type: "agent.create" })}
       />
       <main className="main">
-        {view === "building" ? (
+        {effectiveView === "building" ? (
           <div className="building-wrap">
             {state.order.length ? (
               <Building model={deriveBuilding(buildingInput(state))} onPick={(id) => setMiniId(id)} />
@@ -48,7 +57,7 @@ export function App() {
         )}
       </main>
 
-      {view === "building" && miniId != null && state.agents[miniId] && (
+      {effectiveView === "building" && miniId != null && state.agents[miniId] && (
         <MiniChat
           agent={state.agents[miniId]!}
           items={state.transcripts[miniId] ?? []}
@@ -93,6 +102,7 @@ function Sidebar(props: {
   selected: number | null;
   connected: boolean;
   view: "chat" | "building";
+  narrow: boolean;
   onView: (v: "chat" | "building") => void;
   onSelect: (id: number) => void;
   onCreate: () => void;
@@ -106,7 +116,12 @@ function Sidebar(props: {
         <button className={props.view === "chat" ? "on" : ""} onClick={() => props.onView("chat")}>
           chat
         </button>
-        <button className={props.view === "building" ? "on" : ""} onClick={() => props.onView("building")}>
+        <button
+          className={props.view === "building" ? "on" : ""}
+          disabled={props.narrow}
+          title={props.narrow ? "widen the window for the building view" : ""}
+          onClick={() => props.onView("building")}
+        >
           building
         </button>
       </div>

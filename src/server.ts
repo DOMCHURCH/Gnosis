@@ -189,7 +189,20 @@ export interface ServerHandle {
 export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
   const staticDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "web");
-  const sockets = new Set<Duplex>();
+
+  // Broadcast + reconnect ring buffer. Every bus event is tagged with a monotonic
+  // seq and kept (last RING) so a client that drops can replay what it missed via
+  // ?since=<lastSeq>. One bus subscription fans out to all connected clients.
+  const clients = new Set<{ send: (w: unknown) => void; socket: Duplex }>();
+  const ring: Array<Record<string, unknown> & { seq: number }> = [];
+  const RING = 2000;
+  let seq = 0;
+  const busUnsub = bridge.bus.subscribe((e) => {
+    const w = { ...e, seq: ++seq };
+    ring.push(w);
+    if (ring.length > RING) ring.shift();
+    for (const c of clients) c.send(w);
+  });
 
   const server = http.createServer((req, res) => {
     if (!hostOk(req.headers.host)) {
@@ -224,23 +237,39 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
         `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
     );
 
-    sockets.add(socket);
-    const send = (e: DomEvent) => {
+    const send = (w: unknown) => {
       try {
-        socket.write(encodeText(JSON.stringify(e)));
+        socket.write(encodeText(JSON.stringify(w)));
       } catch {
         /* socket gone */
       }
     };
-    // Snapshot current agents so a fresh client starts in sync.
-    for (const a of bridge.getAgents()) {
-      send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode });
-      if (a.busy) send({ type: "agent.busy", tabId: a.id, busy: true });
+    const client = { send, socket };
+    const sendSnapshot = () => {
+      for (const a of bridge.getAgents()) {
+        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode });
+        if (a.busy) send({ type: "agent.busy", tabId: a.id, busy: true });
+      }
+    };
+
+    // First connect → snapshot current agents. Reconnect (?since=N) → replay the
+    // events missed since seq N; if the gap exceeds the buffer, resync state first.
+    // The connect handler is synchronous, so no event can slip in between reading
+    // the ring and joining the broadcast set (no dup, no gap).
+    const cutoff = seq;
+    const sinceRaw = url.searchParams.get("since");
+    const since = sinceRaw != null && sinceRaw !== "" ? Number(sinceRaw) : null;
+    if (since != null && Number.isFinite(since)) {
+      if (ring.length && since < ring[0]!.seq - 1) sendSnapshot();
+      for (const w of ring) if (w.seq > since) send(w);
+    } else {
+      sendSnapshot();
     }
-    const unsub = bridge.bus.subscribe(send);
+    send({ type: "@sync", seq: cutoff }); // high-water mark for the next reconnect
+    clients.add(client);
+
     const cleanup = () => {
-      unsub();
-      sockets.delete(socket);
+      clients.delete(client);
       try {
         socket.destroy();
       } catch {
@@ -279,12 +308,13 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     url: `http://127.0.0.1:${port}/?token=${token}`,
     token,
     port,
-    clients: () => sockets.size,
+    clients: () => clients.size,
     close: () =>
       new Promise<void>((resolve) => {
-        for (const s of sockets) {
+        busUnsub();
+        for (const c of clients) {
           try {
-            s.destroy();
+            c.socket.destroy();
           } catch {
             /* ignore */
           }

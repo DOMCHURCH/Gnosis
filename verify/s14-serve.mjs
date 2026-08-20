@@ -106,12 +106,17 @@ ok("a fresh client receives the agent snapshot", snapshot.type === "agent.create
 let tuiSaw = null;
 const unsub = bus.subscribe((e) => { if (e.type === "line") tuiSaw = e; });
 bus.emit({ type: "line", tabId: 1, item: { kind: "line", text: "hello from the engine" } });
-const wsSaw = JSON.parse(await client.api.next());
+// The server tags forwarded events with a transport `seq` and sends a @sync frame
+// after the snapshot — read past those to the line itself.
+let wsSaw = null;
+for (;;) { const m = JSON.parse(await client.api.next()); if (m.type === "line") { wsSaw = m; break; } }
 unsub();
+const { seq, ...wsContent } = wsSaw; // strip transport metadata for the content comparison
 
 ok("the TUI (bus subscriber) saw the line", tuiSaw && tuiSaw.item.text === "hello from the engine");
 ok("the WS client saw the SAME line", wsSaw.type === "line" && wsSaw.item.text === "hello from the engine");
-ok("TUI and web content are byte-identical", JSON.stringify(tuiSaw) === JSON.stringify(wsSaw));
+ok("TUI and web content are identical (modulo transport seq)", JSON.stringify(tuiSaw) === JSON.stringify(wsContent));
+ok("the forwarded event carries a monotonic seq", typeof seq === "number");
 
 client.api.close();
 await server.close();
