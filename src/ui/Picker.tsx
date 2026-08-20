@@ -1,14 +1,17 @@
 import { useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { C } from "./theme.js";
+import { fuzzyFilter } from "../fuzzy.js";
 import type { Caps } from "./terminal.js";
 
 export interface PickItem {
   value: string;
   label: string;
   hint?: string;
-  /** Substring-match target for filtering; falls back to hint when absent. */
+  /** Substring/fuzzy-match target for filtering; falls back to hint when absent. */
   search?: string;
+  /** Base ranking (lower = better), used as the fuzzy tiebreaker (e.g. repo-map order). */
+  rank?: number;
 }
 
 interface Props {
@@ -24,11 +27,14 @@ interface Props {
   /** Optional secondary action on Ctrl+S (e.g. "save as default"); shown in the footer. */
   onSave?: (value: string) => void;
   saveHint?: string;
+  /** Fuzzy subsequence match + score ranking (repo-map @-completion) instead of the
+   * default multi-term substring filter. */
+  fuzzy?: boolean;
 }
 
 const VISIBLE = 12;
 
-export function Picker({ caps, width, title, items, onSelect, onCancel, initialValue, onSave, saveHint }: Props) {
+export function Picker({ caps, width, title, items, onSelect, onCancel, initialValue, onSave, saveHint, fuzzy }: Props) {
   const col = (hex: string) => (caps.color ? hex : undefined);
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(() => {
@@ -38,13 +44,14 @@ export function Picker({ caps, width, title, items, onSelect, onCancel, initialV
   });
 
   const filtered = useMemo(() => {
+    if (fuzzy) return fuzzyFilter(items, query); // subsequence match, ranked; empty query → items
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return items;
     return items.filter((it) => {
       const hay = (it.label + " " + (it.search ?? it.hint ?? "")).toLowerCase();
       return terms.every((t) => hay.includes(t));
     });
-  }, [items, query]);
+  }, [items, query, fuzzy]);
 
   const clampedSel = Math.min(sel, Math.max(0, filtered.length - 1));
 

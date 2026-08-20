@@ -917,21 +917,41 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     setOverlay({ type: "history", items });
   };
 
+  // Repo-map file ranking for @-completion, memoized per cwd (the map is DB-cached
+  // so the first build is cheap; later @ opens reuse this).
+  const repoRankRef = useRef<{ cwd: string; rank: Map<string, number> } | null>(null);
+  const repoRanking = async (cwd: string): Promise<Map<string, number>> => {
+    if (repoRankRef.current?.cwd === cwd) return repoRankRef.current.rank;
+    let rank = new Map<string, number>();
+    try {
+      const cfg = await loadConfig();
+      const map = await buildRepoMap(cwd, cfg.mapTokens ?? 1024);
+      rank = new Map(map.rankedFiles.map((p, i) => [p, i]));
+    } catch {
+      /* no grammar / parse error — fall back to unranked (alpha) */
+    }
+    repoRankRef.current = { cwd, rank };
+    return rank;
+  };
+
   const openFilePicker = async (prefix: string) => {
-    const r = await runGlob({ pattern: "**/*" }, undefined, { cwd: controller.active().engine.cwd });
-    const items: PickItem[] = r.isError
+    const cwd = controller.active().engine.cwd;
+    const r = await runGlob({ pattern: "**/*" }, undefined, { cwd });
+    const rank = await repoRanking(cwd);
+    const files = r.isError
       ? []
       : r.output
           .split("\n")
           .filter((l) => l && !l.startsWith("[") && !l.startsWith("No files"))
-          .slice(0, 500)
           .map((l) => {
             const tab = l.indexOf("\t");
             const p = tab === -1 ? l : l.slice(0, tab);
             const size = tab === -1 ? undefined : l.slice(tab + 1);
-            return { value: p, label: p, hint: size ? `${size}b` : undefined };
+            return { value: p, label: p, search: p, rank: rank.get(p), hint: size ? `${size}b` : undefined };
           });
-    setOverlay({ type: "file", items, prefix });
+    // Base order: repo-map-central files first (rank asc), then the rest alpha.
+    files.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.value.localeCompare(b.value));
+    setOverlay({ type: "file", items: files.slice(0, 1000), prefix });
   };
 
   const handleCommand = (value: string) => {
@@ -1298,8 +1318,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         <Picker
           caps={caps}
           width={inner}
-          title="insert file path"
+          title="insert file path (fuzzy, repo-map ranked)"
           items={overlay.items}
+          fuzzy
           onSelect={(v) => {
             setOverlay({ type: "none" });
             setInput(prefix + v + " ");

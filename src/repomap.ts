@@ -219,6 +219,9 @@ export interface RepoMap {
   parsed: number; // files parsed this run (missed the cache)
   cached: number; // files served from cache
   files: number;
+  /** All parsed source files, most-central first (PageRank order) — relative,
+   * POSIX-style paths. Drives @-file completion ranking. */
+  rankedFiles: string[];
 }
 
 const estTokens = (s: string) => Math.ceil(s.length / 4);
@@ -226,8 +229,9 @@ const estTokens = (s: string) => Math.ceil(s.length / 4);
 /** Build the ranked repo map for `cwd`, serialized under `budgetTokens`. */
 export async function buildRepoMap(cwd: string, budgetTokens = 1024): Promise<RepoMap> {
   // Enumerate source files honoring the ignore list (glob skips node_modules,
-  // dist, .git, .dom, .gitignore matches, …).
-  const glob = await runGlob({ pattern: "**/*" });
+  // dist, .git, .dom, .gitignore matches, …). Resolve against the passed cwd, not
+  // the global process cwd (they can differ per tab after the cwd-threading change).
+  const glob = await runGlob({ pattern: "**/*" }, undefined, { cwd });
   const rel = glob.isError ? [] : glob.output.split("\n").map((l) => l.split("\t")[0]!).filter(Boolean);
   const files = rel.map((p) => path.resolve(cwd, p)).filter((p) => LANGS[path.extname(p).toLowerCase()]);
 
@@ -340,5 +344,10 @@ export async function buildRepoMap(cwd: string, budgetTokens = 1024): Promise<Re
     for (const s of byFile.get(f)!.sort((a, b) => a.line - b.line)) out.push(`  ${s.kind} ${s.name}  L${s.line}`);
   }
   const text = byFile.size ? out.join("\n") : "";
-  return { text, tokens: text ? estTokens(text) : 0, parsed, cached, files: files.length };
+  // Full PageRank-ordered file list (not budget-truncated like the text) for
+  // @-completion ranking.
+  const rankedFiles = [...files]
+    .sort((a, b) => (rank.get(b) ?? 0) - (rank.get(a) ?? 0))
+    .map((abs) => path.relative(cwd, abs).split(path.sep).join("/"));
+  return { text, tokens: text ? estTokens(text) : 0, parsed, cached, files: files.length, rankedFiles };
 }

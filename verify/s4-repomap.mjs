@@ -25,6 +25,7 @@ ok("the first (cold) run parses files", a.parsed > 0 && a.cached === 0);
 ok("the map includes the tool registry (TOOLS)", /const TOOLS/.test(a.text) && /src\/tools\/index\.ts/.test(a.text));
 ok("the map includes the engine (class Engine)", /class Engine/.test(a.text) && /src\/engine\.ts/.test(a.text));
 ok("symbols are grouped by file with line numbers", /\bL\d+/.test(a.text));
+ok("rankedFiles (for @-completion) is a non-empty list of the repo's central files", Array.isArray(a.rankedFiles) && a.rankedFiles.includes("src/engine.ts"));
 
 const t0b = Date.now();
 const b = await buildRepoMap(repo, 1024);
@@ -43,6 +44,7 @@ await fs.writeFile(path.join(dir, "src", "b.ts"), 'import { helper, VALUE } from
 
 const c1 = await buildRepoMap(dir, 1024);
 ok("a small project parses all its files first", c1.parsed === 2 && c1.cached === 0);
+ok("rankedFiles orders a referenced file (a.ts) before its referencer (b.ts)", c1.rankedFiles.indexOf("src/a.ts") !== -1 && c1.rankedFiles.indexOf("src/a.ts") < c1.rankedFiles.indexOf("src/b.ts"));
 const c2 = await buildRepoMap(dir, 1024);
 ok("re-running parses nothing", c2.parsed === 0 && c2.cached === 2);
 // bump one file's mtime (content unchanged) — the cache keys on path+mtime
