@@ -97,6 +97,45 @@ export function serialize(
   return wire;
 }
 
+export interface ContextCategory {
+  name: string;
+  tokens: number;
+}
+
+/**
+ * Break the context window's usage down by category (system prompt, summary, user
+ * messages, assistant text, tool calls, tool results, images) with the same ~4
+ * chars/token estimate the context meter uses. Drives the /context readout.
+ */
+export function contextBreakdown(messages: Msg[], system: string, summary: string | null): ContextCategory[] {
+  const est = (s: string) => Math.ceil(s.length / 4);
+  let user = 0;
+  let assistantText = 0;
+  let toolArgs = 0;
+  let toolResults = 0;
+  let images = 0;
+  for (const m of messages) {
+    if (m.role === "user") {
+      user += est(m.text);
+      images += (m.images?.length ?? 0) * 1000; // rough per-image estimate (matches estimateTokens)
+    } else if (m.role === "assistant") {
+      assistantText += est(m.text ?? "");
+      for (const c of m.calls ?? []) toolArgs += est(c.name + c.args);
+    } else {
+      toolResults += est(m.result) + est(m.name);
+    }
+  }
+  return [
+    { name: "system prompt", tokens: est(system) },
+    { name: "summary", tokens: summary ? est(summary) : 0 },
+    { name: "user messages", tokens: user },
+    { name: "assistant text", tokens: assistantText },
+    { name: "tool calls", tokens: toolArgs },
+    { name: "tool results", tokens: toolResults },
+    { name: "images", tokens: images },
+  ].filter((c) => c.tokens > 0);
+}
+
 /** Cheap token estimate (~4 chars per token) used for the context meter and compaction trigger. */
 export function estimateTokens(messages: Msg[], system = ""): number {
   let chars = system.length;

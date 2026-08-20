@@ -17,6 +17,7 @@ import { layoutAllTabs, gridColumns } from "./alltabs.js";
 import type { Caps } from "./terminal.js";
 import { Engine, type Callbacks } from "../engine.js";
 import type { Msg } from "../messages.js";
+import { contextBreakdown } from "../messages.js";
 import { TabsController, type Tab } from "../tabs.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
 import { TOOL_NAMES } from "../tools/index.js";
@@ -80,9 +81,10 @@ const HELP = [
   "  /compact      summarize and shrink history",
   "  /tools        list available tools",
   "  /cost         show token + dollar usage",
+  "  /context      what fills the context window, by category",
   "  /trace        summarize this session's trajectory trace",
   "  /verbose      toggle full (unsummarized) tool output",
-  "  /resume       resume a past session",
+  "  /resume       pick a prior session for this directory",
   "  /vault [set <path>]   switch working root to your Obsidian vault",
   "  /undo         revert dom's most recent commit (or checkpointed edit)",
   "  /checkpoints  list recent dom checkpoints",
@@ -888,15 +890,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
   const openSessionPicker = async () => {
     const all = await listSessions();
-    if (!all.length) {
-      sysLog("no saved sessions");
+    // /resume with no args → prior sessions for THIS cwd (newest first).
+    const here = all.filter((s) => s.cwd === engine.cwd && s.id !== engine.sessionId());
+    if (!here.length) {
+      sysLog(all.length ? "no prior sessions for this directory" : "no saved sessions");
       return;
     }
-    const items: PickItem[] = all.map((s) => ({
-      value: s.id,
-      label: s.id,
-      hint: `${s.messages.length} msgs · ${s.model}${s.cwd === engine.cwd ? " · here" : ""}`,
-    }));
+    const items: PickItem[] = here.map((s) => {
+      const ago = Math.max(0, Math.round((Date.now() - s.updatedAt) / 60000));
+      const when = ago < 60 ? `${ago}m ago` : ago < 1440 ? `${Math.round(ago / 60)}h ago` : `${Math.round(ago / 1440)}d ago`;
+      return { value: s.id, label: s.id, hint: `${s.messages.length} msgs · ${s.model} · ${when}`, search: `${s.id} ${s.model}` };
+    });
     setOverlay({ type: "session", items });
   };
 
@@ -1004,6 +1008,21 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           (s) => `  ${s.name}${s.scope === "project" ? " [project]" : ""}  —  ${s.description}`,
         );
         sysLog([`skills (${sk.length} loaded):`, ...rows].join("\n"));
+        break;
+      }
+      case "context": {
+        const cats = contextBreakdown(engine.messages, engine.currentSystemPrompt(), engine.summary).sort((a, b) => b.tokens - a.tokens);
+        const total = cats.reduce((s, c) => s + c.tokens, 0);
+        const win = engine.contextLength();
+        const rows = cats.map((c) => {
+          const pctUsed = total ? Math.round((c.tokens / total) * 100) : 0;
+          const pctWin = win ? ((c.tokens / win) * 100).toFixed(1) : null;
+          return `  ${c.name.padEnd(15)} ${String(c.tokens).padStart(7)}  ${String(pctUsed).padStart(3)}% of used${pctWin ? `  ${pctWin}% of window` : ""}`;
+        });
+        const head = win
+          ? `context: ${total} tokens used / ${win} window (${Math.round((total / win) * 100)}% full)`
+          : `context: ${total} tokens used`;
+        sysLog([head, ...rows].join("\n"));
         break;
       }
       case "trace": {

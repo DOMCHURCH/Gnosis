@@ -40,7 +40,9 @@ dom --headless "message"  # one-shot, no TUI
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+
+`/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
 
 Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
 
