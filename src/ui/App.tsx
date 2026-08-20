@@ -22,6 +22,7 @@ import type { Preview, PermissionAnswer } from "../permissions.js";
 import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
 import { loadImage, isImagePath } from "../tools/viewimage.js";
+import { gatherPromptHistory } from "../history.js";
 import { fetchModels, resolveModelQuery, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
@@ -49,7 +50,8 @@ type Overlay =
   | { type: "permission"; preview: Preview }
   | { type: "model"; items: PickItem[]; initial?: string; save?: boolean }
   | { type: "file"; items: PickItem[]; prefix: string }
-  | { type: "session"; items: PickItem[] };
+  | { type: "session"; items: PickItem[] }
+  | { type: "history"; items: PickItem[] };
 
 interface Props {
   engine: Engine;
@@ -89,7 +91,7 @@ const HELP = [
   "  /init [--force]   scan the repo and write an AGENTS.md",
   "  /map          print the repo map and its token count",
   "  /help         this help    /exit  quit",
-  "  @  insert a file path    !cmd  run a shell command",
+  "  @  insert a file path    !cmd  run a shell command    ctrl+r  search prompt history",
   "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
 ].join("\n");
 
@@ -898,6 +900,23 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     setOverlay({ type: "session", items });
   };
 
+  // Ctrl+R reverse-search: prior user prompts from THIS session (newest first),
+  // then prior sessions for the same cwd. Reuses the filterable Picker overlay.
+  const openHistorySearch = async () => {
+    const prompts = gatherPromptHistory({
+      currentMessages: engine.messages,
+      currentSessionId: engine.sessionId(),
+      sessions: await listSessions(),
+      cwd: engine.cwd,
+    });
+    if (!prompts.length) {
+      sysLog("no prompt history for this directory yet");
+      return;
+    }
+    const items: PickItem[] = prompts.map((p) => ({ value: p, label: p.replace(/\s+/g, " ").slice(0, 200), search: p }));
+    setOverlay({ type: "history", items });
+  };
+
   const openFilePicker = async (prefix: string) => {
     const r = await runGlob({ pattern: "**/*" }, undefined, { cwd: controller.active().engine.cwd });
     const items: PickItem[] = r.isError
@@ -1182,6 +1201,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       clearQueue();
       return;
     }
+    // Ctrl+R reverse-searches prompt history (this session + prior ones for this cwd).
+    if (key.ctrl && inp === "r" && overlayRef.current.type === "none") {
+      void openHistorySearch();
+      return;
+    }
     // Ctrl+1..9 switches tabs — always available, even while a turn is running so
     // you can leave a busy tab. Terminals that don't emit distinct Ctrl+digit
     // codes can use /tab <n> instead.
@@ -1275,6 +1299,21 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           onSelect={(v) => {
             setOverlay({ type: "none" });
             setInput(prefix + v + " ");
+          }}
+          onCancel={() => setOverlay({ type: "none" })}
+        />
+      );
+    }
+    if (overlay.type === "history") {
+      return (
+        <Picker
+          caps={caps}
+          width={inner}
+          title="reverse-search prompt history"
+          items={overlay.items}
+          onSelect={(v) => {
+            setOverlay({ type: "none" });
+            setInput(v);
           }}
           onCancel={() => setOverlay({ type: "none" })}
         />
@@ -1385,7 +1424,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const overlayRows =
     overlay.type === "permission"
       ? 8
-      : overlay.type === "model" || overlay.type === "file" || overlay.type === "session"
+      : overlay.type === "model" || overlay.type === "file" || overlay.type === "session" || overlay.type === "history"
         ? Math.min(overlay.items.length, 12) + 4
         : 0;
   let regionRows = 0;
