@@ -90,7 +90,18 @@ export const TASKS = [
     async setup(dir) { await write(dir, "list.txt", "alpha\nbeta\ngamma\n"); },
     prompt: "Remove the line containing 'beta' from list.txt, leaving the other lines unchanged.",
     async check(dir) {
-      try { return (await read(dir, "list.txt")) === "alpha\ngamma\n"; } catch { return false; }
+      try {
+        // Semantic check: exactly the two remaining lines in order, no blank line
+        // left where beta was. Tolerates a trailing-newline difference (which made
+        // an exact full-file match flaky against a non-deterministic model) but
+        // still rejects a leftover blank line or a lingering "beta".
+        const raw = await read(dir, "list.txt");
+        const lines = raw.split("\n");
+        if (lines[lines.length - 1] === "") lines.pop(); // drop a single trailing newline
+        return lines.length === 2 && lines[0] === "alpha" && lines[1] === "gamma";
+      } catch {
+        return false;
+      }
     },
     solution: { calls: [{ tool: "read", args: { path: "list.txt" } }, { tool: "edit", args: { path: "list.txt", old_str: "beta\n", new_str: "" } }], answer: "Removed the beta line." },
   },
