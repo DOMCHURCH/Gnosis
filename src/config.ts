@@ -39,6 +39,9 @@ export interface Config {
   /** Auto-run the verifier subagent on a turn that touched 2+ files. Default off;
    * /verify always triggers it manually. */
   autoVerify?: boolean;
+  /** Dollar ceiling per session. On reaching it dom halts the turn, refuses new
+   * sub-agent/oracle spawns, and prompts to continue or stop. Default 2. */
+  maxSessionUsd?: number;
 }
 
 export interface CostState {

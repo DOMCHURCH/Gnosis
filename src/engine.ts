@@ -119,6 +119,8 @@ export interface EngineDeps {
   fallbackModel?: string;
   /** Commit every successful write/edit to the repo (default true). */
   autoCommit?: boolean;
+  /** Dollar ceiling per session (the base allotment). Default 2. */
+  maxSessionUsd?: number;
 }
 
 export class Engine {
@@ -140,6 +142,10 @@ export class Engine {
   fallbackModel?: string;
   /** Commit each successful write/edit to the repo (session-scoped). */
   autoCommit: boolean;
+  /** Base dollar allotment; each "continue" at the ceiling grants another. */
+  budgetUsd: number;
+  /** Current session cost ceiling (raised on continue); Infinity disables it. */
+  budgetCeiling: number;
   mode: Mode;
   summary: string | null;
   cost: CostState;
@@ -205,6 +211,8 @@ export class Engine {
     this.skills = deps.skills ?? [];
     this.fallbackModel = deps.fallbackModel;
     this.autoCommit = deps.autoCommit ?? true;
+    this.budgetUsd = deps.maxSessionUsd ?? 2;
+    this.budgetCeiling = this.budgetUsd;
     this.messages = deps.session.messages;
     this.modelId = deps.session.model;
     this.mode = deps.session.mode;
@@ -220,6 +228,10 @@ export class Engine {
 
   currentModel(): ModelInfo | undefined {
     return this.models.find((m) => m.id === this.modelId);
+  }
+  /** True when the session's dollar cost has reached the current ceiling. */
+  overBudget(): boolean {
+    return this.cost.usd >= this.budgetCeiling;
   }
   /** True when the active model's provider accepts explicit cache_control
    * breakpoints (a non-zero cache-write price in the catalog). */
@@ -321,6 +333,7 @@ export class Engine {
       skills: this.skills,
       fallbackModel: this.fallbackModel,
       autoCommit: this.autoCommit,
+      maxSessionUsd: this.budgetUsd,
     });
     engine.interactive = this.interactive;
     return engine;
@@ -409,6 +422,22 @@ export class Engine {
         if (this.cost.promptTokens + this.cost.completionTokens >= this.tokenBudget) {
           this.capped = "token";
           break;
+        }
+        // Dollar budget ceiling: on reaching it, prompt to continue or stop. "no"
+        // halts the turn; "yes" grants another allotment; "always" lifts it for the
+        // session. Non-interactive (headless/pipe/sub-agent) halts.
+        if (this.overBudget()) {
+          const q = `Session cost $${this.cost.usd.toFixed(4)} reached the $${this.budgetCeiling.toFixed(2)} budget ceiling. Continue?`;
+          const ans = this.interactive
+            ? await cb.requestPermission({ kind: "bash", command: q, dangerous: true, cwd: this.cwd, warning: `budget ceiling — 'always' lifts it, otherwise +$${this.budgetUsd.toFixed(2)}` })
+            : "no";
+          if (ans === "no") {
+            this.capped = "budget";
+            cb.onSystem(`✗ halted at the $${this.budgetCeiling.toFixed(2)} budget ceiling (cost $${this.cost.usd.toFixed(4)}). Raise it with /budget <usd> or config maxSessionUsd.`);
+            break;
+          }
+          this.budgetCeiling = ans === "always" ? Infinity : this.budgetCeiling + this.budgetUsd;
+          cb.onSystem(ans === "always" ? "↑ budget ceiling lifted for this session" : `↑ budget ceiling raised to $${this.budgetCeiling.toFixed(2)}`);
         }
         if (shouldCompact(this.messages, this.contextTokens(), this.contextLength())) {
           this.doCompact(cb);
@@ -710,6 +739,7 @@ export class Engine {
    */
   async runSubAgent(description: string, prompt: string, signal?: AbortSignal): Promise<SubAgentResult> {
     void description;
+    if (this.overBudget()) return { text: "Refused: the session budget ceiling has been reached — not spawning a sub-agent.", tools: 0, tokens: 0, capped: "budget" };
     const session = createSession(this.cwd, this.modelId, "yolo"); // read-only tools; yolo only avoids prompts
     const sub = new Engine({
       apiKey: this.apiKey,
@@ -765,6 +795,7 @@ export class Engine {
    * also tracked separately (cost.oracleUsd) for /cost. Nothing enters history.
    */
   async runOracle(question: string, signal?: AbortSignal): Promise<{ text: string; model: string; tokens: number; usd: number }> {
+    if (this.overBudget()) return { text: "Refused: the session budget ceiling has been reached — not consulting the oracle.", model: this.modelId, tokens: 0, usd: 0 };
     const cfg = await loadConfig();
     const model = cfg.oracleModel || this.modelId;
     const system =
@@ -824,7 +855,7 @@ export class Engine {
    * or null when there's nothing to verify (no edits / no diff). Cost folds in.
    */
   async runVerifier(): Promise<{ verdict: "pass" | "fail" | "unknown"; text: string } | null> {
-    if (!this.turnEditedFiles.size) return null;
+    if (this.overBudget() || !this.turnEditedFiles.size) return null;
     const rel = [...this.turnEditedFiles].map((f) => path.relative(this.cwd, f).split(path.sep).join("/"));
     const diff = await gitDiff(this.cwd, this.turnBaseSha ?? null, rel);
     if (!diff) return null;

@@ -81,6 +81,7 @@ const HELP = [
   "  /compact      summarize and shrink history",
   "  /tools        list available tools",
   "  /cost         show token + dollar usage",
+  "  /budget [usd]   show or set the session dollar ceiling",
   "  /context      what fills the context window, by category",
   "  /verify       skeptically verify the last change (diff vs request)",
   "  /trace        summarize this session's trajectory trace",
@@ -1009,6 +1010,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           (s) => `  ${s.name}${s.scope === "project" ? " [project]" : ""}  —  ${s.description}`,
         );
         sysLog([`skills (${sk.length} loaded):`, ...rows].join("\n"));
+        break;
+      }
+      case "budget": {
+        if (arg) {
+          const n = Number(arg);
+          if (n > 0) { engine.budgetUsd = n; engine.budgetCeiling = n; sysLog(`budget ceiling set to $${n.toFixed(2)}`); }
+          else sysLog("usage: /budget <usd>");
+        } else {
+          const ceil = engine.budgetCeiling === Infinity ? "∞" : `$${engine.budgetCeiling.toFixed(2)}`;
+          sysLog(`budget: $${engine.cost.usd.toFixed(4)} spent / ${ceil} ceiling`);
+        }
         break;
       }
       case "verify": {

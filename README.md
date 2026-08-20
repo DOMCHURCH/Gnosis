@@ -62,6 +62,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
+## Budget ceiling
+
+Each session has a dollar ceiling (`maxSessionUsd`, default $2). On reaching it dom halts the turn and prompts: decline to stop, approve to grant another allotment, or *always* to lift the ceiling for the rest of the session. While over budget, new `task` sub-agent and `oracle` spawns are refused. `/budget` shows spent vs. ceiling; `/budget <usd>` sets it. Headless/pipe runs halt at the ceiling rather than prompting.
+
 ## Command-hiding defense
 
 Before a bash command is shown for approval, dom reveals anything that could hide part of it from you: tabs, zero-width/invisible/bidi-override Unicode, and other control characters are rendered as `<U+XXXX>` (tabs as `⇥`), and multi-line/chained commands are shown in full — never truncated to a benign-looking first line. A command containing hidden characters is flagged and **always prompts, even in yolo**. Only the display is normalized; the real command executes unchanged.
