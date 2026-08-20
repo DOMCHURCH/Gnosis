@@ -42,7 +42,7 @@ dom --json "prompt"       # headless: one turn, structured JSONL events to stdou
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/memory` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 `/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
 
@@ -63,6 +63,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 **Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
+
+## Memory bank
+
+dom keeps a durable, per-project **memory bank** the model writes to with the `memory` tool (`add` a note, `list` it, `clear` it) and that is **re-injected into the system prompt at the start of every session** — so a convention, gotcha, or decision it learns once is remembered next time. Each project has its own bank, keyed by the project's absolute path and stored **outside the repo** under `~/.dom/memory/` (it never pollutes your tree). `/memory` shows the bank (with its file path); `/memory add <note>` adds one by hand and `/memory clear` erases it. Notes are deduped and stored as bullets. (`/mem` is an alias.)
 
 ## Multi-root workspaces
 

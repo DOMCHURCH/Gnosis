@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveShell } from "./tools/bash.js";
 import { renderSkillsSection, type LoadedSkill } from "./skills.js";
+import { readMemory, formatMemoryForPrompt } from "./memory.js";
 
 /** The stated-working-directory line's stable prefix, shared with the engine. */
 export const WORKING_DIR_PREFIX = "Working directory: ";
@@ -80,6 +81,11 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [],
   } catch {
     /* no AGENTS.md */
   }
+
+  // Memory bank: durable notes the model saved about this project in prior
+  // sessions (best-effort; empty until the model saves something).
+  const memory = formatMemoryForPrompt(await readMemory(cwd));
+  if (memory) lines.push("", memory);
 
   // Advertise loaded skills (names, descriptions, absolute paths — no bodies).
   const skillsSection = renderSkillsSection(skills);

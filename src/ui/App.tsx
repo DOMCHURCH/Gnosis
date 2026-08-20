@@ -36,6 +36,7 @@ import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "..
 import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
+import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -81,6 +82,7 @@ const HELP = [
   "  /worktree list | merge <name> | remove <name>",
   "  /workspace add <path>   add a search root (grep/glob without a path span all)",
   "  /workspace list | remove <path>",
+  "  /memory       show the durable project memory bank (add <note> | clear)",
   "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
@@ -1050,6 +1052,27 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "wt":
         void handleWorktree(parts.slice(1));
         break;
+      case "memory":
+      case "mem": {
+        const eng = controller.active().engine;
+        const sub = (parts[1] ?? "").toLowerCase();
+        if (sub === "clear") {
+          void clearMemory(eng.cwd).then(() => sysLog("memory: bank cleared for this project."));
+        } else if (sub === "add") {
+          const note = parts.slice(2).join(" ");
+          if (!note) sysLog("usage: /memory add <note>");
+          else void appendMemory(eng.cwd, note).then((n) => sysLog(`✓ memory: saved (${n} note${n === 1 ? "" : "s"}).`));
+        } else {
+          void readMemory(eng.cwd).then((c) =>
+            sysLog(
+              c
+                ? `memory (${countEntries(c)} notes) — ${memoryPath(eng.cwd)}:\n${c}`
+                : "memory: empty for this project. The model saves notes with the memory tool; /memory add <note> adds one; /memory clear erases.",
+            ),
+          );
+        }
+        break;
+      }
       case "workspace":
       case "ws": {
         const eng = controller.active().engine;

@@ -12,6 +12,7 @@ import {
   readSchema,
   sendMessageSchema,
   oracleSchema,
+  memorySchema,
   taskSchema,
   todoSchema,
   viewImageSchema,
@@ -32,6 +33,7 @@ import { runTodo } from "./todo.js";
 import { runViewImage } from "./viewimage.js";
 import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
+import { runMemory } from "./memory.js";
 
 export interface ToolResult {
   output: string;
@@ -232,6 +234,17 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: oracleSchema,
     mutating: false,
     run: runOracle,
+  },
+  memory: {
+    name: "memory",
+    description:
+      "Durable project memory that persists across sessions and is loaded into your context at the start of each " +
+      "one. action=add saves a note (a convention, gotcha, decision, or fact worth remembering next time); " +
+      "action=list reads the current bank; action=clear erases it. Save sparingly — only durable insights, not " +
+      "transient state. Stored outside the repo (~/.dom/memory), so it never touches the user's tree.",
+    schema: memorySchema,
+    mutating: false,
+    run: runMemory,
   },
 };
 

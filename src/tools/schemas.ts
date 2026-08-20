@@ -141,6 +141,16 @@ export const oracleSchema = z.object({
     ),
 });
 
+export const memorySchema = z.object({
+  action: z
+    .enum(["add", "list", "clear"])
+    .describe("add: append a durable note; list: read the current memory bank; clear: erase it."),
+  note: z
+    .string()
+    .optional()
+    .describe("For action=add: the fact to remember (one durable insight — a convention, gotcha, or decision)."),
+});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
@@ -155,6 +165,7 @@ export type TodoArgs = z.infer<typeof todoSchema>;
 export type ViewImageArgs = z.infer<typeof viewImageSchema>;
 export type WebSearchArgs = z.infer<typeof webSearchSchema>;
 export type OracleArgs = z.infer<typeof oracleSchema>;
+export type MemoryArgs = z.infer<typeof memorySchema>;
 
 export interface ToolJsonSchema {
   type: "object";

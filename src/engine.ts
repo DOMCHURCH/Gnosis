@@ -53,7 +53,7 @@ const MAX_FIX_ITERATIONS = 3;
 // model can't write, run shell commands, hand work to other tabs, or track
 // execution — it can only read/search/fetch to research, then produce a written
 // plan. Leaves {read, glob, grep, http}.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle"]);
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle", "memory"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
