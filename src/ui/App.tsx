@@ -35,6 +35,7 @@ import { buildRepoMap } from "../repomap.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 import { notify } from "../notify.js";
+import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -76,6 +77,8 @@ const HELP = [
   "  /new [name] [purpose]   open a new tab (its own history + engine)",
   "  /tabs         list open tabs    /tab <n|name>  switch tabs    /close  close the active tab",
   "  /alltabs      tiled read-only overview of every tab (again, or /tab, exits)",
+  "  /worktree <name>   isolate work in a git worktree + tab (branch dom/<name>)",
+  "  /worktree list | merge <name> | remove <name>",
   "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
@@ -618,11 +621,52 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (t) switchToTab(t.id);
   };
 
-  const newTab = (name: string | undefined, purpose: string) => {
-    const tab = controller.create(name, purpose);
+  const newTab = (name: string | undefined, purpose: string, cwd?: string) => {
+    const tab = controller.create(name, purpose, cwd);
     tabBuf(tab.id);
     switchToTab(tab.id);
     sysLog(`new tab ${g.chevron} ${tab.name}${purpose ? ` — ${purpose}` : ""}`);
+  };
+
+  // /worktree — isolate work in a separate git worktree + tab (branch dom/<name>).
+  const handleWorktree = async (wargs: string[]) => {
+    const sub = (wargs[0] ?? "").toLowerCase();
+    const cwd = controller.active().engine.cwd;
+    if (!sub || sub === "list") {
+      const list = await listWorktrees(cwd);
+      if (!list.length) {
+        sysLog("no dom worktrees. `/worktree <name>` opens one in an isolated branch + tab.");
+        return;
+      }
+      sysLog(["worktrees:", ...list.map((w) => `  ${w.name}  ${g.chevron} ${w.branch}  ${w.path}`)].join("\n"));
+      return;
+    }
+    if (sub === "merge") {
+      const name = wargs[1];
+      if (!name) { sysLog("usage: /worktree merge <name>"); return; }
+      sysLog(`⟳ merging worktree ${worktreeSlug(name)}…`);
+      const r = await mergeWorktree(cwd, name);
+      sysLog(r.ok ? `✓ merged dom/${worktreeSlug(name)} into the current branch` : `✗ merge failed: ${r.error}`);
+      return;
+    }
+    if (sub === "remove" || sub === "rm") {
+      const name = wargs[1];
+      if (!name) { sysLog("usage: /worktree remove <name> [--force]"); return; }
+      const force = wargs.includes("--force") || wargs.includes("-f");
+      const r = await removeWorktree(cwd, name, { force, deleteBranch: true });
+      sysLog(r.ok ? `✓ removed worktree ${worktreeSlug(name)} (branch deleted)` : `✗ ${r.error}`);
+      return;
+    }
+    // Anything else is a name to create a worktree for (and open a tab rooted there).
+    const name = wargs.join(" ");
+    sysLog(`⟳ creating worktree ${worktreeSlug(name)}…`);
+    const r = await createWorktree(cwd, name);
+    if (!r.ok) { sysLog(`✗ ${r.error}`); return; }
+    newTab(r.info.name, `worktree ${r.info.branch}`, r.info.path);
+    sysLog(
+      `✓ worktree ${r.info.name} on ${r.info.branch} — isolated at ${r.info.path}.\n` +
+        `  Edits here don't touch your working tree. \`/worktree merge ${r.info.name}\` brings it back; \`/worktree remove ${r.info.name}\` discards it.`,
+    );
   };
 
   const closeActiveTab = () => {
@@ -999,6 +1043,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "alltabs":
         toggleAllTabs();
+        break;
+      case "worktree":
+      case "wt":
+        void handleWorktree(parts.slice(1));
         break;
       case "skills": {
         const sk = engine.skills;

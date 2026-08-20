@@ -42,7 +42,7 @@ dom --json "prompt"       # headless: one turn, structured JSONL events to stdou
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 `/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
 
@@ -63,6 +63,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 **Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
+
+## Git worktree isolation
+
+`/worktree <name>` runs work in a **separate git worktree** on its own branch (`dom/<name>`), checked out under `~/.dom/worktrees/` and opened as a new tab. Edits and auto-commits there never touch your current working tree or branch — you keep working in the main tab while the worktree tab explores in parallel. When the work is good, `/worktree merge <name>` merges the branch back (`--no-ff`, so the isolation stays visible in history); if it isn't, `/worktree remove <name>` discards the worktree and its branch without a trace on your branch. `/worktree list` shows the open ones. The name is slugged (`Feature X` → `feature-x`); creating a name whose branch already exists is refused. Merge conflicts abort cleanly and report, leaving your tree untouched. (`/wt` is an alias.)
 
 ## Headless & JSON output
 

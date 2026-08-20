@@ -114,9 +114,10 @@ export class TabsController {
     return `${name}${n}`;
   }
 
-  /** Create a new tab (its own forked Engine). Does not switch to it. */
-  create(name?: string, purpose = ""): Tab {
-    const tab = this.makeTab(this.uniqueName(name ?? `tab${this.nextId}`), purpose, this.root.fork());
+  /** Create a new tab (its own forked Engine). Does not switch to it. A `cwd`
+   * roots the tab's engine elsewhere (e.g. a git worktree) instead of the root's. */
+  create(name?: string, purpose = "", cwd?: string): Tab {
+    const tab = this.makeTab(this.uniqueName(name ?? `tab${this.nextId}`), purpose, this.root.fork(cwd ? { cwd } : undefined));
     this.tabs.push(tab);
     this.onChange();
     return tab;
