@@ -24,6 +24,31 @@ export async function getRepoInfo(cwd: string): Promise<RepoInfo> {
   }
 }
 
+/** Current HEAD sha, or null (not a repo / no commits). */
+export async function gitHead(cwd: string): Promise<string | null> {
+  try {
+    const r = await execa("git", ["rev-parse", "HEAD"], { cwd, reject: false, timeout: 3000 });
+    return r.exitCode === 0 && r.stdout.trim() ? r.stdout.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Unified diff of `files` since `baseSha` (committed + working-tree changes). ""
+ * when nothing changed, no files, or not a repo. */
+export async function gitDiff(cwd: string, baseSha: string | null, files: string[]): Promise<string> {
+  if (!files.length) return "";
+  try {
+    const args = ["--no-pager", "diff"];
+    if (baseSha) args.push(baseSha);
+    args.push("--", ...files);
+    const r = await execa("git", args, { cwd, reject: false, timeout: 10000 });
+    return r.exitCode === 0 ? (r.stdout ?? "").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function getGhAuth(): Promise<string> {
   try {
     const res = await execa("gh", ["auth", "status"], { reject: false, all: true, timeout: 3000 });

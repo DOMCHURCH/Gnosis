@@ -8,6 +8,7 @@ import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
 import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
+import { gitHead, gitDiff } from "./gitinfo.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
@@ -57,6 +58,15 @@ const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_ta
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
 const SUBAGENT_MAX_ITER = 15;
 const SUBAGENT_TOKEN_BUDGET = 50_000;
+// The verifier subagent is deliberately blind to the generator's reasoning: it
+// sees ONLY the original request and the diff, and judges skeptically. No tools.
+const VERIFIER_DIRECTIVE =
+  "You are a skeptical code reviewer. You are given a user's ORIGINAL request and the DIFF of changes another agent " +
+  "made to satisfy it. You do NOT see that agent's reasoning. Judge ONLY from the request and the diff whether the " +
+  "change actually and fully accomplishes the request and is correct. Assume nothing you can't see in the diff. " +
+  "Reply on the FIRST line with exactly `PASS` or `FAIL`, then on following lines the specifics: what's missing, " +
+  "wrong, risky, or incomplete (for FAIL), or a one-line confirmation (for PASS). Be concise and concrete.";
+
 const SUBAGENT_DIRECTIVE =
   "\n\nYou are a READ-ONLY research sub-agent answering ONE question for another agent. You have only read, glob, " +
   "grep, and http. Work in as FEW tool calls as possible: search once with a good query, read only the files that " +
@@ -174,6 +184,11 @@ export class Engine {
   private nextUserImages: ImagePart[] = [];
   /** A write/edit succeeded this turn — arms the auto lint/test loop at turn end. */
   private editedThisTurn = false;
+  /** Files edited this turn (absolute) + the base commit before them, for the
+   * verifier's diff. turnRequest is the user text that started the turn. */
+  private turnEditedFiles = new Set<string>();
+  private turnBaseSha: string | null | undefined = undefined;
+  private turnRequest = "";
   /** Fix retries used by the auto lint/test loop this turn (cap MAX_FIX_ITERATIONS). */
   private fixIterations = 0;
   /** Images loaded by view_image during the current turn; flushed into a synthetic
@@ -374,6 +389,9 @@ export class Engine {
     this.pendingImages = [];
     this.editedThisTurn = false;
     this.fixIterations = 0;
+    this.turnEditedFiles = new Set();
+    this.turnBaseSha = undefined;
+    this.turnRequest = userText;
     this.messages.push({ role: "user", text: userText, images: images.length ? images : undefined });
     await this.trace({ type: "turn", role: "user", text: userText.slice(0, 500) });
     this.abortController = new AbortController();
@@ -557,6 +575,14 @@ export class Engine {
       if (iter >= this.maxIterations) {
         this.capped ??= "iteration";
         cb.onSystem(`✗ hit ${this.maxIterations}-iteration cap for this turn`);
+      }
+      // Auto-verify: on a turn that touched 2+ files, spawn a read-only verifier
+      // (config autoVerify) that judges the diff against the request, blind to the
+      // generator's reasoning, and reports its verdict.
+      if (!this.abortController.signal.aborted && this.turnEditedFiles.size >= 2 && (await loadConfig()).autoVerify) {
+        cb.onSystem("⟳ verifying the change…");
+        const v = await this.runVerifier();
+        if (v) cb.onSystem(v.verdict === "pass" ? `✓ verifier: ${v.text}` : `✗ verifier (${v.verdict}): ${v.text}`);
       }
       // Stop hook (non-blocking): the turn has ended.
       const stopHook = await runNonBlockingHook(this.cwd, "Stop", { sessionId: this.sessionId(), model: this.modelId });
@@ -774,6 +800,43 @@ export class Engine {
     return { ok: failures.length === 0, report: failures.join("\n\n") };
   }
 
+  /**
+   * Spawn a read-only verifier subagent that sees ONLY the original request and
+   * the diff of this turn's edits — never the generator's reasoning — and judges
+   * skeptically whether the change is actually done. Returns the verdict + notes,
+   * or null when there's nothing to verify (no edits / no diff). Cost folds in.
+   */
+  async runVerifier(): Promise<{ verdict: "pass" | "fail" | "unknown"; text: string } | null> {
+    if (!this.turnEditedFiles.size) return null;
+    const rel = [...this.turnEditedFiles].map((f) => path.relative(this.cwd, f).split(path.sep).join("/"));
+    const diff = await gitDiff(this.cwd, this.turnBaseSha ?? null, rel);
+    if (!diff) return null;
+
+    const session = createSession(this.cwd, this.modelId, "yolo");
+    const sub = new Engine({ apiKey: this.apiKey, cwd: this.cwd, systemPrompt: VERIFIER_DIRECTIVE, models: this.models, session, skills: [], autoCommit: false });
+    sub.toolAllowList = []; // NO tools — judge from the request + diff alone
+    sub.maxIterations = 2;
+    sub.tokenBudget = 30_000;
+    sub.interactive = false;
+    sub.noPersist = true;
+
+    const prompt = `ORIGINAL REQUEST:\n${this.turnRequest}\n\nDIFF (files: ${rel.join(", ")}):\n${diff.slice(0, 24000)}`;
+    const noop: Callbacks = { onLine() {}, onPending() {}, onAssistant() {}, onToolStart() {}, onToolResult() {}, onSystem() {}, requestPermission: async () => "no" };
+    await sub.run(prompt, noop);
+
+    // Fold the verifier's cost into this session.
+    this.cost.promptTokens += sub.cost.promptTokens;
+    this.cost.completionTokens += sub.cost.completionTokens;
+    this.cost.usd += sub.cost.usd;
+
+    const text =
+      [...sub.messages].reverse().find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text ??
+      "(verifier produced no verdict)";
+    const first = text.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
+    const verdict = first.startsWith("PASS") ? "pass" : first.startsWith("FAIL") ? "fail" : "unknown";
+    return { verdict, text: text.trim() };
+  }
+
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {
     const tool = TOOLS[call.name];
     if (!tool) return { output: `unknown tool: ${call.name}`, isError: true };
@@ -959,11 +1022,14 @@ export class Engine {
     }
     if (!result.isError && (tool.name === "write" || tool.name === "edit")) {
       this.editedThisTurn = true; // arm the auto lint/test loop
+      const abs = path.resolve(this.cwd, String(args.path ?? ""));
+      // Capture the pre-turn HEAD before the first edit's commit, for the verifier's diff.
+      if (this.turnBaseSha === undefined) this.turnBaseSha = await gitHead(this.cwd);
+      this.turnEditedFiles.add(abs);
       // Dom just wrote the file — treat that as having "read" the current content,
       // so consecutive edits work and only EXTERNAL changes force a re-read.
       await this.recordRead(String(args.path ?? ""));
       if (this.autoCommit) {
-        const abs = path.resolve(this.cwd, String(args.path ?? ""));
         await autoCommitFile(abs, tool.name).catch(() => {});
       }
     }

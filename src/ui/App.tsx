@@ -82,6 +82,7 @@ const HELP = [
   "  /tools        list available tools",
   "  /cost         show token + dollar usage",
   "  /context      what fills the context window, by category",
+  "  /verify       skeptically verify the last change (diff vs request)",
   "  /trace        summarize this session's trajectory trace",
   "  /verbose      toggle full (unsummarized) tool output",
   "  /resume       pick a prior session for this directory",
@@ -1008,6 +1009,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           (s) => `  ${s.name}${s.scope === "project" ? " [project]" : ""}  —  ${s.description}`,
         );
         sysLog([`skills (${sk.length} loaded):`, ...rows].join("\n"));
+        break;
+      }
+      case "verify": {
+        sysLog("⟳ verifying the last change…");
+        void engine.runVerifier().then((v) => {
+          if (!v) sysLog("nothing to verify (no file edits in the last turn, or no diff)");
+          else sysLog(v.verdict === "pass" ? `✓ verifier: ${v.text}` : `✗ verifier (${v.verdict}): ${v.text}`);
+        }).catch((e) => sysLog(`verify: ${(e as Error).message}`));
         break;
       }
       case "context": {

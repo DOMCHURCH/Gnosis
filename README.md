@@ -62,6 +62,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
+## Verifier subagent
+
+`/verify` spawns a read-only subagent that judges whether the last turn's change actually accomplished the request. It receives **only** the original request and the `git diff` of the files edited that turn (committed + working-tree, since the pre-turn HEAD) — never the generator's system prompt or reasoning — and has **no tools**, so it can't be swayed by anything outside the diff. It replies `PASS`/`FAIL` on the first line plus specifics. `"autoVerify": true` runs it automatically after any turn that touched 2+ files. Its cost folds into the session.
+
 ## Auto lint/test loop
 
 With `"autoFix": true` in config, after any turn that edited files dom runs the configured `lintCommand` then `testCommand` in the working directory. A non-zero exit is fed back to the model as a fix request (with the failure output) and it retries — up to 3 attempts, then it stops and reports "still failing". The commands are user-configured (trusted) so they run without a prompt; off by default, and a no-op if neither command is set.

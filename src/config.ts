@@ -36,6 +36,9 @@ export interface Config {
   /** Enable the auto lint/test loop: after a turn that edited files, run
    * lint/test; feed any failure back so the model retries (cap 3). Default off. */
   autoFix?: boolean;
+  /** Auto-run the verifier subagent on a turn that touched 2+ files. Default off;
+   * /verify always triggers it manually. */
+  autoVerify?: boolean;
 }
 
 export interface CostState {
