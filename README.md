@@ -42,7 +42,7 @@ dom --json "prompt"       # headless: one turn, structured JSONL events to stdou
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/memory` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/memory` · `/schedule` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 `/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
 
@@ -63,6 +63,12 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 **Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
+
+## Scheduled runs
+
+dom can run a prompt headlessly on a schedule. `dom schedule add "<spec>" "<prompt>"` registers one (spec is `every 30m` / `hourly` / `daily 14:30`); `dom schedule list` shows each with its next-run time and last outcome; `dom schedule remove <id>` deletes one; `dom schedule run <id>` fires one immediately. `dom schedule tick` runs everything **due right now** and records the result — wire that to cron or Windows Task Scheduler (e.g. every minute), or run `dom schedule daemon` to keep a process ticking every 60s. Each firing boots in the schedule's directory, runs the prompt in pipe mode, and **saves it as a resumable session** so you can `dom -c` in and read the result. The registry lives in `~/.dom/schedules.json`. In-session, `/schedule` lists them and `/schedule add <spec> | <prompt>` adds one.
+
+The scheduling logic (spec parsing, due-calculation, the registry, and `tick`'s due-selection) is covered by the verify suite; **real firing over wall-clock time and the OS-cron wiring are only exercised by `dom schedule tick|daemon` and are not auto-verified.**
 
 ## Memory bank
 

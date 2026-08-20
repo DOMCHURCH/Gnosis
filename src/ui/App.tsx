@@ -37,6 +37,7 @@ import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
 import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
+import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -83,6 +84,7 @@ const HELP = [
   "  /workspace add <path>   add a search root (grep/glob without a path span all)",
   "  /workspace list | remove <path>",
   "  /memory       show the durable project memory bank (add <note> | clear)",
+  "  /schedule     list scheduled runs (add <spec> | <prompt>  ·  remove <id>)",
   "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
@@ -1070,6 +1072,46 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
                 : "memory: empty for this project. The model saves notes with the memory tool; /memory add <note> adds one; /memory clear erases.",
             ),
           );
+        }
+        break;
+      }
+      case "schedule":
+      case "sched": {
+        const eng = controller.active().engine;
+        const sub = (parts[1] ?? "list").toLowerCase();
+        if (sub === "add") {
+          const rest = parts.slice(2).join(" ");
+          const bar = rest.indexOf("|");
+          const spec = (bar >= 0 ? rest.slice(0, bar) : "").trim();
+          const prompt = (bar >= 0 ? rest.slice(bar + 1) : "").trim();
+          if (!spec || !prompt) {
+            sysLog("usage: /schedule add <spec> | <prompt>   e.g. /schedule add every 1h | check the build");
+          } else {
+            void addSchedule({ spec, prompt, cwd: eng.cwd }, Date.now(), Math.floor(Math.random() * 1e6).toString(36)).then((r) =>
+              sysLog(
+                r.ok
+                  ? `✓ scheduled ${r.schedule.id}: ${r.schedule.spec} — next ${new Date(nextRunAt(r.schedule, Date.now()) ?? Date.now()).toLocaleString()}. Fires via \`dom schedule tick\`.`
+                  : `✗ ${r.error}`,
+              ),
+            );
+          }
+        } else if (sub === "remove" || sub === "rm") {
+          const id = parts[2];
+          if (!id) sysLog("usage: /schedule remove <id>");
+          else void removeSchedule(id).then((ok) => sysLog(ok ? `✓ removed ${id}` : `no schedule ${id}`));
+        } else {
+          void loadSchedules().then((all) => {
+            if (!all.length) {
+              sysLog("no scheduled runs. /schedule add <spec> | <prompt>. A cron entry / `dom schedule tick` fires due ones.");
+              return;
+            }
+            const now = Date.now();
+            const rows = all.map(
+              (s) =>
+                `  ${s.id} [${s.enabled ? "on" : "off"}] ${s.spec} — ${s.prompt}\n     next ${new Date(nextRunAt(s, now) ?? now).toLocaleString()}${s.lastStatus ? `  · last ${s.lastStatus}` : ""}`,
+            );
+            sysLog([`scheduled runs (${all.length}):`, ...rows].join("\n"));
+          });
         }
         break;
       }

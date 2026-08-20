@@ -4,6 +4,7 @@ import { parseArgs, boot, BootError } from "./startup.js";
 import { runHeadless } from "./headless.js";
 import { runPipe } from "./pipe.js";
 import { runJson } from "./jsonrun.js";
+import { runScheduleCommand } from "./scheduler.js";
 import { App } from "./ui/App.js";
 import { detectCaps, termWidth } from "./ui/terminal.js";
 import { getGhAuth, getRepoInfo } from "./gitinfo.js";
@@ -23,6 +24,7 @@ usage:
   dom -p "prompt"            pipe mode: read stdin, run one turn, print the result, exit
   dom -p "prompt" --save     ...and persist the one-shot turn as a session
   dom --json "prompt"        headless: stream structured JSONL events to stdout, exit
+  dom schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
   dom --help | --version
 
 Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
@@ -32,7 +34,14 @@ ending with a {"type":"result"} line. Reads piped stdin too, like -p.
 Set OPENROUTER_API_KEY in your environment, or put { "apiKey": "sk-or-..." } in ~/.dom/config.json.`;
 
 async function main() {
-  const flags = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  // `dom schedule ...` manages/fires scheduled runs — handled before flag parsing
+  // so the subcommand words aren't mistaken for an opening prompt.
+  if (argv[0] === "schedule") {
+    process.exit(await runScheduleCommand(argv.slice(1)));
+  }
+
+  const flags = parseArgs(argv);
   if (flags.version) {
     console.log(`dom ${VERSION}`);
     return;
