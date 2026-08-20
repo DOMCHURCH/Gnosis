@@ -31,6 +31,7 @@ import { listHooks } from "../hooks.js";
 import { writeAgentsMd } from "../init.js";
 import { buildRepoMap } from "../repomap.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
+import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -76,6 +77,7 @@ const HELP = [
   "  /compact      summarize and shrink history",
   "  /tools        list available tools",
   "  /cost         show token + dollar usage",
+  "  /trace        summarize this session's trajectory trace",
   "  /verbose      toggle full (unsummarized) tool output",
   "  /resume       resume a past session",
   "  /vault [set <path>]   switch working root to your Obsidian vault",
@@ -937,6 +939,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           (s) => `  ${s.name}${s.scope === "project" ? " [project]" : ""}  —  ${s.description}`,
         );
         sysLog([`skills (${sk.length} loaded):`, ...rows].join("\n"));
+        break;
+      }
+      case "trace": {
+        const sid = engine.sessionId();
+        void readTrace(sid).then((events) => {
+          if (!events.length) {
+            sysLog("no trace yet for this session (traces are written per model/tool call to ~/.dom/traces)");
+            return;
+          }
+          sysLog(formatTraceSummary(sid, summarizeTrace(events)));
+        });
         break;
       }
       case "cost": {

@@ -119,6 +119,10 @@ All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, wh
 
 `provider → tools → loop → headless CLI → permission gate → Ink UI → banner → sessions`. The loop is runnable without the TUI (`dom --headless`) so it can be verified independently.
 
+## Tracing
+
+Every model call, tool call, and user turn is appended as one structured JSONL line to `~/.dom/traces/<session>.jsonl` — model id and per-call tokens/cost for model calls, tool name + (truncated) args + error flag + output size for tool calls. `/trace` prints a summary of the current session: event/turn/call counts, in/out (and cached) tokens, cost, a per-tool breakdown, per-model breakdown, and the file path. Tracing is best-effort (never breaks a turn) and skipped for ephemeral sessions (sub-agents, eval, `-p` without `--save`).
+
 ## Eval
 
 `npm run build && npm run eval` runs a fixed regression suite of 10 tasks — each set up in its own scratch repo with a deterministic, outcome-based check (final file state or the model's answer, never a specific tool sequence) — against the live model, and scores pass/fail plus tokens and cost per task. The first run records a baseline (`eval/baseline.json`); later runs print the delta vs baseline (score, tokens, cost, and any tasks that **regressed** or got fixed) so you can see whether a change actually helped. `-- --record` re-records the baseline; `DOM_EVAL_MODEL=<id>` overrides the model. Real runs need an API key and make (cheap-model) calls. The harness machinery — scoring, baseline record/compare, regression detection — is itself covered offline by `verify/s7-eval.mjs`, which drives it with a deterministic mock and asserts a sabotaged system prompt drops the score.

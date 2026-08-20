@@ -7,6 +7,7 @@ import { serialize, estimateTokens, type Msg, type ToolCall, type ImagePart } fr
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
+import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
@@ -303,7 +304,9 @@ export class Engine {
 
   // --- cost ----------------------------------------------------------------
 
-  private applyUsage(usage: Usage): void {
+  /** Apply a completion's usage to the running cost and return the dollar cost of
+   * this call (for the trace). */
+  private applyUsage(usage: Usage): number {
     this.cost.promptTokens += usage.prompt_tokens;
     this.cost.cachedPromptTokens += usage.cached_tokens;
     this.cost.completionTokens += usage.completion_tokens;
@@ -314,8 +317,26 @@ export class Engine {
         dollars = usage.prompt_tokens * pm.pricing.prompt + usage.completion_tokens * pm.pricing.completion;
       }
     }
-    this.cost.usd += dollars > 0 ? dollars : 0;
+    const applied = dollars > 0 ? dollars : 0;
+    this.cost.usd += applied;
     if (usage.prompt_tokens > 0) this.lastPromptTokens = usage.prompt_tokens;
+    return applied;
+  }
+
+  /** Append a trace event for this session — skipped for ephemeral sessions
+   * (sub-agents, eval, pipe without --save) so traces reflect real sessions. */
+  private async trace(event: TraceEvent): Promise<void> {
+    if (this.noPersist) return;
+    await appendTrace(this.sessionId(), event);
+  }
+
+  /** Parse a tool call's raw JSON args for the trace; never throws. */
+  private parseArgs(argsJson: string): unknown {
+    try {
+      return argsJson && argsJson.trim() ? JSON.parse(argsJson) : {};
+    } catch {
+      return { _raw: argsJson };
+    }
   }
 
   // --- the loop ------------------------------------------------------------
@@ -326,6 +347,7 @@ export class Engine {
     this.nextUserImages = [];
     this.pendingImages = [];
     this.messages.push({ role: "user", text: userText, images: images.length ? images : undefined });
+    await this.trace({ type: "turn", role: "user", text: userText.slice(0, 500) });
     this.abortController = new AbortController();
     this.repairs.clear();
     this.rejections.clear();
@@ -429,7 +451,16 @@ export class Engine {
         if (last) cb.onLine(last);
         cb.onPending("");
 
-        this.applyUsage(result.usage);
+        const callCost = this.applyUsage(result.usage);
+        await this.trace({
+          type: "model_call",
+          model: this.modelId,
+          promptTokens: result.usage.prompt_tokens,
+          completionTokens: result.usage.completion_tokens,
+          cachedTokens: result.usage.cached_tokens,
+          cost: callCost,
+          toolCalls: result.toolCalls.length,
+        });
         const assistant: Extract<Msg, { role: "assistant" }> = {
           role: "assistant",
           text: result.text || undefined,
@@ -451,6 +482,13 @@ export class Engine {
           }
           const res = await this.gateAndExecute(call, cb);
           this.messages.push({ role: "tool", callId: call.id, name: call.name, result: res.output, isError: res.isError });
+          await this.trace({
+            type: "tool_call",
+            name: call.name,
+            args: truncateDeep(this.parseArgs(call.args)),
+            isError: res.isError,
+            outputChars: res.output.length,
+          });
           cb.onToolResult(call, res);
           if (this.stopTurn) {
             stop = true;
