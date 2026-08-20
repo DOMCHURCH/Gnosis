@@ -13,7 +13,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build --config web/vite.config.ts",
+    "build:server": "tsc",
+    "build:web": "vite build --config web/vite.config.ts",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "verify": "node verify/run-all.mjs",
@@ -25,6 +27,7 @@
     "ink": "^5.1.0",
     "ink-text-input": "^6.0.0",
     "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tree-sitter-wasms": "^0.1.11",
     "web-tree-sitter": "^0.20.8",
     "zod": "^3.23.8",
@@ -34,6 +37,10 @@
     "@types/diff": "^7.0.2",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
-    "typescript": "^5.6.3"
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "^5.6.3",
+    "vite": "^8.2.2",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }
