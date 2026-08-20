@@ -62,6 +62,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
+## Secret redaction
+
+Tool output and the model's own tool-call args are scanned for credential patterns — OpenAI/OpenRouter/Anthropic-style `sk-…` keys, AWS `AKIA…`, GitHub `ghp_`/`github_pat_`, Slack `xox…`, Google `AIza…`, JWTs, `Bearer` tokens, and `PRIVATE KEY` blocks — and each is replaced with `<redacted:TYPE>` before it reaches the model, the transcript, or the session file. Redaction touches only the stored/displayed copy: the real command still executes with the real value, so a `cat .env` gets masked in history while the file on disk is untouched. Patterns are specific to avoid mangling ordinary output.
+
 ## Verifier subagent
 
 `/verify` spawns a read-only subagent that judges whether the last turn's change actually accomplished the request. It receives **only** the original request and the `git diff` of the files edited that turn (committed + working-tree, since the pre-turn HEAD) — never the generator's system prompt or reasoning — and has **no tools**, so it can't be swayed by anything outside the diff. It replies `PASS`/`FAIL` on the first line plus specifics. `"autoVerify": true` runs it automatically after any turn that touched 2+ files. Its cost folds into the session.

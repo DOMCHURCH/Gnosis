@@ -5,6 +5,7 @@
 // unit-testable. Errors are never summarized — the caller passes the full text.
 
 import { diffLines } from "diff";
+import { redactSecrets } from "../redact.js";
 
 const CONNECTOR = "  ⎿ ";
 const CONT_INDENT = "    "; // continuation lines align under the connector text
@@ -81,6 +82,9 @@ export function callParts(name: string, args: any): CallParts {
     if (Array.isArray(a.edits) && a.edits.length) secondary = `, ${a.edits.length} edit${a.edits.length === 1 ? "" : "s"}`;
     else if (a.replace_all) secondary = ", replace_all";
   }
+  // Redact secrets from what's shown (a command/URL/arg may carry a token). The
+  // real command still executes — this only touches the transcript display.
+  primary = redactSecrets(primary).text;
   return { tool: capitalize(name), primary, secondary };
 }
 

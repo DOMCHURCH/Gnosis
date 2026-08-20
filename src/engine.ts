@@ -9,6 +9,7 @@ import { autoCommitFile } from "./autocommit.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
 import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
 import { gitHead, gitDiff } from "./gitinfo.js";
+import { redactSecrets } from "./redact.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
@@ -549,6 +550,14 @@ export class Engine {
             break;
           }
           const res = await this.gateAndExecute(call, cb);
+          // Redact secrets from the tool RESULT before it reaches history (→ the
+          // model + session file) or the transcript. Results aren't re-executed, so
+          // this is always safe.
+          const red = redactSecrets(res.output);
+          if (red.count) {
+            res.output = red.text;
+            cb.onSystem(`🔒 redacted ${red.count} secret${red.count === 1 ? "" : "s"} from ${call.name} output`);
+          }
           this.messages.push({ role: "tool", callId: call.id, name: call.name, result: res.output, isError: res.isError });
           await this.trace({
             type: "tool_call",
@@ -562,6 +571,14 @@ export class Engine {
             stop = true;
             break;
           }
+        }
+        // Redact secrets the model put in its own tool-call args (e.g. a curl with
+        // a token) from the STORED history + session file. Execution already ran
+        // with the real args above, so this changes only the model-facing/on-disk
+        // copy (the transcript display is redacted separately in toolrender).
+        for (const c of assistant.calls ?? []) {
+          const r = redactSecrets(c.args);
+          if (r.count) c.args = r.text;
         }
         // Images loaded by view_image this turn ride in on a synthetic user message
         // right after the tool results, so the model sees them the next iteration.
