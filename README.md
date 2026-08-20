@@ -119,6 +119,10 @@ All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, wh
 
 `provider → tools → loop → headless CLI → permission gate → Ink UI → banner → sessions`. The loop is runnable without the TUI (`dom --headless`) so it can be verified independently.
 
+## Eval
+
+`npm run build && npm run eval` runs a fixed regression suite of 10 tasks — each set up in its own scratch repo with a deterministic, outcome-based check (final file state or the model's answer, never a specific tool sequence) — against the live model, and scores pass/fail plus tokens and cost per task. The first run records a baseline (`eval/baseline.json`); later runs print the delta vs baseline (score, tokens, cost, and any tasks that **regressed** or got fixed) so you can see whether a change actually helped. `-- --record` re-records the baseline; `DOM_EVAL_MODEL=<id>` overrides the model. Real runs need an API key and make (cheap-model) calls. The harness machinery — scoring, baseline record/compare, regression detection — is itself covered offline by `verify/s7-eval.mjs`, which drives it with a deterministic mock and asserts a sabotaged system prompt drops the score.
+
 ## Verify
 
 `npm run build && npm run verify` runs the offline regression suite in `verify/`: model resolution + `:batch` filtering, 429 backoff, 413 (too-large) handling, the rejection-loop guard, the `http` gate + secret substitution/redaction, the `~/.dom` bash carve-out (cache/skills allowed, config/.env/sessions blocked), the multi-tab controller (loop guards + badging), the `/alltabs` split-view layout, a compact `Banner` render (no model line), and a headless Ink mount driving `/new`, `/tabs`, `/tab`, and `/alltabs` — plus auto-commit + `/undo`, read-before-edit, background jobs, plan-mode teeth, hooks, `/init`, sub-agents (`task`), and the tree-sitter repo map. Each suite runs in its own process, mocks the network, and isolates `$USERPROFILE` — nothing touches your real `~/.dom`.
