@@ -69,6 +69,15 @@ const PLAN_DIRECTIVE =
   "changes you would make (files to touch and what to change in each), and STOP. Do not claim you edited anything. " +
   "The user will run /approve to execute the plan, or /revise to amend it.";
 
+/** Tokens + dollars consumed by a single turn (deltas over the turn, sub-agent
+ * cost included). */
+export interface TurnCost {
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens: number;
+  usd: number;
+}
+
 export interface Callbacks {
   /** Commit a finalized transcript line as it streams in (the transcript owner). */
   onLine(line: StreamLine): void;
@@ -80,6 +89,8 @@ export interface Callbacks {
   onToolResult(call: ToolCall, result: ToolResult): void;
   onSystem(text: string): void;
   requestPermission(preview: Preview): Promise<PermissionAnswer>;
+  /** Fired once when a turn ends, with that turn's token/dollar cost (optional). */
+  onTurnCost?(cost: TurnCost): void;
 }
 
 export interface EngineDeps {
@@ -342,6 +353,13 @@ export class Engine {
   // --- the loop ------------------------------------------------------------
 
   async run(userText: string, cb: Callbacks): Promise<void> {
+    // Snapshot cost so we can report this turn's delta (sub-agent cost included).
+    const costAtStart = {
+      prompt: this.cost.promptTokens,
+      completion: this.cost.completionTokens,
+      cached: this.cost.cachedPromptTokens,
+      usd: this.cost.usd,
+    };
     // Attach any images queued for this turn (an @image typed in the TUI).
     const images = this.nextUserImages;
     this.nextUserImages = [];
@@ -513,6 +531,12 @@ export class Engine {
       if (stopHook.warn) cb.onSystem(`! ${stopHook.warn}`);
     } finally {
       this.abortController = null;
+      cb.onTurnCost?.({
+        promptTokens: this.cost.promptTokens - costAtStart.prompt,
+        completionTokens: this.cost.completionTokens - costAtStart.completion,
+        cachedTokens: this.cost.cachedPromptTokens - costAtStart.cached,
+        usd: this.cost.usd - costAtStart.usd,
+      });
       await this.persist();
     }
   }

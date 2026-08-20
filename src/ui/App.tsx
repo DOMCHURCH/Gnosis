@@ -505,6 +505,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       emitToTab(tab, { kind: "tool", tool, primary, secondary, ok: !result.isError, body });
     },
     onSystem: (text) => emitToTab(tab, { kind: "system", text }),
+    onTurnCost: (c) => {
+      const uncached = Math.max(0, c.promptTokens - c.cachedTokens);
+      const cached = c.cachedTokens > 0 ? ` (${c.cachedTokens} cached)` : "";
+      emitToTab(tab, { kind: "system", text: `${g.mid} turn: ${uncached}${cached} in · ${c.completionTokens} out · $${c.usd.toFixed(4)}` });
+    },
     requestPermission: (preview) =>
       new Promise<PermissionAnswer>((resolve) => {
         const label = preview.kind === "diff" ? preview.path : preview.kind === "bash" ? preview.command : `${preview.method} ${preview.url}`;
