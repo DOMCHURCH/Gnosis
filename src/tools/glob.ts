@@ -150,6 +150,23 @@ async function walk(
 }
 
 export async function runGlob(args: GlobArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  // Multi-root: no explicit path + 2+ workspace roots → glob each root, then
+  // prefix every hit with its root name. Single-root path is left untouched below.
+  const roots = ctx?.roots ?? [];
+  if (!args.path && roots.length > 1) {
+    const merged: string[] = [];
+    for (const root of roots) {
+      const r = await runGlob(args, _signal, { ...ctx, cwd: root, roots: undefined });
+      if (/^No files matching/.test(r.output)) continue;
+      const label = path.basename(root);
+      for (const line of r.output.split("\n")) merged.push(`${label}/${line}`);
+    }
+    return {
+      output: merged.length ? truncateOutput(merged.join("\n")) : `No files matching ${args.pattern}`,
+      isError: false,
+    };
+  }
+
   const base = path.resolve(ctx?.cwd ?? process.cwd(), args.path ?? ".");
   const match = compileGlob(args.pattern);
   const ig = buildIgnorer(base, args.include_ignored ?? false);

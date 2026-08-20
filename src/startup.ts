@@ -165,7 +165,7 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   const systemPrompt = await buildSystemPrompt(cwd, skills, config.mapTokens ?? 1024);
   // Auto-commit is on by default; config.autoCommit=false or --no-auto-commit disables it.
   const autoCommit = !flags.noAutoCommit && (config.autoCommit ?? true);
-  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel, autoCommit, maxSessionUsd: config.maxSessionUsd });
+  const engine = new Engine({ apiKey, cwd, systemPrompt, models, session, skills, fallbackModel: config.fallbackModel, autoCommit, maxSessionUsd: config.maxSessionUsd, workspaceRoots: config.workspaceRoots });
 
   // SessionStart hook (non-blocking, best-effort — never delays or blocks boot).
   void runNonBlockingHook(cwd, "SessionStart", { sessionId: session.id, model: session.model, resumed }).catch(() => {});

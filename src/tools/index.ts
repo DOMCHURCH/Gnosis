@@ -77,6 +77,10 @@ export type OracleRunner = (question: string, signal?: AbortSignal) => Promise<O
 export interface ToolContext {
   /** The directory every path-resolving tool resolves against (never process.cwd()). */
   cwd: string;
+  /** Workspace roots (roots[0] === cwd). When set with 2+ entries, grep/glob
+   * called WITHOUT an explicit path search every root and prefix each result with
+   * the root's name. Absent / single-entry → ordinary single-root behavior. */
+  roots?: string[];
   tab?: TabRuntime;
   subagent?: SubAgentRunner;
   /** Replace the session's task list (rendered live above the input). Absent

@@ -2,7 +2,7 @@
 // either the headless runner or the Ink UI via a Callbacks object.
 
 import path from "node:path";
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync, statSync } from "node:fs";
 import { serialize, estimateTokens, type Msg, type ToolCall, type ImagePart } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
@@ -121,6 +121,8 @@ export interface EngineDeps {
   autoCommit?: boolean;
   /** Dollar ceiling per session (the base allotment). Default 2. */
   maxSessionUsd?: number;
+  /** Extra workspace roots beyond cwd; grep/glob without a path span all of them. */
+  workspaceRoots?: string[];
 }
 
 export class Engine {
@@ -149,6 +151,9 @@ export class Engine {
   mode: Mode;
   summary: string | null;
   cost: CostState;
+  /** Workspace roots for multi-root search. roots[0] is always this.cwd (the
+   * primary root); grep/glob without an explicit path span every entry. */
+  roots: string[];
   /** The model's task list (the `todo` tool). Persisted per session; the UI
    * renders it live above the input. Replaced wholesale on each todo call. */
   todos: TodoItem[];
@@ -222,9 +227,32 @@ export class Engine {
     this.cost.subAgentUsd ??= 0;
     this.cost.oracleUsd ??= 0;
     this.todos = deps.session.todos ?? [];
+    // Primary root is always cwd; extra roots are de-duped and must be real dirs.
+    this.roots = [this.cwd];
+    for (const r of deps.workspaceRoots ?? []) this.addRoot(r);
   }
 
   // --- state helpers -------------------------------------------------------
+
+  /** Add a workspace root (absolute after resolving against cwd). Rejects a
+   * non-directory or a duplicate. Returns the resolved path or an error message. */
+  addRoot(p: string): { ok: boolean; message: string } {
+    const abs = path.resolve(this.cwd, p);
+    if (!existsSync(abs) || !statSync(abs).isDirectory()) return { ok: false, message: `not a directory: ${abs}` };
+    if (this.roots.some((r) => path.resolve(r) === abs)) return { ok: false, message: `already a workspace root: ${abs}` };
+    this.roots.push(abs);
+    return { ok: true, message: abs };
+  }
+
+  /** Remove a workspace root. The primary root (cwd) can't be removed. */
+  removeRoot(p: string): { ok: boolean; message: string } {
+    const abs = path.resolve(this.cwd, p);
+    if (path.resolve(this.roots[0]!) === abs) return { ok: false, message: "can't remove the primary root (cwd)." };
+    const i = this.roots.findIndex((r) => path.resolve(r) === abs);
+    if (i < 0) return { ok: false, message: `not a workspace root: ${abs}` };
+    this.roots.splice(i, 1);
+    return { ok: true, message: abs };
+  }
 
   currentModel(): ModelInfo | undefined {
     return this.models.find((m) => m.id === this.modelId);
@@ -274,7 +302,13 @@ export class Engine {
    * tracking this engine's cwd (so it matches where tools actually run after
    * /vault). In plan mode a directive is appended telling the model to plan. */
   currentSystemPrompt(): string {
-    const base = withWorkingDir(this.systemPrompt, this.cwd);
+    let base = withWorkingDir(this.systemPrompt, this.cwd);
+    if (this.roots.length > 1) {
+      const list = this.roots.map((r, i) => `  ${i === 0 ? "*" : "-"} ${r}${i === 0 ? " (primary)" : ""}`).join("\n");
+      base +=
+        `\n\nWorkspace roots — grep/glob WITHOUT a path argument search all of these; ` +
+        `each result is prefixed with its root's name. Use an explicit path to scope to one.\n${list}`;
+    }
     return this.mode === "plan" ? base + PLAN_DIRECTIVE : base;
   }
 
@@ -717,6 +751,7 @@ export class Engine {
   private toolCtx(): ToolContext {
     return {
       cwd: this.cwd,
+      roots: this.roots,
       tab: this.toolContext?.tab,
       subagent: (d, p, sig) => this.runSubAgent(d, p, sig),
       setTodos: (items) => {

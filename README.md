@@ -42,7 +42,7 @@ dom --json "prompt"       # headless: one turn, structured JSONL events to stdou
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 `/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
 
@@ -63,6 +63,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 **Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
+
+## Multi-root workspaces
+
+A session can span more than one project root. `/workspace add <path>` registers an extra root (or set `"workspaceRoots": ["../other"]` in config); `/workspace list` shows them and `/workspace remove <path>` drops one (the primary root — your cwd — always stays). With 2+ roots, **`grep` and `glob` called without an explicit `path` search every root** and prefix each hit with the root's name (`api/src/db.ts:12:…`, `web/src/db.ts:8:…`), so you can search across repos in one call; pass an explicit `path` to scope back to one. The roots are advertised in the system prompt so the model knows they exist. (`/ws` is an alias.)
 
 ## Git worktree isolation
 

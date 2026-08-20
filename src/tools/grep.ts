@@ -134,6 +134,24 @@ async function jsFallback(args: GrepArgs, cwd: string): Promise<ToolResult> {
 }
 
 export async function runGrep(args: GrepArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  // Multi-root: no explicit path + 2+ workspace roots → grep each root, then
+  // prefix every match line with its root name. Single-root path unchanged below.
+  const roots = ctx?.roots ?? [];
+  if (!args.path && roots.length > 1) {
+    const chunks: string[] = [];
+    for (const root of roots) {
+      const r = await runGrep(args, _signal, { ...ctx, cwd: root, roots: undefined });
+      if (r.isError) return r;
+      if (/^No matches for/.test(r.output)) continue;
+      const label = path.basename(root);
+      chunks.push(r.output.split("\n").map((l) => `${label}/${l}`).join("\n"));
+    }
+    return {
+      output: chunks.length ? truncateOutput(chunks.join("\n")) : `No matches for /${args.pattern}/`,
+      isError: false,
+    };
+  }
+
   const cwd = ctx?.cwd ?? process.cwd();
   const rg = rgPath();
   if (rg) {

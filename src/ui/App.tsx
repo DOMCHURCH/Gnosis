@@ -79,6 +79,8 @@ const HELP = [
   "  /alltabs      tiled read-only overview of every tab (again, or /tab, exits)",
   "  /worktree <name>   isolate work in a git worktree + tab (branch dom/<name>)",
   "  /worktree list | merge <name> | remove <name>",
+  "  /workspace add <path>   add a search root (grep/glob without a path span all)",
+  "  /workspace list | remove <path>",
   "  /skills       list loaded skills",
   "  /clear        clear the conversation",
   "  /compact      summarize and shrink history",
@@ -1048,6 +1050,32 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "wt":
         void handleWorktree(parts.slice(1));
         break;
+      case "workspace":
+      case "ws": {
+        const eng = controller.active().engine;
+        const sub = (parts[1] ?? "").toLowerCase();
+        if (!sub || sub === "list") {
+          const rows = eng.roots.map((r, i) => `  ${i === 0 ? g.chevron : " "} ${r}${i === 0 ? "  (primary)" : ""}`);
+          sysLog([`workspace roots (${eng.roots.length}) — grep/glob without a path search all:`, ...rows].join("\n"));
+        } else if (sub === "add") {
+          const p = parts.slice(2).join(" ");
+          if (!p) sysLog("usage: /workspace add <path>");
+          else {
+            const r = eng.addRoot(p);
+            sysLog(r.ok ? `✓ added workspace root: ${r.message}` : `✗ ${r.message}`);
+          }
+        } else if (sub === "remove" || sub === "rm") {
+          const p = parts.slice(2).join(" ");
+          if (!p) sysLog("usage: /workspace remove <path>");
+          else {
+            const r = eng.removeRoot(p);
+            sysLog(r.ok ? `✓ removed workspace root: ${r.message}` : `✗ ${r.message}`);
+          }
+        } else {
+          sysLog("usage: /workspace [list | add <path> | remove <path>]");
+        }
+        break;
+      }
       case "skills": {
         const sk = engine.skills;
         if (!sk.length) {

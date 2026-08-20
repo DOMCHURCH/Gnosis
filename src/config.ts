@@ -42,6 +42,9 @@ export interface Config {
   /** Dollar ceiling per session. On reaching it dom halts the turn, refuses new
    * sub-agent/oracle spawns, and prompts to continue or stop. Default 2. */
   maxSessionUsd?: number;
+  /** Extra workspace roots (multi-root): grep/glob without a path search cwd plus
+   * these. Also addable at runtime with /workspace add <path>. */
+  workspaceRoots?: string[];
 }
 
 export interface CostState {
