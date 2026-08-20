@@ -11,6 +11,7 @@ import {
   listTabsSchema,
   readSchema,
   sendMessageSchema,
+  oracleSchema,
   taskSchema,
   todoSchema,
   viewImageSchema,
@@ -30,6 +31,7 @@ import { runTask } from "./task.js";
 import { runTodo } from "./todo.js";
 import { runViewImage } from "./viewimage.js";
 import { runWebSearch } from "./websearch.js";
+import { runOracle } from "./oracle.js";
 
 export interface ToolResult {
   output: string;
@@ -58,6 +60,16 @@ export interface SubAgentResult {
 /** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
 export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
 
+/** Result of an oracle consultation: the answer plus accounting. */
+export interface OracleResult {
+  text: string;
+  model: string;
+  tokens: number;
+  usd: number;
+}
+/** Runs a single-turn, tool-less completion on the stronger oracle model. */
+export type OracleRunner = (question: string, signal?: AbortSignal) => Promise<OracleResult>;
+
 /** Per-turn context passed to tool.run. Carries the working directory paths are
  * resolved against (each engine owns its own — tabs and sub-agents pass theirs);
  * the multi-tab tools use `tab`; the `task` tool uses `subagent`; the `todo` tool
@@ -74,6 +86,8 @@ export interface ToolContext {
   imageInput?: boolean;
   /** Attach a loaded image to the next message (view_image). */
   attachImage?: (img: ImagePart) => void;
+  /** Consult the stronger oracle model (single turn, no tools) for `oracle`. */
+  oracle?: OracleRunner;
 }
 
 export interface ToolDef {
@@ -203,6 +217,17 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: webSearchSchema,
     mutating: false,
     run: runWebSearch,
+  },
+  oracle: {
+    name: "oracle",
+    description:
+      "Consult a stronger model on a hard, self-contained sub-problem (a tricky bug, an algorithm, a design call). " +
+      "It runs a single isolated turn with no tools and no access to your files or history, so put ALL needed " +
+      "context in the question, and returns just the answer. Use sparingly for genuinely hard problems — it costs " +
+      "more (tracked separately in /cost).",
+    schema: oracleSchema,
+    mutating: false,
+    run: runOracle,
   },
 };
 

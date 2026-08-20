@@ -100,6 +100,10 @@ Make an outbound HTTP(S) request: `{ url, method?, headers?, body?, timeout? }` 
 
 `task(description, prompt)` delegates an open-ended search or investigation to a fresh read-only sub-agent — "find where X is handled", "which files touch Y". The sub-agent has its own history and context budget (it inherits your cwd, model, and repo map) but only `read`/`glob`/`grep`/`http` — no writing, no shell, and no recursion — and is capped at 15 iterations / 50k tokens (on exceed it returns what it has with a truncation note). It runs to completion and returns only its final summary; its intermediate turns never enter your history. The transcript shows one line: `● Task(description)` then `⎿ N tools · N tokens` and the summary. Its cost is folded into the session and shown separately in `/cost`. Prefer it over grepping large output into your own context.
 
+### `oracle`
+
+`oracle(question)` consults a stronger model (config `oracleModel`, falling back to the session model when unset) on a hard, self-contained sub-problem. It runs a **single** completion with **no tools** and an **isolated context** — only the question, none of your files or history — so the model must put all needed context in the question, and it returns just the answer. Its tokens fold into the session cost and its dollar spend is tracked separately in `/cost` (`incl. $… oracle`). Excluded from plan mode and sub-agents. Use it sparingly for genuinely hard problems.
+
 The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis](https://github.com/public-apis/public-apis) index to `~/.dom/cache/public-apis.md` (refreshed at most every 30 days), greps it by category, reports the Auth column honestly (many "free" entries still need a key), HEAD-checks links before recommending them, then calls `http`.
 
 ## Storage

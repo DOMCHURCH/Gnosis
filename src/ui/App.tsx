@@ -1001,9 +1001,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         const cached = engine.cost.cachedPromptTokens ?? 0;
         const uncached = Math.max(0, engine.cost.promptTokens - cached);
         const sub = engine.cost.subAgentUsd ?? 0;
+        const oracle = engine.cost.oracleUsd ?? 0;
+        const extras: string[] = [];
+        if (sub > 0) extras.push(`$${sub.toFixed(4)} sub-agents`);
+        if (oracle > 0) extras.push(`$${oracle.toFixed(4)} oracle`);
         sysLog(
           `in: ${uncached} uncached + ${cached} cached · out: ${engine.cost.completionTokens} · $${engine.cost.usd.toFixed(4)}` +
-            (sub > 0 ? ` (incl. $${sub.toFixed(4)} sub-agents)` : ""),
+            (extras.length ? ` (incl. ${extras.join(", ")})` : ""),
         );
         break;
       }

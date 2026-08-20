@@ -132,6 +132,15 @@ export const webSearchSchema = z.object({
   count: z.number().int().positive().optional().describe("How many results to return (default 8, capped at 20)."),
 });
 
+export const oracleSchema = z.object({
+  question: z
+    .string()
+    .describe(
+      "A focused, hard sub-problem for a stronger model to reason about. Include ALL needed context inline — the " +
+        "oracle runs in an isolated single turn with no tools and no access to your files, history, or the repo.",
+    ),
+});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
@@ -145,6 +154,7 @@ export type TaskArgs = z.infer<typeof taskSchema>;
 export type TodoArgs = z.infer<typeof todoSchema>;
 export type ViewImageArgs = z.infer<typeof viewImageSchema>;
 export type WebSearchArgs = z.infer<typeof webSearchSchema>;
+export type OracleArgs = z.infer<typeof oracleSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

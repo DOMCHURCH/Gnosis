@@ -64,6 +64,9 @@ export function callParts(name: string, args: any): CallParts {
     case "web_search":
       primary = String(a.query ?? "");
       break;
+    case "oracle":
+      primary = String(a.question ?? "");
+      break;
     case "todo": {
       const count = Array.isArray(a.items) ? a.items.length : 0;
       primary = `${count} task${count === 1 ? "" : "s"}`;

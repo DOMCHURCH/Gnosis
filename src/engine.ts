@@ -40,7 +40,7 @@ import {
 } from "./permissions.js";
 import { shouldCompact, compact } from "./compaction.js";
 import { MarkdownStripper, type StreamLine } from "./strip.js";
-import { createSession, saveSession, type CostState, type Mode, type SessionData, type TodoItem } from "./config.js";
+import { createSession, loadConfig, saveSession, type CostState, type Mode, type SessionData, type TodoItem } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 
 const MAX_ITER = 100;
@@ -49,7 +49,7 @@ const MAX_ITER = 100;
 // model can't write, run shell commands, hand work to other tabs, or track
 // execution — it can only read/search/fetch to research, then produce a written
 // plan. Leaves {read, glob, grep, http}.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search"]);
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
@@ -190,6 +190,7 @@ export class Engine {
     this.cost = deps.session.cost;
     this.cost.cachedPromptTokens ??= 0; // older sessions predate the cached-token field
     this.cost.subAgentUsd ??= 0;
+    this.cost.oracleUsd ??= 0;
     this.todos = deps.session.todos ?? [];
   }
 
@@ -276,6 +277,7 @@ export class Engine {
     this.cost = s.cost;
     this.cost.cachedPromptTokens ??= 0;
     this.cost.subAgentUsd ??= 0;
+    this.cost.oracleUsd ??= 0;
     this.todos = s.todos ?? [];
     this.lastPromptTokens = 0;
     this.repairs.clear();
@@ -622,6 +624,7 @@ export class Engine {
       attachImage: (img) => {
         this.pendingImages.push(img);
       },
+      oracle: (q, sig) => this.runOracle(q, sig),
     };
   }
 
@@ -680,6 +683,44 @@ export class Engine {
     this.cost.usd += sub.cost.usd;
     this.cost.subAgentUsd = (this.cost.subAgentUsd ?? 0) + sub.cost.usd;
     return { text, tools, tokens, capped: sub.capped };
+  }
+
+  /**
+   * Consult the stronger oracle model (config `oracleModel`, else the session
+   * model) on a hard sub-problem: a SINGLE completion, no tools, isolated context
+   * (only the question). Its tokens fold into the session cost; the dollar spend is
+   * also tracked separately (cost.oracleUsd) for /cost. Nothing enters history.
+   */
+  async runOracle(question: string, signal?: AbortSignal): Promise<{ text: string; model: string; tokens: number; usd: number }> {
+    const cfg = await loadConfig();
+    const model = cfg.oracleModel || this.modelId;
+    const system =
+      "You are an expert consultant answering ONE hard question in a single turn. You have no tools and no access " +
+      "to the caller's files, history, or repo — reason from the question alone and from your own knowledge. Answer " +
+      "directly and correctly, showing the key reasoning concisely.";
+    const wire = serialize([{ role: "user", text: question }], system, null);
+    const result = await streamCompletion(
+      {
+        apiKey: this.apiKey,
+        model,
+        messages: wire,
+        tools: [],
+        signal: signal ?? this.abortController?.signal ?? new AbortController().signal,
+        cache: false,
+      },
+      () => {},
+    );
+    let dollars = result.usage.cost;
+    if (!(dollars > 0)) {
+      const pm = this.models.find((m) => m.id === model);
+      if (pm) dollars = result.usage.prompt_tokens * pm.pricing.prompt + result.usage.completion_tokens * pm.pricing.completion;
+    }
+    dollars = dollars > 0 ? dollars : 0;
+    this.cost.promptTokens += result.usage.prompt_tokens;
+    this.cost.completionTokens += result.usage.completion_tokens;
+    this.cost.usd += dollars;
+    this.cost.oracleUsd = (this.cost.oracleUsd ?? 0) + dollars;
+    return { text: result.text || "(the oracle returned no answer)", model, tokens: result.usage.prompt_tokens + result.usage.completion_tokens, usd: dollars };
   }
 
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {

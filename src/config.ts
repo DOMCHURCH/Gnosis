@@ -26,6 +26,9 @@ export interface Config {
   /** Desktop notification (with terminal-bell fallback) when a turn finishes or
    * needs approval. Default true. */
   notify?: boolean;
+  /** Stronger model the `oracle` tool consults for hard sub-problems. Falls back
+   * to the session model when unset. */
+  oracleModel?: string;
 }
 
 export interface CostState {
@@ -37,6 +40,8 @@ export interface CostState {
   usd: number;
   /** Of usd, the portion spent by `task` sub-agents (shown separately in /cost). */
   subAgentUsd?: number;
+  /** Of usd, the portion spent by the `oracle` tool (shown separately in /cost). */
+  oracleUsd?: number;
 }
 
 export type TodoStatus = "pending" | "active" | "done";
