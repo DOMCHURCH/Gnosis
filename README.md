@@ -62,6 +62,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
+## Command-hiding defense
+
+Before a bash command is shown for approval, dom reveals anything that could hide part of it from you: tabs, zero-width/invisible/bidi-override Unicode, and other control characters are rendered as `<U+XXXX>` (tabs as `⇥`), and multi-line/chained commands are shown in full — never truncated to a benign-looking first line. A command containing hidden characters is flagged and **always prompts, even in yolo**. Only the display is normalized; the real command executes unchanged.
+
 ## Secret redaction
 
 Tool output and the model's own tool-call args are scanned for credential patterns — OpenAI/OpenRouter/Anthropic-style `sk-…` keys, AWS `AKIA…`, GitHub `ghp_`/`github_pat_`, Slack `xox…`, Google `AIza…`, JWTs, `Bearer` tokens, and `PRIVATE KEY` blocks — and each is replaced with `<redacted:TYPE>` before it reaches the model, the transcript, or the session file. Redaction touches only the stored/displayed copy: the real command still executes with the real value, so a `cat .env` gets masked in history while the file on disk is untouched. Patterns are specific to avoid mangling ordinary output.

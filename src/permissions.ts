@@ -8,6 +8,7 @@ import type { Mode } from "./config.js";
 import { cacheDir, domDir, skillsDir } from "./config.js";
 import type { ToolDef } from "./tools/index.js";
 import { httpBlockReason, normalizeMethod, UNSAFE_METHODS } from "./tools/http.js";
+import { normalizeCommand, hasHiddenChars } from "./cmdnorm.js";
 
 export type PermissionAnswer = "yes" | "no" | "always";
 
@@ -237,7 +238,8 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   // in a dangerous place (home dir / non-project git). Dangerous calls always
   // prompt and can never be waved through by yolo, approvals, or auto-accept.
   const reason = dangerReason(ctx.cwd, tool, args) ?? undefined;
-  const dangerous = reason !== undefined || (tool.name === "bash" && isDangerous(String(args.command ?? "")));
+  const cmd = String(args.command ?? "");
+  const dangerous = reason !== undefined || (tool.name === "bash" && (isDangerous(cmd) || hasHiddenChars(cmd)));
 
   // Read-only tools run free — unless flagged dangerous by context.
   if (!tool.mutating && !dangerous) return { kind: "allow" };
@@ -256,12 +258,16 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
 }
 
 export function buildBashPreview(cwd: string, command: string, warning?: string): Preview {
+  // Reveal any hidden characters so the human sees the FULL resolved command.
+  const norm = normalizeCommand(command);
+  const hiddenWarn = norm.suspicious ? `hidden characters revealed (${norm.reasons.join(", ")})` : undefined;
+  const combined = [warning, hiddenWarn].filter(Boolean).join(" · ") || undefined;
   return {
     kind: "bash",
-    command,
-    dangerous: isDangerous(command) || warning !== undefined,
+    command: norm.display,
+    dangerous: isDangerous(command) || norm.suspicious || warning !== undefined,
     cwd,
-    warning,
+    warning: combined,
   };
 }
 
