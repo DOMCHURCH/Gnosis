@@ -29,6 +29,13 @@ export interface Config {
   /** Stronger model the `oracle` tool consults for hard sub-problems. Falls back
    * to the session model when unset. */
   oracleModel?: string;
+  /** Shell command run after an editing turn when autoFix is on (e.g. "npm run lint"). */
+  lintCommand?: string;
+  /** Shell command run after an editing turn when autoFix is on (e.g. "npm test"). */
+  testCommand?: string;
+  /** Enable the auto lint/test loop: after a turn that edited files, run
+   * lint/test; feed any failure back so the model retries (cap 3). Default off. */
+  autoFix?: boolean;
 }
 
 export interface CostState {

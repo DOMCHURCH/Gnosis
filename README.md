@@ -62,6 +62,10 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
+## Auto lint/test loop
+
+With `"autoFix": true` in config, after any turn that edited files dom runs the configured `lintCommand` then `testCommand` in the working directory. A non-zero exit is fed back to the model as a fix request (with the failure output) and it retries — up to 3 attempts, then it stops and reports "still failing". The commands are user-configured (trusted) so they run without a prompt; off by default, and a no-op if neither command is set.
+
 ## Background jobs
 
 Pass `run_in_background: true` to `bash` — for dev servers, watchers, or long builds — and the call returns immediately with a job id while the command keeps running, so the model can carry on. `/jobs` lists running jobs, `/job <id>` shows its output so far, and `/kill <id>` terminates the whole process tree. A finishing job appends a dim line to the transcript. Background jobs die with the session.

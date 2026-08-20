@@ -44,6 +44,8 @@ import { createSession, loadConfig, saveSession, type CostState, type Mode, type
 import type { LoadedSkill } from "./skills.js";
 
 const MAX_ITER = 100;
+/** Auto lint/test loop: how many fix retries before giving up and reporting. */
+const MAX_FIX_ITERATIONS = 3;
 
 // Plan mode has teeth: these tools are absent from the tool list entirely, so the
 // model can't write, run shell commands, hand work to other tabs, or track
@@ -170,6 +172,10 @@ export class Engine {
   /** Images attached to the NEXT user turn (an @image in TUI input). Consumed and
    * cleared when run() pushes the user message. */
   private nextUserImages: ImagePart[] = [];
+  /** A write/edit succeeded this turn — arms the auto lint/test loop at turn end. */
+  private editedThisTurn = false;
+  /** Fix retries used by the auto lint/test loop this turn (cap MAX_FIX_ITERATIONS). */
+  private fixIterations = 0;
   /** Images loaded by view_image during the current turn; flushed into a synthetic
    * user message after the tool calls so the model sees them the next iteration. */
   private pendingImages: ImagePart[] = [];
@@ -366,6 +372,8 @@ export class Engine {
     const images = this.nextUserImages;
     this.nextUserImages = [];
     this.pendingImages = [];
+    this.editedThisTurn = false;
+    this.fixIterations = 0;
     this.messages.push({ role: "user", text: userText, images: images.length ? images : undefined });
     await this.trace({ type: "turn", role: "user", text: userText.slice(0, 500) });
     this.abortController = new AbortController();
@@ -491,7 +499,29 @@ export class Engine {
         // only marks completion. History keeps the model's original text.
         cb.onAssistant(assistant);
 
-        if (!result.toolCalls.length) break;
+        if (!result.toolCalls.length) {
+          // Auto lint/test loop: if this turn edited files, run the checks; on
+          // failure feed it back and let the model fix (cap MAX_FIX_ITERATIONS).
+          if (this.editedThisTurn && !this.abortController.signal.aborted) {
+            const checks = await this.runChecks(cb);
+            if (checks && !checks.ok) {
+              if (this.fixIterations < MAX_FIX_ITERATIONS) {
+                this.fixIterations++;
+                this.editedThisTurn = false;
+                this.messages.push({
+                  role: "user",
+                  text: `Automated checks failed after your edits. Fix the code so they pass, then stop.\n\n${checks.report}`,
+                });
+                cb.onSystem(`⟳ checks failed — fix attempt ${this.fixIterations}/${MAX_FIX_ITERATIONS}`);
+                continue;
+              }
+              cb.onSystem(`✗ checks still failing after ${MAX_FIX_ITERATIONS} fix attempts — stopping`);
+            } else if (checks && checks.ok && this.fixIterations > 0) {
+              cb.onSystem("✓ checks pass");
+            }
+          }
+          break;
+        }
 
         let stop = false;
         for (const call of result.toolCalls) {
@@ -723,6 +753,27 @@ export class Engine {
     return { text: result.text || "(the oracle returned no answer)", model, tokens: result.usage.prompt_tokens + result.usage.completion_tokens, usd: dollars };
   }
 
+  /**
+   * Auto lint/test loop check: when autoFix is on and lint/test commands are
+   * configured, run them in this.cwd. Returns null when disabled/unconfigured,
+   * else { ok, report } where report is the concatenated failure output. Commands
+   * are user-configured (trusted), so they run without a permission prompt.
+   */
+  private async runChecks(cb: Callbacks): Promise<{ ok: boolean; report: string } | null> {
+    const cfg = await loadConfig();
+    if (!cfg.autoFix) return null;
+    const checks = ([["lint", cfg.lintCommand], ["test", cfg.testCommand]] as const).filter(([, c]) => !!c);
+    if (!checks.length) return null;
+    const failures: string[] = [];
+    for (const [label, cmd] of checks) {
+      cb.onSystem(`⟳ ${label}: ${cmd}`);
+      const res = await runBash({ command: cmd! }, this.abortController?.signal, this.toolCtx());
+      if (res.aborted) return { ok: true, report: "" }; // aborted — don't loop
+      if (res.isError) failures.push(`${label} (\`${cmd}\`) failed:\n${res.output}`);
+    }
+    return { ok: failures.length === 0, report: failures.join("\n\n") };
+  }
+
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {
     const tool = TOOLS[call.name];
     if (!tool) return { output: `unknown tool: ${call.name}`, isError: true };
@@ -907,6 +958,7 @@ export class Engine {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }
     if (!result.isError && (tool.name === "write" || tool.name === "edit")) {
+      this.editedThisTurn = true; // arm the auto lint/test loop
       // Dom just wrote the file — treat that as having "read" the current content,
       // so consecutive edits work and only EXTERNAL changes force a re-read.
       await this.recordRead(String(args.path ?? ""));
