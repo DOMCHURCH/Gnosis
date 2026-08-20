@@ -23,6 +23,9 @@ export interface Config {
   autoCommit?: boolean;
   /** Token budget for the repo map injected into the system prompt (default 1024). */
   mapTokens?: number;
+  /** Desktop notification (with terminal-bell fallback) when a turn finishes or
+   * needs approval. Default true. */
+  notify?: boolean;
 }
 
 export interface CostState {

@@ -119,6 +119,10 @@ All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, wh
 
 `provider → tools → loop → headless CLI → permission gate → Ink UI → banner → sessions`. The loop is runnable without the TUI (`dom --headless`) so it can be verified independently.
 
+## Notifications
+
+When a turn finishes or a tool needs approval, dom sends a desktop notification (config `notify`, default on; set `"notify": false` to disable). It uses `osascript` on macOS and `notify-send` on Linux **only for local sessions** — over SSH those would pop on the remote host, so dom instead emits an OSC 9 terminal escape plus a bell that the *local* terminal renders. The terminal escape is also the Windows / no-native-tool fallback, and a failed native notifier falls back to it too. A ctrl+c abort is your own action, so it doesn't notify.
+
 ## Tracing
 
 Every model call, tool call, and user turn is appended as one structured JSONL line to `~/.dom/traces/<session>.jsonl` — model id and per-call tokens/cost for model calls, tool name + (truncated) args + error flag + output size for tool calls. `/trace` prints a summary of the current session: event/turn/call counts, in/out (and cached) tokens, cost, a per-tool breakdown, per-model breakdown, and the file path. Tracing is best-effort (never breaks a turn) and skipped for ephemeral sessions (sub-agents, eval, `-p` without `--save`).

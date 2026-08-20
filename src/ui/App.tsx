@@ -32,6 +32,7 @@ import { writeAgentsMd } from "../init.js";
 import { buildRepoMap } from "../repomap.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
 import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
+import { notify } from "../notify.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -204,6 +205,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // that boundary. Normal completion auto-fires the queue; an abort preserves it
   // for the user to send (empty enter), edit, or drop (esc).
   const flushSuppressedRef = useRef(false);
+  // Desktop notifications (config `notify`, default on). Loaded once on mount.
+  const notifyRef = useRef(true);
+  // Whether the busy→idle transition was a ctrl+c abort (skip the finish notify).
+  const abortedTurnRef = useRef(false);
+  // Tracks the previous busy value so the effect can detect a real turn boundary.
+  const wasBusyRef = useRef(false);
   // The transient in-progress line (streaming owner commits finished lines to the
   // transcript; this holds only the line still being typed — active tab only).
   const [pending, setPending] = useState("");
@@ -322,6 +329,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     };
   }, []);
 
+  // Load the notify preference once (default on).
+  useEffect(() => {
+    loadConfig().then((c) => { notifyRef.current = c.notify ?? true; }).catch(() => {});
+  }, []);
+
   // Repo info follows the ACTIVE tab's working root (each engine owns its cwd),
   // not the global process cwd. Callers that just switched pass the new cwd.
   const refreshRepo = (cwd: string = controller.active().engine.cwd) => {
@@ -330,6 +342,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
   useEffect(() => {
     if (!busy) {
+      // A real turn just ended (busy true→false): notify unless it was a ctrl+c abort.
+      if (wasBusyRef.current) {
+        if (!abortedTurnRef.current) notify("dom", "turn finished", { enabled: notifyRef.current });
+        abortedTurnRef.current = false;
+        wasBusyRef.current = false;
+      }
       setThink(null);
       // The active tab's turn ended: drop the transient region + refresh repo.
       setPending("");
@@ -337,6 +355,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       refreshRepo();
       return;
     }
+    wasBusyRef.current = true;
     const start = Date.now();
     setThink({ word: pickWord(Math.random()) });
     setElapsed(0);
@@ -488,6 +507,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     onSystem: (text) => emitToTab(tab, { kind: "system", text }),
     requestPermission: (preview) =>
       new Promise<PermissionAnswer>((resolve) => {
+        const label = preview.kind === "diff" ? preview.path : preview.kind === "bash" ? preview.command : `${preview.method} ${preview.url}`;
+        notify("dom", `needs approval: ${label}`, { enabled: notifyRef.current });
         // Active tab: prompt inline. Background tab: park it (badge amber, keep
         // focus); it surfaces when the user switches over.
         if (isActive(tab)) {
@@ -1120,6 +1141,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       // queue (the turn is still "busy" here) rather than firing it on the abort.
       if (overlayRef.current.type === "permission") {
         flushSuppressedRef.current = true;
+        abortedTurnRef.current = true; // user-initiated stop — don't notify on finish
         resolvePerm("no");
         engine.abort();
         armCtrlCExit();
@@ -1129,6 +1151,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       // keep any queued input (ctrl+c preserves; esc is the discard gesture).
       if (busyRef.current) {
         flushSuppressedRef.current = true;
+        abortedTurnRef.current = true; // user-initiated stop — don't notify on finish
         engine.abort();
         armCtrlCExit();
         return;
