@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { truncateOutput } from "./truncate.js";
 import type { ReadArgs } from "./schemas.js";
-import type { ToolResult } from "./index.js";
+import type { ToolContext, ToolResult } from "./index.js";
 
 const DEFAULT_LIMIT = 2000;
 
@@ -12,8 +12,8 @@ function looksBinary(buf: Buffer): boolean {
   return false;
 }
 
-export async function runRead(args: ReadArgs): Promise<ToolResult> {
-  const abs = path.resolve(process.cwd(), args.path);
+export async function runRead(args: ReadArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  const abs = path.resolve(ctx?.cwd ?? process.cwd(), args.path);
   let buf: Buffer;
   try {
     buf = await fs.readFile(abs);

@@ -84,12 +84,12 @@ interface RunOutcome {
   crashed: boolean;
 }
 
-async function runHookProcess(ref: HookRef, payload: unknown): Promise<RunOutcome> {
+async function runHookProcess(ref: HookRef, payload: unknown, cwd: string): Promise<RunOutcome> {
   const { file, args } = commandFor(ref.path);
   try {
     const res = await execa(file, args, {
       input: JSON.stringify(payload),
-      cwd: process.cwd(),
+      cwd,
       timeout: TIMEOUT_MS,
       reject: false,
       windowsHide: true,
@@ -112,7 +112,7 @@ export interface PreResult {
 export async function runPreToolUse(cwd: string, tool: string, args: unknown): Promise<PreResult> {
   const ref = await resolveHook(cwd, "PreToolUse");
   if (!ref) return { block: false };
-  const out = await runHookProcess(ref, { event: "PreToolUse", tool, args, cwd: process.cwd() });
+  const out = await runHookProcess(ref, { event: "PreToolUse", tool, args, cwd }, cwd);
   if (out.timedOut) return { block: false, warn: `PreToolUse hook timed out (5s) — allowing ${tool}` };
   if (out.crashed) return { block: false, warn: `PreToolUse hook could not run (${out.stderr}) — allowing ${tool}` };
   if ((out.exitCode ?? 0) !== 0) return { block: true, reason: out.stderr || `Blocked by PreToolUse hook (exit ${out.exitCode}).` };
@@ -128,7 +128,7 @@ export async function runNonBlockingHook(
 ): Promise<{ warn?: string }> {
   const ref = await resolveHook(cwd, event);
   if (!ref) return {};
-  const out = await runHookProcess(ref, { event, cwd: process.cwd(), ...payload });
+  const out = await runHookProcess(ref, { event, cwd, ...payload }, cwd);
   if (out.timedOut) return { warn: `${event} hook timed out (5s)` };
   if (out.crashed) return { warn: `${event} hook could not run (${out.stderr})` };
   return {};

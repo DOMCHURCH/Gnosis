@@ -3,7 +3,7 @@ import path from "node:path";
 import { loadConfig } from "../config.js";
 import { recordCheckpoint } from "../checkpoint.js";
 import type { WriteArgs } from "./schemas.js";
-import type { ToolResult } from "./index.js";
+import type { ToolContext, ToolResult } from "./index.js";
 
 /** True when `cwd` is the configured Obsidian vault, or a directory inside it. */
 function withinVault(cwd: string, vault: string): boolean {
@@ -20,14 +20,14 @@ export interface WritePlan {
 }
 
 /** Resolve what a write would do (path .md/vault handling + current content),
- * without applying it (drives the diff preview). */
-export async function planWrite(args: WriteArgs): Promise<WritePlan> {
-  let abs = path.resolve(process.cwd(), args.path);
+ * without applying it (drives the diff preview). Paths resolve against `cwd`. */
+export async function planWrite(args: WriteArgs, cwd: string = process.cwd()): Promise<WritePlan> {
+  let abs = path.resolve(cwd, args.path);
   // Vault mode only: a note written without an extension defaults to .md. Outside
   // the configured vault, paths are left exactly as given (no silent .md).
   if (path.extname(abs) === "") {
     const cfg = await loadConfig();
-    if (cfg.obsidianVault && withinVault(process.cwd(), path.resolve(cfg.obsidianVault))) {
+    if (cfg.obsidianVault && withinVault(cwd, path.resolve(cfg.obsidianVault))) {
       abs += ".md";
     }
   }
@@ -42,7 +42,7 @@ export async function planWrite(args: WriteArgs): Promise<WritePlan> {
   }
 
   return {
-    relPath: path.relative(process.cwd(), abs).split(path.sep).join("/"),
+    relPath: path.relative(cwd, abs).split(path.sep).join("/"),
     absPath: abs,
     oldContent,
     newContent: args.content,
@@ -50,8 +50,8 @@ export async function planWrite(args: WriteArgs): Promise<WritePlan> {
   };
 }
 
-export async function runWrite(args: WriteArgs): Promise<ToolResult> {
-  const plan = await planWrite(args);
+export async function runWrite(args: WriteArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  const plan = await planWrite(args, ctx?.cwd ?? process.cwd());
   try {
     await fs.mkdir(path.dirname(plan.absPath), { recursive: true });
     await fs.writeFile(plan.absPath, args.content, "utf8");

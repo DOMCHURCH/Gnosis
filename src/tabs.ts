@@ -142,17 +142,14 @@ export class TabsController {
     return this.active();
   }
 
-  /** Make a tab active: clears its badge (it's now visible) and chdirs to its cwd. */
+  /** Make a tab active: clears its badge (it's now visible). Each tab's engine
+   * owns its own cwd, so no process.chdir is needed — tools resolve against the
+   * engine's cwd via ctx, and interleaved turns from different tabs never clash. */
   setActive(id: number): void {
     const tab = this.byId(id);
     if (!tab) return;
     this.activeId = id;
     tab.badge = "none";
-    try {
-      process.chdir(tab.engine.cwd);
-    } catch {
-      /* directory vanished — leave cwd as-is */
-    }
     this.onChange();
   }
 

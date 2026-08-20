@@ -3,7 +3,7 @@ import path from "node:path";
 import { truncateOutput } from "./truncate.js";
 import { buildIgnorer, type Ignorer } from "./ignore.js";
 import type { GlobArgs } from "./schemas.js";
-import type { ToolResult } from "./index.js";
+import type { ToolContext, ToolResult } from "./index.js";
 
 /** Translate a glob pattern into an anchored RegExp over POSIX-style paths. */
 export function globToRegExp(pattern: string): RegExp {
@@ -149,8 +149,8 @@ async function walk(
   }
 }
 
-export async function runGlob(args: GlobArgs): Promise<ToolResult> {
-  const base = path.resolve(process.cwd(), args.path ?? ".");
+export async function runGlob(args: GlobArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  const base = path.resolve(ctx?.cwd ?? process.cwd(), args.path ?? ".");
   const match = compileGlob(args.pattern);
   const ig = buildIgnorer(base, args.include_ignored ?? false);
   const found: Found[] = [];

@@ -78,12 +78,13 @@ function expandHome(p: string): string {
   return p;
 }
 
-/** The absolute filesystem target a tool call would touch, if it names one. */
-function resolveTarget(tool: ToolDef, args: any): string | null {
+/** The absolute filesystem target a tool call would touch, if it names one.
+ * Resolved against the caller's explicit `cwd`, never the global process cwd. */
+function resolveTarget(cwd: string, tool: ToolDef, args: any): string | null {
   const raw = args?.path;
   if (typeof raw !== "string" || !raw) return null;
   if (["read", "write", "edit", "glob", "grep", "view_image"].includes(tool.name)) {
-    return path.resolve(process.cwd(), expandHome(raw));
+    return path.resolve(cwd, expandHome(raw));
   }
   return null;
 }
@@ -98,7 +99,7 @@ function isInside(child: string, parent: string): boolean {
  * ~/.dom is off-limits to every tool, always — it holds the API key and session
  * data. Returns the offending absolute path (for the message) or null.
  */
-export function domTarget(tool: ToolDef, args: any): string | null {
+export function domTarget(cwd: string, tool: ToolDef, args: any): string | null {
   const dom = domDir();
   // ~/.dom/skills and ~/.dom/cache are the readable/writable pockets of ~/.dom:
   // skills are read on demand, and cache holds skill data indexes (e.g. the
@@ -106,7 +107,7 @@ export function domTarget(tool: ToolDef, args: any): string | null {
   // secrets file (.env), and session history stay blocked.
   const skills = skillsDir();
   const cache = cacheDir();
-  const target = resolveTarget(tool, args);
+  const target = resolveTarget(cwd, tool, args);
   if (target && isInside(target, dom) && !isInside(target, skills) && !isInside(target, cache)) return target;
   if (tool.name === "bash" && bashTouchesBlockedDom(String(args?.command ?? ""))) return dom;
   return null;
@@ -136,19 +137,19 @@ function bashTouchesBlockedDom(cmd: string): boolean {
  * null when it needs no special treatment. The message names the resolved
  * absolute path so the user can see exactly where it would land.
  */
-export function dangerReason(tool: ToolDef, args: any): string | null {
+export function dangerReason(cwd: string, tool: ToolDef, args: any): string | null {
   const home = path.resolve(os.homedir());
   if (tool.name === "bash") {
     const cmd = String(args?.command ?? "");
-    const cwd = path.resolve(process.cwd());
-    if (GIT_WRITE.test(cmd) && !hasProjectContext(cwd)) {
-      return `git write command in a directory with no project (no .git or manifest): ${cwd}`;
+    const dir = path.resolve(cwd);
+    if (GIT_WRITE.test(cmd) && !hasProjectContext(dir)) {
+      return `git write command in a directory with no project (no .git or manifest): ${dir}`;
     }
-    if (cwd === home) return `runs directly in your home directory: ${cwd}`;
+    if (dir === home) return `runs directly in your home directory: ${dir}`;
     return null;
   }
   if (tool.name === "write" || tool.name === "edit") {
-    const target = resolveTarget(tool, args);
+    const target = resolveTarget(cwd, tool, args);
     if (target && (target === home || path.dirname(target) === home)) {
       return `writes directly into your home directory: ${target}`;
     }
@@ -174,8 +175,8 @@ export function approvalKey(tool: ToolDef, args: any): string {
  * rejects of the SAME target collide (so we can stop retrying it); a different
  * path — e.g. an "underscore variant" — is a distinct target with its own count.
  */
-export function rejectionKey(tool: ToolDef, args: any): string {
-  const target = resolveTarget(tool, args);
+export function rejectionKey(cwd: string, tool: ToolDef, args: any): string {
+  const target = resolveTarget(cwd, tool, args);
   if (target) return `${tool.name}:${target}`;
   if (tool.name === "http") return `http:${String(args?.url ?? "")}`;
   if (tool.name === "bash") return `bash:${String(args?.command ?? "")}`;
@@ -183,9 +184,9 @@ export function rejectionKey(tool: ToolDef, args: any): string {
 }
 
 /** Human-readable label for the target of a rejected call (for the model + user). */
-export function targetLabel(tool: ToolDef, args: any): string {
-  const target = resolveTarget(tool, args);
-  if (target) return path.relative(process.cwd(), target).split(path.sep).join("/") || target;
+export function targetLabel(cwd: string, tool: ToolDef, args: any): string {
+  const target = resolveTarget(cwd, tool, args);
+  if (target) return path.relative(cwd, target).split(path.sep).join("/") || target;
   if (tool.name === "http") return `${String(args?.method ?? "GET")} ${String(args?.url ?? "")}`;
   if (tool.name === "bash") return String(args?.command ?? "");
   return tool.name;
@@ -194,6 +195,8 @@ export function targetLabel(tool: ToolDef, args: any): string {
 export interface GateContext {
   mode: Mode;
   approvals: Set<string>;
+  /** The working directory paths are resolved against (the calling engine's cwd). */
+  cwd: string;
 }
 
 export type GateDecision =
@@ -208,7 +211,7 @@ export type GateDecision =
  */
 export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   // Hard block: nothing may touch ~/.dom — not even a read. Never a prompt.
-  const dom = domTarget(tool, args);
+  const dom = domTarget(ctx.cwd, tool, args);
   if (dom) {
     return { kind: "reject", reason: `blocked: ${dom} is inside ~/.dom, which dom must never touch.` };
   }
@@ -233,7 +236,7 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   // A call is dangerous if the command matches a dangerous pattern OR it lands
   // in a dangerous place (home dir / non-project git). Dangerous calls always
   // prompt and can never be waved through by yolo, approvals, or auto-accept.
-  const reason = dangerReason(tool, args) ?? undefined;
+  const reason = dangerReason(ctx.cwd, tool, args) ?? undefined;
   const dangerous = reason !== undefined || (tool.name === "bash" && isDangerous(String(args.command ?? "")));
 
   // Read-only tools run free — unless flagged dangerous by context.
@@ -252,12 +255,12 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   return { kind: "prompt", dangerous, reason };
 }
 
-export function buildBashPreview(command: string, warning?: string): Preview {
+export function buildBashPreview(cwd: string, command: string, warning?: string): Preview {
   return {
     kind: "bash",
     command,
     dangerous: isDangerous(command) || warning !== undefined,
-    cwd: process.cwd(),
+    cwd,
     warning,
   };
 }

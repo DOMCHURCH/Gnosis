@@ -5,7 +5,7 @@ import { truncateOutput } from "./truncate.js";
 import { globToRegExp } from "./glob.js";
 import { buildIgnorer, DEFAULT_IGNORE_DIRS } from "./ignore.js";
 import type { GrepArgs } from "./schemas.js";
-import type { ToolResult } from "./index.js";
+import type { ToolContext, ToolResult } from "./index.js";
 
 /**
  * Normalize one ripgrep output line's leading path to forward slashes. rg emits
@@ -33,7 +33,7 @@ function rgPath(): string | null {
   return null;
 }
 
-async function runRipgrep(rg: string, args: GrepArgs): Promise<ToolResult> {
+async function runRipgrep(rg: string, args: GrepArgs, cwd: string): Promise<ToolResult> {
   const argv = ["--line-number", "--no-heading", "--color", "never"];
   if (args.include_ignored) {
     argv.push("--no-ignore", "--hidden"); // opt back in to everything
@@ -43,10 +43,10 @@ async function runRipgrep(rg: string, args: GrepArgs): Promise<ToolResult> {
   }
   if (args.glob) argv.push("--glob", args.glob);
   argv.push("-e", args.pattern);
-  argv.push(args.path ? path.resolve(process.cwd(), args.path) : ".");
+  argv.push(args.path ? path.resolve(cwd, args.path) : ".");
 
   const res = await execa(rg, argv, {
-    cwd: process.cwd(),
+    cwd,
     reject: false,
     all: false,
     timeout: 60_000,
@@ -72,7 +72,7 @@ function looksBinary(buf: Buffer): boolean {
   return false;
 }
 
-async function jsFallback(args: GrepArgs): Promise<ToolResult> {
+async function jsFallback(args: GrepArgs, cwd: string): Promise<ToolResult> {
   let re: RegExp;
   try {
     re = new RegExp(args.pattern);
@@ -80,7 +80,7 @@ async function jsFallback(args: GrepArgs): Promise<ToolResult> {
     return { output: `grep: invalid pattern: ${(e as Error).message}`, isError: true };
   }
   const globRe = args.glob ? globToRegExp(args.glob) : null;
-  const base = path.resolve(process.cwd(), args.path ?? ".");
+  const base = path.resolve(cwd, args.path ?? ".");
   const ig = buildIgnorer(base, args.include_ignored ?? false);
   const results: string[] = [];
 
@@ -108,7 +108,7 @@ async function jsFallback(args: GrepArgs): Promise<ToolResult> {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       const relBase = path.relative(base, full).split(path.sep).join("/");
-      const relDisplay = path.relative(process.cwd(), full).split(path.sep).join("/");
+      const relDisplay = path.relative(cwd, full).split(path.sep).join("/");
       if (entry.isDirectory()) {
         if (ig.ignoreDir(entry.name, relBase)) continue;
         await walk(full);
@@ -122,7 +122,7 @@ async function jsFallback(args: GrepArgs): Promise<ToolResult> {
 
   const stat = await fs.stat(base).catch(() => null);
   if (stat?.isFile()) {
-    await search(base, path.relative(process.cwd(), base).split(path.sep).join("/"));
+    await search(base, path.relative(cwd, base).split(path.sep).join("/"));
   } else {
     await walk(base);
   }
@@ -133,14 +133,15 @@ async function jsFallback(args: GrepArgs): Promise<ToolResult> {
   };
 }
 
-export async function runGrep(args: GrepArgs): Promise<ToolResult> {
+export async function runGrep(args: GrepArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  const cwd = ctx?.cwd ?? process.cwd();
   const rg = rgPath();
   if (rg) {
     try {
-      return await runRipgrep(rg, args);
+      return await runRipgrep(rg, args, cwd);
     } catch {
       /* fall through to JS */
     }
   }
-  return jsFallback(args);
+  return jsFallback(args, cwd);
 }

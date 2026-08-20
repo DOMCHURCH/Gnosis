@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { recordCheckpoint } from "../checkpoint.js";
 import type { EditArgs } from "./schemas.js";
-import type { ToolResult } from "./index.js";
+import type { ToolContext, ToolResult } from "./index.js";
 
 /** Line numbers (1-based) at which `needle` begins within `text`. */
 export function matchLines(text: string, needle: string): number[] {
@@ -61,8 +61,8 @@ function normalizeEdits(args: EditArgs): SingleEdit[] | { error: string } {
  * the whole set with nothing written (atomic). The returned newContent already
  * has every edit applied, so the caller's single diff preview is the combined one.
  */
-export async function planEdit(args: EditArgs): Promise<EditPlan | { error: string }> {
-  const abs = path.resolve(process.cwd(), args.path);
+export async function planEdit(args: EditArgs, cwd: string = process.cwd()): Promise<EditPlan | { error: string }> {
+  const abs = path.resolve(cwd, args.path);
   const edits = normalizeEdits(args);
   if ("error" in edits) return edits;
 
@@ -95,7 +95,7 @@ export async function planEdit(args: EditArgs): Promise<EditPlan | { error: stri
   }
 
   return {
-    relPath: path.relative(process.cwd(), abs).split(path.sep).join("/"),
+    relPath: path.relative(cwd, abs).split(path.sep).join("/"),
     absPath: abs,
     oldContent: original,
     newContent: text,
@@ -104,8 +104,8 @@ export async function planEdit(args: EditArgs): Promise<EditPlan | { error: stri
   };
 }
 
-export async function runEdit(args: EditArgs): Promise<ToolResult> {
-  const plan = await planEdit(args);
+export async function runEdit(args: EditArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
+  const plan = await planEdit(args, ctx?.cwd ?? process.cwd());
   if ("error" in plan) return { output: plan.error, isError: true };
 
   try {

@@ -58,10 +58,13 @@ export interface SubAgentResult {
 /** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
 export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
 
-/** Per-turn context passed to tool.run. Most tools ignore it; the multi-tab tools
- * use `tab`; the `task` tool uses `subagent`; the `todo` tool uses `setTodos`; the
- * `view_image` tool uses `imageInput` + `attachImage`. */
+/** Per-turn context passed to tool.run. Carries the working directory paths are
+ * resolved against (each engine owns its own — tabs and sub-agents pass theirs);
+ * the multi-tab tools use `tab`; the `task` tool uses `subagent`; the `todo` tool
+ * uses `setTodos`; the `view_image` tool uses `imageInput` + `attachImage`. */
 export interface ToolContext {
+  /** The directory every path-resolving tool resolves against (never process.cwd()). */
+  cwd: string;
   tab?: TabRuntime;
   subagent?: SubAgentRunner;
   /** Replace the session's task list (rendered live above the input). Absent

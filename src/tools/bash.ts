@@ -84,6 +84,7 @@ export function killTree(pid: number | undefined): void {
 
 export async function runBash(args: BashArgs, signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
   const shell = resolveShell();
+  const cwd = ctx?.cwd ?? process.cwd();
   const timeout = (args.timeout ?? 120) * 1000;
   const aborted = (): ToolResult => ({ output: "■ aborted", isError: true, aborted: true });
 
@@ -94,7 +95,7 @@ export async function runBash(args: BashArgs, signal?: AbortSignal, ctx?: ToolCo
   // NOT tied to the turn's AbortSignal — it outlives the turn and dies only with
   // the session or an explicit /kill.
   if (args.run_in_background) {
-    const job = jobs.launch(args.command, process.cwd(), ctx?.tab?.selfName() ?? null);
+    const job = jobs.launch(args.command, cwd, ctx?.tab?.selfName() ?? null);
     return {
       output:
         `Started background job ${job.id}: ${args.command}\n` +
@@ -104,7 +105,7 @@ export async function runBash(args: BashArgs, signal?: AbortSignal, ctx?: ToolCo
   }
 
   const child = execa(shell.file, shell.args(args.command), {
-    cwd: process.cwd(),
+    cwd,
     timeout,
     reject: false,
     all: true,

@@ -143,9 +143,9 @@ export async function recordCheckpoint(
  * (or delete it if it was newly created), then step the ref back to the parent.
  * Returns the reverted relative path, or null when there is nothing to undo.
  */
-export async function undoLast(): Promise<string | null> {
+export async function undoLast(cwd: string): Promise<string | null> {
   try {
-    const root = await repoRoot(process.cwd());
+    const root = await repoRoot(cwd);
     if (!root) return null;
     const tip = await refTip(root);
     if (!tip) return null;
@@ -181,9 +181,9 @@ export async function undoLast(): Promise<string | null> {
 }
 
 /** List recent checkpoints (newest first). Empty when disabled or none exist. */
-export async function listCheckpoints(limit = 20): Promise<CheckpointInfo[]> {
+export async function listCheckpoints(cwd: string, limit = 20): Promise<CheckpointInfo[]> {
   try {
-    const root = await repoRoot(process.cwd());
+    const root = await repoRoot(cwd);
     if (!root) return [];
     if (!(await refTip(root))) return [];
     const shaRes = await git(root, ["rev-list", "--first-parent", "-n", String(limit), REF]);

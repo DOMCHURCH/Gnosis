@@ -92,12 +92,12 @@ const HELP = [
 
 // Image @references in a submitted message: `@path` tokens that name an existing
 // image file. These get loaded and attached to the message for a vision model.
-function imageRefsIn(text: string): string[] {
+function imageRefsIn(text: string, cwd: string): string[] {
   const out: string[] = [];
   const re = /@(\S+)/g;
   for (let m = re.exec(text); m; m = re.exec(text)) {
     const p = m[1]!;
-    if (isImagePath(p) && existsSync(path.resolve(process.cwd(), p))) out.push(p);
+    if (isImagePath(p) && existsSync(path.resolve(cwd, p))) out.push(p);
   }
   return out;
 }
@@ -218,7 +218,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // The status bar shows a dim `*` whenever the active model differs from it.
   const [savedModel, setSavedModel] = useState(defaultModel);
   const [repo, setRepo] = useState(initialRepo);
-  // The working root (== process.cwd()) of the active tab; /vault and tab switches move it.
+  // The working root of the active tab (its engine.cwd), shown in the status bar;
+  // /vault and tab switches move it. Not tied to the global process cwd.
   const [root, setRoot] = useState(rootEngine.cwd);
   // Bumped by the tabs controller (onChange) so busy/badge/tab-bar state repaints.
   const [, setTabTick] = useState(0);
@@ -319,8 +320,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     };
   }, []);
 
-  const refreshRepo = () => {
-    getRepoInfo(process.cwd()).then(setRepo).catch(() => {});
+  // Repo info follows the ACTIVE tab's working root (each engine owns its cwd),
+  // not the global process cwd. Callers that just switched pass the new cwd.
+  const refreshRepo = (cwd: string = controller.active().engine.cwd) => {
+    getRepoInfo(cwd).then(setRepo).catch(() => {});
   };
 
   useEffect(() => {
@@ -626,18 +629,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
   // --- command handling ----------------------------------------------------
 
-  // Move the active tab's working root. Every tool resolves paths against
-  // process.cwd(), so a chdir is all that's needed — no tool changes.
+  // Move the active tab's working root. Each engine owns its cwd and every tool
+  // resolves against it via ctx — so we update THIS tab's engine.cwd, never the
+  // global process cwd (which would corrupt other tabs' path resolution).
   const switchRoot = (abs: string) => {
-    try {
-      process.chdir(abs);
-    } catch (e) {
-      sysLog(`vault: cannot switch to ${abs} — ${(e as Error).message}`);
-      return;
-    }
     engine.cwd = abs; // the active tab remembers its root across switches
     setRoot(abs);
-    getRepoInfo(abs).then(setRepo).catch(() => {});
+    refreshRepo(abs);
     sysLog(`vault ${g.chevron} ${abs}`);
   };
 
@@ -673,13 +671,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const doUndo = async () => {
     // Prefer reverting the last dom auto-commit; fall back to the checkpoint ref
     // (used when auto-commit is off or the change was never committed).
-    const undoneCommit = await undoLastDomCommit(process.cwd());
+    const undoneCommit = await undoLastDomCommit(engine.cwd);
     if (undoneCommit) {
       sysLog(`reverted last dom commit — ${undoneCommit.message}`);
       refreshRepo();
       return;
     }
-    const reverted = await undoLast();
+    const reverted = await undoLast(engine.cwd);
     if (reverted) {
       sysLog(`reverted ${reverted}`);
       refreshRepo();
@@ -691,7 +689,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const runMap = async () => {
     const cfg = await loadConfig();
     const budget = cfg.mapTokens ?? 1024;
-    const m = await buildRepoMap(process.cwd(), budget);
+    const m = await buildRepoMap(engine.cwd, budget);
     if (!m.text) {
       sysLog("repo map is empty (no supported source files, or no grammar installed)");
       return;
@@ -700,17 +698,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
 
   const runInit = async (force: boolean) => {
-    const r = await writeAgentsMd(process.cwd(), force);
+    const r = await writeAgentsMd(engine.cwd, force);
     if (!r.written) {
       sysLog(r.reason ?? "could not write AGENTS.md");
       return;
     }
-    sysLog(`wrote ${path.relative(process.cwd(), r.path).split(path.sep).join("/") || "AGENTS.md"} (${r.lineCount} lines) — it's appended to the system prompt next session`);
+    sysLog(`wrote ${path.relative(engine.cwd, r.path).split(path.sep).join("/") || "AGENTS.md"} (${r.lineCount} lines) — it's appended to the system prompt next session`);
     refreshRepo();
   };
 
   const showHooks = async () => {
-    const hs = await listHooks(process.cwd());
+    const hs = await listHooks(engine.cwd);
     if (!hs.length) {
       sysLog("no hooks registered — add scripts under ~/.dom/hooks/ or ./.dom/hooks/ (SessionStart, PreToolUse, PostToolUse, Stop)");
       return;
@@ -756,7 +754,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
 
   const showCheckpoints = async () => {
-    const cps = await listCheckpoints();
+    const cps = await listCheckpoints(engine.cwd);
     if (!cps.length) {
       sysLog("no checkpoints");
       return;
@@ -873,7 +871,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
 
   const openFilePicker = async (prefix: string) => {
-    const r = await runGlob({ pattern: "**/*" });
+    const r = await runGlob({ pattern: "**/*" }, undefined, { cwd: controller.active().engine.cwd });
     const items: PickItem[] = r.isError
       ? []
       : r.output
@@ -1066,13 +1064,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     const tab = controller.active();
     // @image references: on a vision model, load them and attach to this message.
-    const imagePaths = imageRefsIn(v);
+    const imagePaths = imageRefsIn(v, tab.engine.cwd);
     if (imagePaths.length && tab.engine.supportsImageInput()) {
       emitToTab(tab, { kind: "user", text: v });
       void (async () => {
         const imgs = [];
         for (const p of imagePaths) {
-          const r = await loadImage(path.resolve(process.cwd(), p));
+          const r = await loadImage(path.resolve(tab.engine.cwd, p), tab.engine.cwd);
           if ("error" in r) sysLog(r.error);
           else imgs.push({ source: r.source, mime: r.mime, data: r.data });
         }

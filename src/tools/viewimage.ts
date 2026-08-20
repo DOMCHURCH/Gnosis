@@ -34,8 +34,8 @@ function sniffMime(buf: Buffer): string | null {
   return null;
 }
 
-function relOf(abs: string): string {
-  const rel = path.relative(process.cwd(), abs).split(path.sep).join("/");
+function relOf(abs: string, cwd: string): string {
+  const rel = path.relative(cwd, abs).split(path.sep).join("/");
   return rel && !rel.startsWith("..") ? rel : abs;
 }
 
@@ -54,8 +54,8 @@ export interface LoadedImage extends ImagePart {
  * MIME is taken from magic bytes first, then the extension. Rejects non-images and
  * anything over 10 MB.
  */
-export async function loadImage(absPath: string): Promise<LoadedImage | { error: string }> {
-  const rel = relOf(absPath);
+export async function loadImage(absPath: string, cwd: string = process.cwd()): Promise<LoadedImage | { error: string }> {
+  const rel = relOf(absPath, cwd);
   let buf: Buffer;
   try {
     buf = await fs.readFile(absPath);
@@ -81,8 +81,9 @@ export async function runViewImage(args: ViewImageArgs, _signal?: AbortSignal, c
       isError: true,
     };
   }
-  const abs = path.resolve(process.cwd(), args.path);
-  const r = await loadImage(abs);
+  const cwd = ctx.cwd ?? process.cwd();
+  const abs = path.resolve(cwd, args.path);
+  const r = await loadImage(abs, cwd);
   if ("error" in r) return { output: r.error, isError: true };
   ctx.attachImage?.({ source: r.source, mime: r.mime, data: r.data });
   return {

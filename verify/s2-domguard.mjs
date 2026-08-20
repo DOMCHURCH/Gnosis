@@ -14,7 +14,10 @@ const ok = (name, cond) => { console.log(`${cond ? "✓" : "✗"} ${name}`); if 
 
 const bash = TOOLS.bash;
 const read = TOOLS.read;
-const blockedByBash = (command) => domTarget(bash, { command }) !== null;
+// The ~/.dom guard keys off the homedir + the command/path text, not cwd — pass a
+// stable cwd for the resolved absolute path (matters only for relative paths).
+const CWD = process.cwd();
+const blockedByBash = (command) => domTarget(CWD, bash, { command }) !== null;
 
 // --- bash carve-out: cache/ and skills/ are allowed pockets --------------------
 ok("bash may read ~/.dom/cache", !blockedByBash("cat ~/.dom/cache/publicapis.json"));
@@ -32,15 +35,15 @@ ok("a mixed command touching .env too is blocked", blockedByBash("cat ~/.dom/cac
 ok("a command naming no .dom path is unaffected", !blockedByBash("ls src"));
 
 // --- the gate agrees: cache is allowed (in yolo), config.json is a hard reject --
-ok("gate allows bash reading cache (yolo)", gate(bash, { command: "cat ~/.dom/cache/x" }, { mode: "yolo", approvals: new Set() }).kind === "allow");
+ok("gate allows bash reading cache (yolo)", gate(bash, { command: "cat ~/.dom/cache/x" }, { mode: "yolo", approvals: new Set(), cwd: CWD }).kind === "allow");
 {
-  const d = gate(bash, { command: "cat ~/.dom/.env" }, { mode: "yolo", approvals: new Set() });
+  const d = gate(bash, { command: "cat ~/.dom/.env" }, { mode: "yolo", approvals: new Set(), cwd: CWD });
   ok("gate rejects bash reading .env (never a prompt)", d.kind === "reject" && /\.dom/.test(d.reason));
 }
 
 // --- path tools keep the same carve-out (read cache ok, config blocked) --------
-ok("read may open ~/.dom/cache", domTarget(read, { path: "~/.dom/cache/x" }) === null);
-ok("read blocked from ~/.dom/config.json", domTarget(read, { path: "~/.dom/config.json" }) !== null);
+ok("read may open ~/.dom/cache", domTarget(CWD, read, { path: "~/.dom/cache/x" }) === null);
+ok("read blocked from ~/.dom/config.json", domTarget(CWD, read, { path: "~/.dom/config.json" }) !== null);
 
 // --- 413 limit phrase keeps the FULL number even when it straddles the cut -----
 {

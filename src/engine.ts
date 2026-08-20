@@ -98,8 +98,9 @@ export interface EngineDeps {
 
 export class Engine {
   private apiKey: string;
-  /** Working root for this tab. Mutable so /vault can move a single tab's root;
-   * process.cwd() is set to the active tab's cwd on switch. */
+  /** Working root for this engine (its tab). Every path-resolving tool resolves
+   * against this via ctx.cwd — the global process.cwd() is never used or chdir'd.
+   * Mutable so /vault can move a single tab's root without touching other tabs. */
   cwd: string;
   private systemPrompt: string;
   models: ModelInfo[];
@@ -126,8 +127,9 @@ export class Engine {
   /** Session flag: 'always' (or the input-bar auto mode) auto-approves write/edit diffs. */
   autoApproveEdits = false;
   /** Multi-tab runtime access for the send_message/list_tabs tools; set by the
-   * tabs controller. Undefined in single-tab/headless — those tools then no-op. */
-  toolContext?: ToolContext;
+   * tabs controller. Undefined in single-tab/headless — those tools then no-op.
+   * Only carries the tab runtime; the tool cwd comes from this.cwd (see toolCtx). */
+  toolContext?: Pick<ToolContext, "tab">;
 
   lastPromptTokens = 0;
   private abortController: AbortController | null = null;
@@ -222,10 +224,10 @@ export class Engine {
   }
 
   /** System prompt for the current turn, with the stated working directory
-   * tracking process.cwd() (so it matches where tools actually run after /vault).
-   * In plan mode a directive is appended telling the model to plan, not act. */
+   * tracking this engine's cwd (so it matches where tools actually run after
+   * /vault). In plan mode a directive is appended telling the model to plan. */
   currentSystemPrompt(): string {
-    const base = withWorkingDir(this.systemPrompt, process.cwd());
+    const base = withWorkingDir(this.systemPrompt, this.cwd);
     return this.mode === "plan" ? base + PLAN_DIRECTIVE : base;
   }
 
@@ -469,7 +471,7 @@ export class Engine {
         cb.onSystem(`✗ hit ${this.maxIterations}-iteration cap for this turn`);
       }
       // Stop hook (non-blocking): the turn has ended.
-      const stopHook = await runNonBlockingHook(process.cwd(), "Stop", { sessionId: this.sessionId(), model: this.modelId });
+      const stopHook = await runNonBlockingHook(this.cwd, "Stop", { sessionId: this.sessionId(), model: this.modelId });
       if (stopHook.warn) cb.onSystem(`! ${stopHook.warn}`);
     } finally {
       this.abortController = null;
@@ -520,8 +522,8 @@ export class Engine {
    * turn and hands control back to the user instead of looping on a "no".
    */
   private rejectionResult(tool: ToolDef, args: unknown, cb: Callbacks): ToolResult {
-    const key = rejectionKey(tool, args);
-    const label = targetLabel(tool, args);
+    const key = rejectionKey(this.cwd, tool, args);
+    const label = targetLabel(this.cwd, tool, args);
     const n = (this.rejections.get(key) ?? 0) + 1;
     this.rejections.set(key, n);
     if (n >= 2) {
@@ -548,6 +550,7 @@ export class Engine {
    * the task-list setter for `todo`, and image input/attach for `view_image`. */
   private toolCtx(): ToolContext {
     return {
+      cwd: this.cwd,
       tab: this.toolContext?.tab,
       subagent: (d, p, sig) => this.runSubAgent(d, p, sig),
       setTodos: (items) => {
@@ -598,24 +601,11 @@ export class Engine {
       onSystem() {},
       requestPermission: async () => "no", // never prompt; unsafe calls are simply refused
     };
-    // Tools resolve paths against process.cwd(), not engine.cwd — pin it to this
-    // engine's working root for the duration so the sub-agent searches the same
-    // tree the parent does (not wherever process.cwd() happens to have drifted).
-    const prevCwd = process.cwd();
-    try {
-      process.chdir(this.cwd);
-    } catch {
-      /* the working root vanished — search from wherever we are */
-    }
-    try {
-      await sub.run(prompt, cb);
-    } finally {
-      try {
-        process.chdir(prevCwd);
-      } catch {
-        /* ignore */
-      }
-    }
+    // The sub-agent engine owns cwd = this.cwd, and its tools resolve against that
+    // (via ctx.cwd) — so it searches the parent's working root without any global
+    // process.chdir. Nothing to save or restore, and aborting mid-run leaves no
+    // cwd change behind.
+    await sub.run(prompt, cb);
 
     const text =
       [...sub.messages].reverse().find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text ??
@@ -660,11 +650,11 @@ export class Engine {
 
     // PreToolUse hook (blocking): a clean non-zero exit refuses the call with its
     // stderr as the tool error; a timeout/crash warns and lets the call through.
-    const pre = await runPreToolUse(process.cwd(), tool.name, args);
+    const pre = await runPreToolUse(this.cwd, tool.name, args);
     if (pre.warn) cb.onSystem(`! ${pre.warn}`);
     if (pre.block) return { output: pre.reason ?? "Blocked by PreToolUse hook.", isError: true };
 
-    const decision = gate(tool, args, { mode: this.mode, approvals: this.approvals });
+    const decision = gate(tool, args, { mode: this.mode, approvals: this.approvals, cwd: this.cwd });
     if (decision.kind === "reject") return { output: decision.reason, isError: true };
 
     // File edits get a unified-diff preview + confirm before applying — but first
@@ -681,7 +671,7 @@ export class Engine {
       const preview =
         tool.name === "http"
           ? buildHttpPreview(args.method, String(args.url ?? ""), decision.dangerous)
-          : buildBashPreview(String(args.command ?? ""), decision.reason);
+          : buildBashPreview(this.cwd, String(args.command ?? ""), decision.reason);
       const ans = await cb.requestPermission(preview);
       if (ans === "no") return this.rejectionResult(tool, args, cb);
       if (ans === "always" && !decision.dangerous) this.approvals.add(approvalKey(tool, args));
@@ -702,7 +692,7 @@ export class Engine {
 
   /** PostToolUse hook (non-blocking): fired after a tool actually executes. */
   private async postHook(name: string, args: unknown, result: ToolResult, cb: Callbacks): Promise<void> {
-    const { warn } = await runNonBlockingHook(process.cwd(), "PostToolUse", {
+    const { warn } = await runNonBlockingHook(this.cwd, "PostToolUse", {
       tool: name,
       args,
       result: { output: result.output, isError: result.isError },
@@ -713,7 +703,7 @@ export class Engine {
   /** Record that a file was read this session, at its current mtime. */
   private async recordRead(p: string): Promise<void> {
     try {
-      const abs = path.resolve(process.cwd(), p);
+      const abs = path.resolve(this.cwd, p);
       const st = await fs.stat(abs);
       this.readFiles.set(abs, st.mtimeMs);
     } catch {
@@ -727,7 +717,7 @@ export class Engine {
    * changed on disk since it read it. Creating a NEW file with write is exempt.
    */
   private async precheckStale(tool: "write" | "edit", args: any): Promise<string | null> {
-    const abs = path.resolve(process.cwd(), String(args.path ?? ""));
+    const abs = path.resolve(this.cwd, String(args.path ?? ""));
     let st: Awaited<ReturnType<typeof fs.stat>> | null = null;
     try {
       st = await fs.stat(abs);
@@ -784,7 +774,7 @@ export class Engine {
 
     // Compute the change to show. If it can't be computed (missing/ambiguous
     // target), skip the prompt and let tool.run surface the real error.
-    const plan = tool.name === "write" ? await planWrite(args) : await planEdit(args);
+    const plan = tool.name === "write" ? await planWrite(args, this.cwd) : await planEdit(args, this.cwd);
     if ("error" in plan) return apply();
 
     const preview = buildDiffPreview(
@@ -818,7 +808,7 @@ export class Engine {
       // so consecutive edits work and only EXTERNAL changes force a re-read.
       await this.recordRead(String(args.path ?? ""));
       if (this.autoCommit) {
-        const abs = path.resolve(process.cwd(), String(args.path ?? ""));
+        const abs = path.resolve(this.cwd, String(args.path ?? ""));
         await autoCommitFile(abs, tool.name).catch(() => {});
       }
     }
@@ -830,7 +820,7 @@ export class Engine {
   async runBashDirect(command: string, cb: Callbacks): Promise<void> {
     const tool = TOOLS["bash"]!;
     const args = { command };
-    const decision = gate(tool, args, { mode: this.mode, approvals: this.approvals });
+    const decision = gate(tool, args, { mode: this.mode, approvals: this.approvals, cwd: this.cwd });
     if (decision.kind === "reject") {
       cb.onSystem(decision.reason);
       return;
@@ -838,7 +828,7 @@ export class Engine {
     const call: ToolCall = { id: "!", name: "bash", args: JSON.stringify(args) };
     cb.onToolStart(call, args);
     if (decision.kind === "prompt") {
-      const ans = await cb.requestPermission(buildBashPreview(command, decision.reason));
+      const ans = await cb.requestPermission(buildBashPreview(this.cwd, command, decision.reason));
       if (ans === "no") {
         cb.onSystem("✗ denied by user");
         return;
@@ -850,7 +840,7 @@ export class Engine {
     // the spawned process runs on untouched.
     this.abortController = new AbortController();
     try {
-      const res = await runBash(args, this.abortController.signal);
+      const res = await runBash(args, this.abortController.signal, this.toolCtx());
       cb.onToolResult(call, res);
     } finally {
       this.abortController = null;

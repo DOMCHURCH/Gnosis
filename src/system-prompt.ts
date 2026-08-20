@@ -8,7 +8,7 @@ export const WORKING_DIR_PREFIX = "Working directory: ";
 
 /**
  * Rewrite the "Working directory:" line so it names `cwd`. Called each turn so
- * the stated root tracks process.cwd() (e.g. after /vault) without rebuilding
+ * the stated root tracks the engine's cwd (e.g. after /vault) without rebuilding
  * the whole prompt or re-reading AGENTS.md.
  */
 export function withWorkingDir(prompt: string, cwd: string): string {

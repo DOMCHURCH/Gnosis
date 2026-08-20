@@ -11,7 +11,7 @@ import { runHttp, envPath } from "../dist/tools/http.js";
 let fails = 0;
 const ok = (name, cond) => { console.log(`${cond ? "✓" : "✗"} ${name}`); if (!cond) fails++; };
 const http = TOOLS.http;
-const g = (args, mode = "ask") => gate(http, args, { mode, approvals: new Set() });
+const g = (args, mode = "ask") => gate(http, args, { mode, approvals: new Set(), cwd: process.cwd() });
 
 // --- permission gate: methods ---
 ok("POST prompts even in yolo (dangerous)", (() => { const d = g({ method: "POST", url: "https://api.example.com/x" }, "yolo"); return d.kind === "prompt" && d.dangerous === true; })());
