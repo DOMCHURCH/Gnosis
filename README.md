@@ -64,6 +64,17 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
 
+## Web view (`dom serve`)
+
+`dom serve [--port 7777]` runs the normal Ink TUI **and** a localhost web server that mirrors the same running engines to a browser — it's a view/remote-control over the existing agents, not a second agent. The agent loop is never duplicated: every Engine emits to an in-process **event bus** (via the tabs controller), and both the TUI and the websocket read from it. Emission is fire-and-forget, so it can't slow the loop; with the server off, nothing is emitted and the TUI is unchanged.
+
+Security is enforced before anything else runs:
+- binds **127.0.0.1 only** (never `0.0.0.0`);
+- rejects any request whose `Host` header isn't localhost (DNS-rebinding defense);
+- generates a **random per-startup token**, prints it in the URL, and requires it on every HTTP request and websocket connect.
+
+The server serves a static frontend and a websocket at `/ws`. Events are typed JSON: `agent.created/closed/mode/busy`, `turn.start/end`, `line`, `tool.start/end`, `subagent.start/end`, `permission.request/resolved`, `job.start/end`, `message.sent`. Clients send back `input`, `command`, `permission`, and `agent.create`/`agent.close`, which route into the same controller the TUI uses (permission requests can be answered from either side — first wins). The websocket layer is hand-rolled (RFC 6455), so dom adds no runtime dependency. **Phase 1 ships the server + event stream; the browser UI lands in phase 2** (until then `/` serves a placeholder that tails the event stream).
+
 ## Scheduled runs
 
 dom can run a prompt headlessly on a schedule. `dom schedule add "<spec>" "<prompt>"` registers one (spec is `every 30m` / `hourly` / `daily 14:30`); `dom schedule list` shows each with its next-run time and last outcome; `dom schedule remove <id>` deletes one; `dom schedule run <id>` fires one immediately. `dom schedule tick` runs everything **due right now** and records the result — wire that to cron or Windows Task Scheduler (e.g. every minute), or run `dom schedule daemon` to keep a process ticking every 60s. Each firing boots in the schedule's directory, runs the prompt in pipe mode, and **saves it as a resumable session** so you can `dom -c` in and read the result. The registry lives in `~/.dom/schedules.json`. In-session, `/schedule` lists them and `/schedule add <spec> | <prompt>` adds one.

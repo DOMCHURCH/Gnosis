@@ -5,6 +5,8 @@ import { runHeadless } from "./headless.js";
 import { runPipe } from "./pipe.js";
 import { runJson } from "./jsonrun.js";
 import { runScheduleCommand } from "./scheduler.js";
+import { startServer } from "./server.js";
+import { EventBus, createBridge, type AppBridge } from "./events.js";
 import { App } from "./ui/App.js";
 import { detectCaps, termWidth } from "./ui/terminal.js";
 import { getGhAuth, getRepoInfo } from "./gitinfo.js";
@@ -25,6 +27,7 @@ usage:
   dom -p "prompt" --save     ...and persist the one-shot turn as a session
   dom --json "prompt"        headless: stream structured JSONL events to stdout, exit
   dom schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
+  dom serve [--port 7777]    TUI + a localhost web view over the same engines
   dom --help | --version
 
 Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
@@ -83,11 +86,30 @@ async function main() {
   }
 
   // The TUI needs an interactive stdin (raw mode). Fall back to headless otherwise.
-  if (flags.headless || !process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!flags.serve && (flags.headless || !process.stdin.isTTY || !process.stdout.isTTY)) {
     if (resumed) process.stderr.write(`resumed session ${engine.sessionId()}\n`);
     for (const w of skillWarnings) process.stderr.write(`\x1b[2m! ${w}\x1b[0m\n`);
     await runHeadless(engine, { prompt: flags.prompt });
     return;
+  }
+
+  // `dom serve`: start the localhost web server (TUI + browser view over the same
+  // engines). Needs a TTY for the TUI, which drives the shared controller.
+  let bridge: AppBridge | undefined;
+  if (flags.serve) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.error("dom serve needs an interactive terminal (the TUI drives the shared engines).");
+      process.exit(1);
+    }
+    bridge = createBridge(new EventBus());
+    let server;
+    try {
+      server = await startServer(bridge, { port: flags.port });
+    } catch (e) {
+      console.error(`failed to start server on port ${flags.port ?? 7777}: ${(e as Error).message}`);
+      process.exit(1);
+    }
+    process.stderr.write(`\ndom serve — open in your browser:\n  ${server.url}\n(bound to 127.0.0.1 only · token required · Ctrl+C in the terminal to stop)\n\n`);
   }
 
   // Interactive: file edits get a diff preview + confirm prompt (headless applies directly).
@@ -109,6 +131,7 @@ async function main() {
       initialRepo={initialRepo}
       skillWarnings={skillWarnings}
       defaultModel={defaultModel}
+      bridge={bridge}
     />,
     { exitOnCtrlC: false },
   );

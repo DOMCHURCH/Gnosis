@@ -58,6 +58,7 @@ class JobManager extends EventEmitter {
       proc,
     };
     this.jobs.set(id, job);
+    this.emit("start", this.publicOf(job));
 
     proc.all?.on("data", (d: Buffer) => {
       job.output += d.toString();

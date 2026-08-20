@@ -37,10 +37,14 @@ export interface Flags {
   /** `--json`: headless one-shot that streams structured JSONL events to stdout
    * (the machine contract for a web UI / programmatic caller). Implies print. */
   json: boolean;
+  /** `serve`: run the Ink TUI AND a localhost web server mirroring the engines. */
+  serve: boolean;
+  /** `--port <n>`: port for `dom serve` (default 7777). */
+  port?: number;
 }
 
 export function parseArgs(argv: string[]): Flags {
-  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false, print: false, save: false, json: false };
+  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false, print: false, save: false, json: false, serve: false };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -63,6 +67,12 @@ export function parseArgs(argv: string[]): Flags {
         break;
       case "--json":
         flags.json = true;
+        break;
+      case "serve":
+        flags.serve = true;
+        break;
+      case "--port":
+        flags.port = Number(argv[++i]);
         break;
       case "-c":
       case "--continue":

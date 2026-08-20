@@ -44,6 +44,7 @@ import { shouldCompact, compact } from "./compaction.js";
 import { MarkdownStripper, type StreamLine } from "./strip.js";
 import { createSession, loadConfig, saveSession, type CostState, type Mode, type SessionData, type TodoItem } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
+import type { EventBus, AppBridge } from "./events.js";
 
 const MAX_ITER = 100;
 /** Auto lint/test loop: how many fix retries before giving up and reporting. */
@@ -154,6 +155,12 @@ export class Engine {
   /** Workspace roots for multi-root search. roots[0] is always this.cwd (the
    * primary root); grep/glob without an explicit path span every entry. */
   roots: string[];
+  /** Event bus + identity for the web view (`dom serve`). Set by the tabs
+   * controller; absent in a plain TUI/headless run (then nothing is emitted). */
+  bus?: EventBus;
+  bridge?: AppBridge;
+  agentId = 0;
+  agentName = "";
   /** The model's task list (the `todo` tool). Persisted per session; the UI
    * renders it live above the input. Replaced wholesale on each todo call. */
   todos: TodoItem[];
@@ -206,6 +213,8 @@ export class Engine {
   /** Images loaded by view_image during the current turn; flushed into a synthetic
    * user message after the tool calls so the model sees them the next iteration. */
   private pendingImages: ImagePart[] = [];
+  /** Monotonic id for permission requests emitted to the bus (web view). */
+  private permSeq = 0;
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -318,6 +327,7 @@ export class Engine {
   }
   setMode(mode: Mode): void {
     this.mode = mode;
+    this.bus?.emit({ type: "agent.mode", tabId: this.agentId, mode });
   }
   clear(): void {
     this.messages.length = 0;
@@ -423,7 +433,51 @@ export class Engine {
 
   // --- the loop ------------------------------------------------------------
 
+  /** Wrap the TUI callbacks so the same activity also fans out to the event bus
+   * (the web view). tool.start and permission.request originate here; the
+   * persistent transcript lines are mirrored by the UI's own sink so the browser
+   * shows byte-identical content. permission requests are routed through the
+   * bridge so either the TUI overlay OR a web client can answer (first wins). */
+  private wrapCallbacks(cb: Callbacks): Callbacks {
+    const bus = this.bus;
+    const bridge = this.bridge;
+    if (!bus) return cb;
+    const tabId = this.agentId;
+    return {
+      ...cb,
+      onToolStart: (call, args) => {
+        try {
+          bus.emit({ type: "tool.start", tabId, tool: call.name, args });
+        } catch {
+          /* emit and forget */
+        }
+        cb.onToolStart(call, args);
+      },
+      requestPermission: (preview) => {
+        if (!bridge) {
+          bus.emit({ type: "permission.request", tabId, id: `${tabId}:${++this.permSeq}`, preview, options: ["yes", "no", "always"] });
+          return cb.requestPermission(preview);
+        }
+        const id = `${tabId}:${++this.permSeq}`;
+        return new Promise<PermissionAnswer>((resolve) => {
+          let done = false;
+          const finish = (a: PermissionAnswer) => {
+            if (done) return;
+            done = true;
+            bridge.clearPermission(id);
+            bus.emit({ type: "permission.resolved", tabId, id, answer: a });
+            resolve(a);
+          };
+          bridge.registerPermission(id, finish); // a web client may answer
+          bus.emit({ type: "permission.request", tabId, id, preview, options: ["yes", "no", "always"] });
+          void Promise.resolve(cb.requestPermission(preview)).then(finish); // the TUI overlay
+        });
+      },
+    };
+  }
+
   async run(userText: string, cb: Callbacks): Promise<void> {
+    cb = this.wrapCallbacks(cb);
     // Snapshot cost so we can report this turn's delta (sub-agent cost included).
     const costAtStart = {
       prompt: this.cost.promptTokens,
@@ -773,8 +827,8 @@ export class Engine {
    * history; its cost folds into ours and is tracked separately for /cost.
    */
   async runSubAgent(description: string, prompt: string, signal?: AbortSignal): Promise<SubAgentResult> {
-    void description;
     if (this.overBudget()) return { text: "Refused: the session budget ceiling has been reached — not spawning a sub-agent.", tools: 0, tokens: 0, capped: "budget" };
+    this.bus?.emit({ type: "subagent.start", tabId: this.agentId, description });
     const session = createSession(this.cwd, this.modelId, "yolo"); // read-only tools; yolo only avoids prompts
     const sub = new Engine({
       apiKey: this.apiKey,
@@ -820,6 +874,7 @@ export class Engine {
     this.cost.completionTokens += sub.cost.completionTokens;
     this.cost.usd += sub.cost.usd;
     this.cost.subAgentUsd = (this.cost.subAgentUsd ?? 0) + sub.cost.usd;
+    this.bus?.emit({ type: "subagent.end", tabId: this.agentId, description, result: text.slice(0, 500) });
     return { text, tools, tokens, capped: sub.capped };
   }
 

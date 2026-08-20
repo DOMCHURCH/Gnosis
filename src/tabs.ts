@@ -11,6 +11,7 @@
 import type { Engine } from "./engine.js";
 import type { TabRuntime } from "./tools/index.js";
 import type { Preview, PermissionAnswer } from "./permissions.js";
+import type { EventBus, AppBridge } from "./events.js";
 
 export const MAX_HOPS = 3;
 export const MAX_MESSAGES = 20;
@@ -61,14 +62,31 @@ export class TabsController {
   private readonly root: Engine;
   private executor: Executor;
   private onChange: () => void;
+  /** Event bus for the web view (`dom serve`); undefined in a plain TUI run. */
+  private readonly bus?: EventBus;
+  private readonly bridge?: AppBridge;
 
-  constructor(root: Engine, rootName: string, executor: Executor, onChange: () => void) {
+  constructor(root: Engine, rootName: string, executor: Executor, onChange: () => void, bus?: EventBus, bridge?: AppBridge) {
     this.root = root;
     this.executor = executor;
     this.onChange = onChange;
+    this.bus = bus;
+    this.bridge = bridge;
     const tab = this.makeTab(rootName, "", root);
     this.tabs.push(tab);
     this.activeId = tab.id;
+    this.emitCreated(tab);
+  }
+
+  private emitCreated(tab: Tab): void {
+    this.bus?.emit({
+      type: "agent.created",
+      tabId: tab.id,
+      name: tab.name,
+      cwd: tab.engine.cwd,
+      model: tab.engine.modelId,
+      mode: tab.engine.mode,
+    });
   }
 
   // --- lookups ---------------------------------------------------------------
@@ -103,6 +121,11 @@ export class TabsController {
       pendingPermission: null,
     };
     engine.toolContext = { tab: this.runtimeFor(tab) };
+    // Wire the engine to the bus so its turns/tools/sub-agents/permissions emit.
+    engine.bus = this.bus;
+    engine.bridge = this.bridge;
+    engine.agentId = tab.id;
+    engine.agentName = tab.name;
     return tab;
   }
 
@@ -119,6 +142,7 @@ export class TabsController {
   create(name?: string, purpose = "", cwd?: string): Tab {
     const tab = this.makeTab(this.uniqueName(name ?? `tab${this.nextId}`), purpose, this.root.fork(cwd ? { cwd } : undefined));
     this.tabs.push(tab);
+    this.emitCreated(tab);
     this.onChange();
     return tab;
   }
@@ -130,6 +154,7 @@ export class TabsController {
     if (i === -1) return this.active();
     const closingActive = id === this.activeId;
     const tab = this.tabs[i]!;
+    this.bus?.emit({ type: "agent.closed", tabId: tab.id, name: tab.name });
     tab.engine.abort();
     // Reject any parked permission so its promise doesn't dangle.
     tab.pendingPermission?.resolve("no");
@@ -198,6 +223,13 @@ export class TabsController {
     tab.busy = true;
     tab.currentHops = hops;
     tab.currentSender = sender;
+    // Per-turn cost/token delta for turn.end (the engine folds cumulative totals).
+    // Only touched when the bus is active — a bare test engine may lack .cost.
+    const c0 = this.bus ? tab.engine.cost : undefined;
+    const startUsd = c0?.usd ?? 0;
+    const startTok = c0 ? c0.promptTokens + c0.completionTokens : 0;
+    this.bus?.emit({ type: "agent.busy", tabId: tab.id, busy: true });
+    this.bus?.emit({ type: "turn.start", tabId: tab.id });
     this.onChange();
     try {
       await fn();
@@ -207,6 +239,11 @@ export class TabsController {
       tab.busy = false;
       tab.currentHops = 0;
       tab.currentSender = null;
+      if (this.bus) {
+        const c1 = tab.engine.cost;
+        this.bus.emit({ type: "turn.end", tabId: tab.id, cost: (c1?.usd ?? 0) - startUsd, tokens: (c1 ? c1.promptTokens + c1.completionTokens : 0) - startTok });
+        this.bus.emit({ type: "agent.busy", tabId: tab.id, busy: false });
+      }
       this.onChange();
       const next = tab.queue.shift();
       if (next) void this.runTurnWith(tab, next.hops, next.from, () => this.executor(tab, this.formatIncoming(next)));
@@ -266,6 +303,7 @@ export class TabsController {
     this.messageCount++;
     to.queue.push({ from: fromName, text, hops });
     if (to.id !== this.activeId && to.badge !== "approval") to.badge = "output";
+    this.bus?.emit({ type: "message.sent", from: fromName, to: to.name, hops });
     this.onChange();
     this.dispatch(to);
     return { ok: true, message: `delivered to "${to.name}" (hop ${hops}).` };

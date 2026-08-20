@@ -38,6 +38,7 @@ import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
 import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
 import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
+import type { AppBridge } from "../events.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -68,6 +69,10 @@ interface Props {
   /** Configured default model (config.model ?? built-in). The status bar marks a
    * divergence when the live session model differs from this. */
   defaultModel: string;
+  /** Present only under `dom serve`: the web view's event bus + remote handlers.
+   * When set, the controller emits to the bus and this component registers the
+   * client→server handlers so a browser drives the SAME engines. */
+  bridge?: AppBridge;
 }
 
 const HELP = [
@@ -168,7 +173,7 @@ function useTermWidth(fallback: number, regionRowsRef: { current: number }): num
   return cols;
 }
 
-export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings, defaultModel }: Props) {
+export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings, defaultModel, bridge }: Props) {
   const { exit } = useApp();
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
@@ -283,6 +288,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       rootName,
       (tab, text) => executorRef.current(tab, text),
       () => onChangeRef.current(),
+      bridge?.bus,
+      bridge,
     );
     tabBuf(controllerRef.current.active().id);
   }
@@ -429,6 +436,23 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // hug a tool block (the model's "\n\n" before its one-line finding, then the
   // call) is dropped instead of wasting a row, and runs of blanks collapse to one.
   // A blank only survives between two ordinary prose lines.
+  // Mirror a committed transcript item to the event bus so the browser renders
+  // byte-identical content (this is the "same transcript" guarantee). A tool item
+  // becomes a tool.end event; everything else is a line event carrying the item.
+  const mirror = (tabId: number, item: DistributiveOmit<Log, "id">) => {
+    const bus = bridge?.bus;
+    if (!bus) return;
+    try {
+      if (item.kind === "tool") {
+        bus.emit({ type: "tool.end", tabId, tool: item.tool, primary: item.primary, secondary: item.secondary, ok: item.ok, summary: item.body });
+      } else if (item.kind !== "banner") {
+        bus.emit({ type: "line", tabId, item });
+      }
+    } catch {
+      /* emit and forget */
+    }
+  };
+
   const emitToTab = (tab: Tab, item: DistributiveOmit<Log, "id">) => {
     const buf = tabBuf(tab.id);
     if (item.kind === "line" && item.text === "") {
@@ -440,6 +464,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       if (item.kind !== "tool" && buf.lastKind !== "tool") commit(tab, { id: nextId(), kind: "line", text: "" });
     }
     commit(tab, { id: nextId(), ...item } as Log);
+    mirror(tab.id, item);
   };
   const sysLog = (text: string) => emitToTab(controller.active(), { kind: "system", text });
 
@@ -1356,6 +1381,54 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     setInput(v);
     if (v.endsWith("@") && !busyRef.current) void openFilePicker(v.slice(0, -1));
   };
+
+  // --- web view bridge (dom serve) -----------------------------------------
+
+  // Populate the bridge's client→server handlers each render so they close over
+  // the latest state. The browser drives the SAME engines through these — it never
+  // talks to OpenRouter and never runs its own loop.
+  if (bridge) {
+    bridge.getAgents = () =>
+      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy }));
+    bridge.onInput = (tabId, text) => {
+      const tab = controller.byId(tabId) ?? controller.active();
+      emitToTab(tab, { kind: "user", text });
+      controller.submitUser(tab, text);
+    };
+    bridge.onCommand = (tabId, command) => {
+      const tab = controller.byId(tabId);
+      if (tab && tab.id !== controller.active().id) switchToTab(tab.id);
+      handleCommand(command.startsWith("/") ? command.trim() : "/" + command.trim());
+    };
+    bridge.onCreateAgent = (name, purpose) => newTab(name, purpose ?? "");
+    bridge.onCloseAgent = (tabId) => {
+      const t = controller.byId(tabId);
+      if (!t) return;
+      if (t.id !== controller.active().id) switchToTab(t.id);
+      closeActiveTab();
+    };
+  }
+
+  // Bridge background-job lifecycle to the bus, and let a web answer dismiss the
+  // TUI's permission overlay (the engine already resolved the shared request).
+  useEffect(() => {
+    if (!bridge) return;
+    const tabIdFor = (owner: string | null) => (owner ? controller.byName(owner)?.id ?? null : null);
+    const onStart = (j: Job) => bridge.bus.emit({ type: "job.start", tabId: tabIdFor(j.owner), jobId: j.id, command: j.command });
+    const onDone = (j: Job) => bridge.bus.emit({ type: "job.end", tabId: tabIdFor(j.owner), jobId: j.id, status: j.status, exitCode: j.exitCode });
+    jobs.on("start", onStart);
+    jobs.on("done", onDone);
+    const unsub = bridge.bus.subscribe((e) => {
+      if (e.type === "permission.resolved" && overlayRef.current.type === "permission" && permOwnerRef.current === e.tabId) {
+        resolvePerm(e.answer as PermissionAnswer);
+      }
+    });
+    return () => {
+      jobs.off("start", onStart);
+      jobs.off("done", onDone);
+      unsub();
+    };
+  }, [bridge]);
 
   // --- global keys ---------------------------------------------------------
 
