@@ -34,10 +34,13 @@ export interface Flags {
   print: boolean;
   /** `--save`: in pipe mode, persist the one-shot turn as a session (default off). */
   save: boolean;
+  /** `--json`: headless one-shot that streams structured JSONL events to stdout
+   * (the machine contract for a web UI / programmatic caller). Implies print. */
+  json: boolean;
 }
 
 export function parseArgs(argv: string[]): Flags {
-  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false, print: false, save: false };
+  const flags: Flags = { headless: false, yolo: false, resumeLatest: false, help: false, version: false, noAutoCommit: false, print: false, save: false, json: false };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -57,6 +60,9 @@ export function parseArgs(argv: string[]): Flags {
         break;
       case "--save":
         flags.save = true;
+        break;
+      case "--json":
+        flags.json = true;
         break;
       case "-c":
       case "--continue":

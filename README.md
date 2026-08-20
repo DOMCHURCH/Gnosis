@@ -36,6 +36,8 @@ dom --model <id>          # start on a specific model
 dom --yolo                # allow all tools (dangerous commands still prompt)
 dom --no-auto-commit      # don't commit each successful write/edit to git
 dom --headless "message"  # one-shot, no TUI
+dom -p "prompt"           # pipe mode: one turn, final answer to stdout, exit
+dom --json "prompt"       # headless: one turn, structured JSONL events to stdout
 ```
 
 ### In-session commands
@@ -61,6 +63,15 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 **Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.
 
 **Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
+
+## Headless & JSON output
+
+Two non-interactive one-shot modes read piped stdin (appended to the prompt, so `git diff | dom -p "review this"` works) and never open the TUI:
+
+- **`dom -p "prompt"`** (pipe mode) writes only the model's final answer to **stdout**; progress and errors go to stderr, so it composes in shell pipelines. `--save` persists the turn as a session (off by default). Exit code is non-zero on error or an empty answer.
+- **`dom --json "prompt"`** streams a structured event log to stdout as **newline-delimited JSON** — one complete object per line, so a web UI or script can spawn dom and read events incrementally. This is the intended programmatic contract. Event types, in order: `session` (once, first — `sessionId`, `model`, `cwd`), then per activity `assistant` (text), `tool_use` (`id`, `name`, `input`), `tool_result` (`id`, `name`, `ok`, `output`), `system`, `permission` (a prompt auto-denied in headless — the `preview` is recorded so you can re-run with `--yolo`), `cost` (per turn), and finally `result` (once, last — `ok`, `text`, `usd`, `sessionId`, `capped`). The resumed-session notice and skill warnings go to **stderr** so stdout stays pure JSONL. `--json` takes precedence if combined with `-p`.
+
+Secrets are redacted in `tool_use` inputs, `permission` previews, and assistant/result text before they reach stdout (tool outputs are already redacted upstream); the real values were used during execution — redaction is display-only. Both modes refuse anything that needs confirmation (bash/http prompts); read-only work and file edits proceed as in `--headless`.
 
 ## Budget ceiling
 

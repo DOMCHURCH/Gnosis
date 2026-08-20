@@ -7,7 +7,7 @@
 import { Engine, type Callbacks } from "./engine.js";
 
 /** Read all of stdin when it's piped (not a TTY); "" for an interactive terminal. */
-async function readStdin(): Promise<string> {
+export async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
   const chunks: Buffer[] = [];
   try {
