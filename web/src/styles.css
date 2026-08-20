@@ -99,3 +99,39 @@ body {
 .answer.yes { border-color: var(--green); color: var(--green); }
 .answer.always { border-color: var(--cyan); color: var(--cyan); }
 .answer.no { border-color: var(--red); color: var(--red); }
+
+/* --- view tabs --- */
+.viewtabs { display: flex; gap: 4px; padding: 8px; }
+.viewtabs button { flex: 1; padding: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--dim); border-radius: 8px; cursor: pointer; font: inherit; }
+.viewtabs button.on { color: var(--cyan); border-color: var(--cyan); }
+
+/* --- building --- */
+.building-wrap { flex: 1; overflow: auto; padding: 16px; }
+.building { width: 100%; height: auto; display: block; }
+.floor { fill: var(--panel); }
+.floor-0 { fill: #14141c; }
+.floor-1 { fill: #151420; }
+.floor-2 { fill: #16141e; }
+.floor-3 { fill: #131620; }
+.floor-4 { fill: #101318; }
+.floor-line { stroke: var(--border); stroke-width: 1; }
+.floor-label { fill: var(--dim); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+
+.figure { transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1); }
+.figure .head, .figure .body { fill: var(--cyan); }
+.figure.subagent .head, .figure.subagent .body { fill: var(--magenta); }
+.figure.subagent { animation: figure-in 300ms ease-out; }
+@keyframes figure-in { from { opacity: 0; } to { opacity: 1; } }
+.figure .fig-name { fill: var(--text); font-size: 11px; text-anchor: middle; }
+.busy-ring { fill: none; stroke: var(--amber); stroke-width: 2; opacity: 0.7; animation: ring 1.2s ease-in-out infinite; }
+@keyframes ring { 0%, 100% { r: 20px; opacity: 0.7; } 50% { r: 24px; opacity: 0.25; } }
+.perm { fill: var(--amber); animation: pulse 1s ease-in-out infinite; }
+.msg-link { stroke: var(--magenta); stroke-width: 2; opacity: 0.9; animation: link-fade 1.6s ease-out forwards; }
+@keyframes link-fade { 0% { opacity: 0; } 15% { opacity: 0.95; } 100% { opacity: 0; } }
+
+/* --- minichat --- */
+.minichat { position: fixed; right: 20px; bottom: 20px; width: min(420px, 90vw); height: min(460px, 70vh); background: var(--panel); border: 1px solid var(--cyan); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); display: flex; flex-direction: column; overflow: hidden; }
+.minichat-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.minichat .transcript { padding: 10px 12px; }
+.mini-close { margin-left: auto; background: transparent; border: none; color: var(--dim); cursor: pointer; font: inherit; }
+.mini-close:hover { color: var(--red); }

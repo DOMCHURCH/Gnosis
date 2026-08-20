@@ -11,6 +11,7 @@ export interface Agent {
   busy: boolean;
   cost: number;
   tokens: number;
+  awaitingPermission: boolean;
 }
 
 export type TranscriptItem =

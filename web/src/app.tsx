@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
+import { Building } from "./Building";
+import { buildingInput, deriveBuilding } from "./floors.js";
 import type { Agent, Preview, TranscriptItem } from "./types";
 
 export function App() {
   const { state, send, select } = useDomSocket();
+  const [view, setView] = useState<"chat" | "building">("chat");
+  const [miniId, setMiniId] = useState<number | null>(null);
   const selected = state.selected;
   const agent = selected != null ? state.agents[selected] : undefined;
   const items = selected != null ? state.transcripts[selected] ?? [] : [];
   const running = selected != null ? state.running[selected] : null;
+
+  const sendTo = (id: number, text: string) =>
+    text.startsWith("/") ? send({ type: "command", tabId: id, command: text }) : send({ type: "input", tabId: id, text });
 
   return (
     <div className="app">
@@ -16,27 +23,40 @@ export function App() {
         agents={state.agents}
         selected={selected}
         connected={state.connected}
+        view={view}
+        onView={setView}
         onSelect={select}
         onCreate={() => send({ type: "agent.create" })}
       />
       <main className="main">
-        {agent ? (
+        {view === "building" ? (
+          <div className="building-wrap">
+            {state.order.length ? (
+              <Building model={deriveBuilding(buildingInput(state))} onPick={(id) => setMiniId(id)} />
+            ) : (
+              <div className="empty">{state.connected ? "no agents yet" : "connecting…"}</div>
+            )}
+          </div>
+        ) : agent ? (
           <>
             <Transcript items={items} running={running} />
-            <Composer
-              disabled={!state.connected}
-              onSend={(text) =>
-                text.startsWith("/")
-                  ? send({ type: "command", tabId: agent.id, command: text })
-                  : send({ type: "input", tabId: agent.id, text })
-              }
-            />
+            <Composer disabled={!state.connected} onSend={(text) => sendTo(agent.id, text)} />
             <StatusBar agent={agent} />
           </>
         ) : (
           <div className="empty">{state.connected ? "no agents — create one" : "connecting…"}</div>
         )}
       </main>
+
+      {view === "building" && miniId != null && state.agents[miniId] && (
+        <MiniChat
+          agent={state.agents[miniId]!}
+          items={state.transcripts[miniId] ?? []}
+          onClose={() => setMiniId(null)}
+          onSend={(text) => sendTo(miniId, text)}
+        />
+      )}
+
       {state.permission && (
         <PermissionModal
           preview={state.permission.preview}
@@ -49,11 +69,31 @@ export function App() {
   );
 }
 
+function MiniChat(props: { agent: Agent; items: TranscriptItem[]; onClose: () => void; onSend: (text: string) => void }) {
+  const recent = props.items.slice(-40);
+  return (
+    <div className="minichat">
+      <div className="minichat-head">
+        <span>{props.agent.name}</span>
+        <span className={`badge mode-${props.agent.mode}`}>{props.agent.mode}</span>
+        {props.agent.busy && <span className="spinner" />}
+        <button className="mini-close" onClick={props.onClose}>
+          ✕
+        </button>
+      </div>
+      <Transcript items={recent} running={null} />
+      <Composer disabled={false} onSend={props.onSend} />
+    </div>
+  );
+}
+
 function Sidebar(props: {
   order: number[];
   agents: Record<number, Agent>;
   selected: number | null;
   connected: boolean;
+  view: "chat" | "building";
+  onView: (v: "chat" | "building") => void;
   onSelect: (id: number) => void;
   onCreate: () => void;
 }) {
@@ -61,6 +101,14 @@ function Sidebar(props: {
     <aside className="sidebar">
       <div className="brand">
         dom <span className={props.connected ? "dot on" : "dot off"} title={props.connected ? "connected" : "disconnected"} />
+      </div>
+      <div className="viewtabs">
+        <button className={props.view === "chat" ? "on" : ""} onClick={() => props.onView("chat")}>
+          chat
+        </button>
+        <button className={props.view === "building" ? "on" : ""} onClick={() => props.onView("building")}>
+          building
+        </button>
       </div>
       <div className="agents">
         {props.order.map((id) => {

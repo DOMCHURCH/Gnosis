@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { Agent, ClientMessage, DomEvent, PermissionRequest, TranscriptItem } from "./types";
+import type { MessageLink, SubAgent } from "./floors";
 
 export interface State {
   connected: boolean;
@@ -8,13 +9,24 @@ export interface State {
   transcripts: Record<number, TranscriptItem[]>;
   /** Currently-running tool label per agent (from tool.start), cleared on end. */
   running: Record<number, string | null>;
+  /** Running background job ids per agent (job.start/end). */
+  jobs: Record<number, string[]>;
+  /** Live sub-agents (subagent.start/end) — figures on the Sub-agents floor. */
+  subagents: SubAgent[];
+  /** Transient tab-to-tab message links (message.sent), cleared after a moment. */
+  links: MessageLink[];
   selected: number | null;
   permission: PermissionRequest | null;
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, selected: null, permission: null };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], selected: null, permission: null };
 
-type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number };
+type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string };
+
+function idByName(state: State, name: string): number | null {
+  for (const id of state.order) if (state.agents[id]?.name === name) return id;
+  return null;
+}
 
 function withItem(state: State, tabId: number, item: TranscriptItem): State {
   const cur = state.transcripts[tabId] ?? [];
@@ -34,7 +46,7 @@ export function reducer(state: State, action: Action): State {
       return { ...state, selected: action.id };
     case "agent.created": {
       if (state.agents[action.tabId]) return state; // snapshot may duplicate
-      const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: 0, tokens: 0 };
+      const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: 0, tokens: 0, awaitingPermission: false };
       return {
         ...state,
         agents: { ...state.agents, [action.tabId]: agent },
@@ -69,23 +81,47 @@ export function reducer(state: State, action: Action): State {
         summary: action.summary,
       });
     case "subagent.start":
-      return withItem(state, action.tabId, { kind: "system", text: `⟳ sub-agent: ${action.description}` });
-    case "subagent.end":
-      return withItem(state, action.tabId, { kind: "system", text: `✓ sub-agent done: ${action.description}` });
+      return withItem(
+        { ...state, subagents: [...state.subagents, { parentId: action.tabId, description: action.description, key: `${action.tabId}:${action.description}:${state.subagents.length}` }] },
+        action.tabId,
+        { kind: "system", text: `⟳ sub-agent: ${action.description}` },
+      );
+    case "subagent.end": {
+      const i = state.subagents.findIndex((s) => s.parentId === action.tabId && s.description === action.description);
+      const subagents = i >= 0 ? state.subagents.filter((_, k) => k !== i) : state.subagents;
+      return withItem({ ...state, subagents }, action.tabId, { kind: "system", text: `✓ sub-agent done: ${action.description}` });
+    }
     case "job.start": {
       const tid = action.tabId ?? state.selected;
-      return tid == null ? state : withItem(state, tid, { kind: "system", text: `⎈ job ${action.jobId}: ${action.command}` });
+      const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: [...(state.jobs[action.tabId] ?? []), action.jobId] } : state.jobs;
+      const next = { ...state, jobs };
+      return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId}: ${action.command}` });
     }
     case "job.end": {
       const tid = action.tabId ?? state.selected;
-      return tid == null ? state : withItem(state, tid, { kind: "system", text: `⎈ job ${action.jobId} ${action.status}` });
+      const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: (state.jobs[action.tabId] ?? []).filter((j) => j !== action.jobId) } : state.jobs;
+      const next = { ...state, jobs };
+      return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId} ${action.status}` });
     }
+    case "message.sent": {
+      const from = idByName(state, action.from);
+      const to = idByName(state, action.to);
+      if (from == null || to == null) return state;
+      return { ...state, links: [...state.links, { from, to, key: `${action.from}->${action.to}` }] };
+    }
+    case "@clearLink":
+      return { ...state, links: state.links.filter((l) => l.key !== action.key) };
     case "permission.request":
-      return { ...state, permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
-    case "permission.resolved":
-      return state.permission?.id === action.id ? { ...state, permission: null } : state;
+      return {
+        ...patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: true })),
+        permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options },
+      };
+    case "permission.resolved": {
+      const cleared = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: false }));
+      return cleared.permission?.id === action.id ? { ...cleared, permission: null } : cleared;
+    }
     default:
-      return state; // turn.start, message.sent (used by the phase-3 building)
+      return state; // turn.start
   }
 }
 
@@ -101,10 +137,17 @@ export function useDomSocket() {
     ws.onopen = () => dispatch({ type: "@connected", value: true });
     ws.onclose = () => dispatch({ type: "@connected", value: false });
     ws.onmessage = (e) => {
+      let ev: Action;
       try {
-        dispatch(JSON.parse(e.data) as Action);
+        ev = JSON.parse(e.data) as Action;
       } catch {
-        /* ignore malformed frame */
+        return; // ignore malformed frame
+      }
+      dispatch(ev);
+      // A tab-to-tab message draws a link; fade it after a moment.
+      if (ev.type === "message.sent") {
+        const key = `${ev.from}->${ev.to}`;
+        setTimeout(() => dispatch({ type: "@clearLink", key }), 1600);
       }
     };
     return () => ws.close();
