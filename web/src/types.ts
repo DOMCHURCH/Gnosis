@@ -14,6 +14,20 @@ export interface Agent {
   awaitingPermission: boolean;
 }
 
+/** A live sub-agent figure (subagent.start/end). */
+export interface SubAgent {
+  parentId: number;
+  description: string;
+  key: string;
+}
+
+/** A transient tab-to-tab message link (message.sent). */
+export interface MessageLink {
+  from: number;
+  to: number;
+  key: string;
+}
+
 export type TranscriptItem =
   | { kind: "user"; text: string }
   | { kind: "line"; text: string }

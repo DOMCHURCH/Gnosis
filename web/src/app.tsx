@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
-import { Building } from "./Building";
-import { buildingInput, deriveBuilding } from "./floors.js";
+import { OfficeFloor, type ChatMsg, type Mention } from "./OfficeFloor";
+import { officeModel } from "./office.js";
 import type { Agent, Preview, TranscriptItem } from "./types";
 
 export function App() {
   const { state, send, select } = useDomSocket();
-  const [view, setView] = useState<"chat" | "building">("chat");
-  const [miniId, setMiniId] = useState<number | null>(null);
-  // Under 900px the building collapses to the sidebar+chat layout (it needs width).
+  const [view, setView] = useState<"chat" | "office">("chat");
+  // Under 900px the office collapses to the sidebar+chat layout (it needs width).
   const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 900);
   useEffect(() => {
     const onResize = () => setNarrow(window.innerWidth < 900);
@@ -21,8 +20,72 @@ export function App() {
   const items = selected != null ? state.transcripts[selected] ?? [] : [];
   const running = selected != null ? state.running[selected] : null;
 
+  // Office-view local state (its own selection + drafts + chat target), plus a
+  // debug overlay driven by window.domOffice.
+  const [officeSel, setOfficeSel] = useState<number | string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [steer, setSteer] = useState("");
+  const [target, setTarget] = useState<{ label: string; id: number | null }>({ label: "PRIMARY", id: null });
+  const [, bump] = useState(0);
+  const debugRef = useRef<{ agents: any[]; feed: ChatMsg[]; userCb: ((m: any) => void) | null; approvalCb: ((m: any) => void) | null }>({ agents: [], feed: [], userCb: null, approvalCb: null });
+
   const sendTo = (id: number, text: string) =>
     text.startsWith("/") ? send({ type: "command", tabId: id, command: text }) : send({ type: "input", tabId: id, text });
+
+  // window.domOffice — a debug overlay on top of the live-driven floor.
+  useEffect(() => {
+    const forceUpdate = () => bump((n) => n + 1);
+    const api = {
+      add: (a: any) => { const id = a?.id ?? `dbg-${debugRef.current.agents.length + 1}`; debugRef.current.agents.push({ ...a, id }); forceUpdate(); return id; },
+      update: (id: any, patch: any) => { debugRef.current.agents = debugRef.current.agents.map((x) => (x.id === id ? { ...x, ...patch } : x)); forceUpdate(); },
+      think: (id: any, line: string) => { debugRef.current.agents = debugRef.current.agents.map((x) => (x.id === id ? { ...x, thinking: (x.thinking || []).concat([line]) } : x)); forceUpdate(); },
+      remove: (id: any) => { debugRef.current.agents = debugRef.current.agents.filter((x) => x.id !== id); forceUpdate(); },
+      list: () => officeModel(state, debugRef.current.agents).placed.map((a) => ({ ...a })),
+      say: (m: any) => { debugRef.current.feed.push({ key: `dbg${Date.now()}`, from: m.from || "SYSTEM", color: m.color || "#6B6B7B", text: m.text || "", time: m.time || "", border: m.kind === "approval" ? "#FBBF24" : "#2A2A38" }); debugRef.current.feed = debugRef.current.feed.slice(-40); forceUpdate(); },
+      onUserMessage: (cb: any) => { debugRef.current.userCb = cb; },
+      onApproval: (cb: any) => { debugRef.current.approvalCb = cb; },
+      zones: ["coordinator", "planning", "coding", "application", "subagents"],
+    };
+    (window as any).domOffice = api;
+    return () => { if ((window as any).domOffice === api) delete (window as any).domOffice; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  const model = officeModel(state, debugRef.current.agents);
+  const colorByTab: Record<number, string> = {};
+  for (const a of [...model.placed, ...model.offFloor]) if (typeof a.id === "number") colorByTab[a.id] = a.color;
+
+  const chat: ChatMsg[] = [
+    ...state.officeFeed.map((f) => ({ key: f.key, from: f.from, color: f.from === "YOU" ? "#C9C9D6" : colorByTab[f.tabId] ?? "#6B6B7B", text: f.text, time: f.time, border: f.kind === "approval" ? "#FBBF24" : "#2A2A38" })),
+    ...debugRef.current.feed,
+  ].slice(-40);
+
+  const primaryId = state.order[0] ?? null;
+  const targetId = target.id ?? primaryId;
+  const mentions: Mention[] = [
+    { key: "all", label: "@ALL", color: target.id == null ? "#C9C9D6" : "#6B6B7B", border: target.id == null ? "#6B6B7B" : "#2A2A38", onClick: () => setTarget({ label: "PRIMARY", id: null }) },
+    ...model.placed.filter((a) => typeof a.id === "number").slice(0, 3).map((a) => ({
+      key: String(a.id), label: `@${a.name}`.toUpperCase().slice(0, 8), color: target.id === a.id ? a.color : "#6B6B7B", border: target.id === a.id ? a.color : "#2A2A38",
+      onClick: () => setTarget({ label: a.name, id: a.id as number }),
+    })),
+  ];
+
+  const officeSend = () => {
+    const text = draft.trim();
+    if (!text) return;
+    if (targetId != null) sendTo(targetId, text);
+    if (debugRef.current.userCb) debugRef.current.userCb({ text, target: target.label });
+    setDraft("");
+  };
+  const officeSteer = () => {
+    const text = steer.trim();
+    if (text && typeof officeSel === "number") sendTo(officeSel, text);
+    setSteer("");
+  };
+  const answerPermission = (answer: string) => {
+    if (state.permission) send({ type: "permission", id: state.permission.id, answer });
+    if (debugRef.current.approvalCb) debugRef.current.approvalCb({ id: officeSel, approved: answer !== "no", action: "" });
+  };
 
   return (
     <div className="app">
@@ -38,13 +101,29 @@ export function App() {
         onCreate={() => send({ type: "agent.create" })}
       />
       <main className="main">
-        {effectiveView === "building" ? (
-          <div className="building-wrap">
-            {state.order.length ? (
-              <Building model={deriveBuilding(buildingInput(state))} onPick={(id) => setMiniId(id)} />
-            ) : (
-              <div className="empty">{state.connected ? "no agents yet" : "connecting…"}</div>
-            )}
+        {effectiveView === "office" ? (
+          <div className="office-wrap">
+            <OfficeFloor
+              model={model}
+              selectedId={officeSel}
+              chat={chat}
+              draft={draft}
+              steer={steer}
+              chatTarget={target.label}
+              ctxLine={`${state.order.length} tabs · ${model.awaiting} awaiting`}
+              mentions={mentions}
+              onSelect={setOfficeSel}
+              onClose={() => setOfficeSel(null)}
+              onSteer={officeSteer}
+              onSteerDraft={setSteer}
+              onApprove={() => answerPermission("yes")}
+              onDeny={() => answerPermission("no")}
+              onToggleIdle={() => {}}
+              onDismiss={() => { if (typeof officeSel === "number") send({ type: "agent.close", tabId: officeSel }); setOfficeSel(null); }}
+              onDraft={setDraft}
+              onSend={officeSend}
+              onSpawn={() => send({ type: "agent.create" })}
+            />
           </div>
         ) : agent ? (
           <>
@@ -56,15 +135,6 @@ export function App() {
           <div className="empty">{state.connected ? "no agents — create one" : "connecting…"}</div>
         )}
       </main>
-
-      {effectiveView === "building" && miniId != null && state.agents[miniId] && (
-        <MiniChat
-          agent={state.agents[miniId]!}
-          items={state.transcripts[miniId] ?? []}
-          onClose={() => setMiniId(null)}
-          onSend={(text) => sendTo(miniId, text)}
-        />
-      )}
 
       {state.permission && (
         <PermissionModal
@@ -78,32 +148,14 @@ export function App() {
   );
 }
 
-function MiniChat(props: { agent: Agent; items: TranscriptItem[]; onClose: () => void; onSend: (text: string) => void }) {
-  const recent = props.items.slice(-40);
-  return (
-    <div className="minichat">
-      <div className="minichat-head">
-        <span>{props.agent.name}</span>
-        <span className={`badge mode-${props.agent.mode}`}>{props.agent.mode}</span>
-        {props.agent.busy && <span className="spinner" />}
-        <button className="mini-close" onClick={props.onClose}>
-          ✕
-        </button>
-      </div>
-      <Transcript items={recent} running={null} />
-      <Composer disabled={false} onSend={props.onSend} />
-    </div>
-  );
-}
-
 function Sidebar(props: {
   order: number[];
   agents: Record<number, Agent>;
   selected: number | null;
   connected: boolean;
-  view: "chat" | "building";
+  view: "chat" | "office";
   narrow: boolean;
-  onView: (v: "chat" | "building") => void;
+  onView: (v: "chat" | "office") => void;
   onSelect: (id: number) => void;
   onCreate: () => void;
 }) {
@@ -117,12 +169,12 @@ function Sidebar(props: {
           chat
         </button>
         <button
-          className={props.view === "building" ? "on" : ""}
+          className={props.view === "office" ? "on" : ""}
           disabled={props.narrow}
-          title={props.narrow ? "widen the window for the building view" : ""}
-          onClick={() => props.onView("building")}
+          title={props.narrow ? "widen the window for the office view" : ""}
+          onClick={() => props.onView("office")}
         >
-          building
+          office
         </button>
       </div>
       <div className="agents">

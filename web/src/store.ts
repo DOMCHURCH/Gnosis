@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { Agent, ClientMessage, DomEvent, PermissionRequest, TranscriptItem } from "./types";
-import type { MessageLink, SubAgent } from "./floors";
+import type { Agent, ClientMessage, DomEvent, MessageLink, PermissionRequest, SubAgent, TranscriptItem } from "./types";
 
 export interface State {
   connected: boolean;
@@ -15,13 +14,34 @@ export interface State {
   subagents: SubAgent[];
   /** Transient tab-to-tab message links (message.sent), cleared after a moment. */
   links: MessageLink[];
+  /** Current activity label per agent — the office figure's `action`. */
+  actions: Record<number, string>;
+  /** Transient 'just spoke' flag per agent (set on turn.end, cleared after a beat). */
+  speaking: Record<number, boolean>;
+  /** Rolling floor-wide chat feed for the office view (from line events). */
+  officeFeed: FeedItem[];
   selected: number | null;
   permission: PermissionRequest | null;
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], selected: null, permission: null };
+export interface FeedItem { key: string; tabId: number; from: string; text: string; kind: string; time: string; }
 
-type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], selected: null, permission: null };
+
+type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number };
+
+function clock(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function argLabel(args: unknown): string {
+  if (args && typeof args === "object") {
+    const a = args as Record<string, unknown>;
+    const v = a.path ?? a.pattern ?? a.command ?? a.query ?? a.url;
+    if (typeof v === "string") return v.length > 24 ? v.slice(0, 23) + "…" : v;
+  }
+  return "";
+}
 
 function idByName(state: State, name: string): number | null {
   for (const id of state.order) if (state.agents[id]?.name === name) return id;
@@ -65,12 +85,37 @@ export function reducer(state: State, action: Action): State {
       return patchAgent(state, action.tabId, (a) => ({ ...a, mode: action.mode }));
     case "agent.busy":
       return patchAgent(state, action.tabId, (a) => ({ ...a, busy: action.busy }));
-    case "turn.end":
-      return patchAgent(state, action.tabId, (a) => ({ ...a, cost: a.cost + action.cost, tokens: a.tokens + action.tokens }));
-    case "line":
-      return withItem(state, action.tabId, action.item);
+    case "turn.end": {
+      // A turn just finished → the agent 'spoke' for a beat; its action becomes the
+      // last thing it said (or the last tool result).
+      const items = state.transcripts[action.tabId] ?? [];
+      const last = [...items].reverse().find((it) => (it.kind === "line" || it.kind === "system") && !!it.text);
+      const said = last && "text" in last ? last.text.slice(0, 60) : undefined;
+      const withCost = patchAgent(state, action.tabId, (a) => ({ ...a, cost: a.cost + action.cost, tokens: a.tokens + action.tokens }));
+      return {
+        ...withCost,
+        speaking: { ...withCost.speaking, [action.tabId]: true },
+        actions: said ? { ...withCost.actions, [action.tabId]: said } : withCost.actions,
+      };
+    }
+    case "@clearSpeaking":
+      return { ...state, speaking: { ...state.speaking, [action.tabId]: false } };
+    case "line": {
+      const next = withItem(state, action.tabId, action.item);
+      // Feed text lines (not rules) into the office chat rail.
+      if (action.item.kind !== "rule" && "text" in action.item && action.item.text) {
+        const from = action.item.kind === "user" ? "YOU" : state.agents[action.tabId]?.name ?? `#${action.tabId}`;
+        const feed = [...next.officeFeed, { key: `f${action.tabId}-${next.officeFeed.length}-${Date.now()}`, tabId: action.tabId, from, text: action.item.text, kind: action.item.kind, time: clock() }];
+        return { ...next, officeFeed: feed.slice(-40) };
+      }
+      return next;
+    }
     case "tool.start":
-      return { ...state, running: { ...state.running, [action.tabId]: action.tool } };
+      return {
+        ...state,
+        running: { ...state.running, [action.tabId]: action.tool },
+        actions: { ...state.actions, [action.tabId]: `${action.tool}${argLabel(action.args) ? " " + argLabel(action.args) : ""}` },
+      };
     case "tool.end":
       return withItem({ ...state, running: { ...state.running, [action.tabId]: null } }, action.tabId, {
         kind: "tool",
@@ -173,6 +218,11 @@ export function useDomSocket() {
         if (ev.type === "message.sent") {
           const key = `${ev.from}->${ev.to}`;
           setTimeout(() => dispatch({ type: "@clearLink", key }), 1600);
+        }
+        // 'speaking' is a brief post-turn state; clear it after a beat.
+        if (ev.type === "turn.end") {
+          const tabId = ev.tabId;
+          setTimeout(() => dispatch({ type: "@clearSpeaking", tabId }), 2500);
         }
       };
     };
