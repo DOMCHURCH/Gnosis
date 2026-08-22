@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { render } from "ink";
+import { maybeRebuild } from "./selfbuild.js";
 import { parseArgs, boot, BootError } from "./startup.js";
 import { runHeadless } from "./headless.js";
 import { runPipe } from "./pipe.js";
@@ -38,6 +39,13 @@ Set OPENROUTER_API_KEY in your environment, or put { "apiKey": "sk-or-..." } in 
 
 async function main() {
   const argv = process.argv.slice(2);
+
+  // Before anything loads the app: if the compiled output is stale relative to
+  // src/ or web/src/, rebuild and re-exec on the fresh build (skipped by
+  // DOM_NO_BUILD, and a no-op when already current). Resolved from the install
+  // root, so it's correct from any working directory.
+  maybeRebuild(argv);
+
   // `dom schedule ...` manages/fires scheduled runs — handled before flag parsing
   // so the subcommand words aren't mistaken for an opening prompt.
   if (argv[0] === "schedule") {

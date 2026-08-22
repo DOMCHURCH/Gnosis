@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.resolve(here, "../dist/cli.js");
 const fake = await fs.mkdtemp(path.join(os.tmpdir(), "dom-home-"));
-const env = { ...process.env, OPENROUTER_API_KEY: "test-key", USERPROFILE: fake, HOME: fake, NO_COLOR: "1" };
+const env = { ...process.env, OPENROUTER_API_KEY: "test-key", USERPROFILE: fake, HOME: fake, NO_COLOR: "1", DOM_NO_BUILD: "1" };
 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
