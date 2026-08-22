@@ -55,19 +55,21 @@ export function figureState(tab) {
   return "idle";
 }
 
-function previewLabel(p) {
-  if (!p) return "";
-  if (p.kind === "bash") return p.command;
-  if (p.kind === "http") return `${p.method} ${p.url}`;
-  if (p.kind === "diff") return `${p.tool} ${p.path}`;
-  return "";
-}
-
-function actionFor(state, tabId, st) {
-  if (st === "awaiting" && state.permission && state.permission.tabId === tabId) return previewLabel(state.permission.preview) || "awaiting approval";
-  const a = state.actions ? state.actions[tabId] : null;
-  if (a) return a;
-  return st === "thinking" ? "working" : st === "speaking" ? "…" : "idle";
+/** The tab's live ACTIVITY line — its state, never its message text:
+ *  - running a tool → the tool and its target (e.g. "read src/engine.ts")
+ *  - awaiting approval → "awaiting approval"
+ *  - streaming a reply (busy, no tool) → "responding"
+ *  - otherwise → "idle"
+ * The tool label comes from state.actions, which tool.start sets to the tool +
+ * its target; it is only consulted while a tool is actually running. */
+export function activityFor(state, tabId) {
+  const tab = state.agents && state.agents[tabId];
+  if (!tab) return "idle";
+  if (tab.awaitingPermission) return "awaiting approval";
+  const running = state.running && state.running[tabId];
+  if (running) return (state.actions && state.actions[tabId]) || running;
+  if (tab.busy) return "responding";
+  return "idle";
 }
 
 function recentText(state, tabId, kinds, n) {
@@ -99,7 +101,7 @@ export function floorFigures(state, tabId) {
   const jobs = (state.jobs && state.jobs[tabId]) || [];
   const st = figureState(tab);
   const figs = [
-    { id: `tab:${tabId}`, tabId, kind: "tab", name: tab.name, zone: zoneForTab(tab, { ownsSub: subs.length > 0 }), state: st, action: actionFor(state, tabId, st), output: recentText(state, tabId, "tool", 3), thinking: recentText(state, tabId, "line", 3) },
+    { id: `tab:${tabId}`, tabId, kind: "tab", name: tab.name, zone: zoneForTab(tab, { ownsSub: subs.length > 0 }), state: st, action: activityFor(state, tabId), output: recentText(state, tabId, "tool", 3), thinking: recentText(state, tabId, "line", 3) },
   ];
   for (const j of jobs) figs.push({ id: `job:${j.id}`, tabId, kind: "job", name: `job ${j.id}`, zone: "application", state: "thinking", action: j.command || "background job", output: [], thinking: [`background job ${j.id}`] });
   for (const s of subs) figs.push({ id: `sub:${s.key}`, tabId, kind: "subagent", name: (s.description || "task").slice(0, 8), zone: "subagents", state: "thinking", action: s.description || "sub-task", output: [], thinking: [`spawned by ${tab.name}`] });
@@ -215,7 +217,7 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor) {
     // Live session totals for the active tab (per-message cost stays gone).
     costLine: tab ? `${fmtTokens(tab.tokens)} tok · $${(tab.cost || 0).toFixed(4)}` : "",
     sessionTitle: tab ? `${String(idx + 1).padStart(2, "0")} · ${tab.name}` : "—",
-    sessionTask: tab ? actionFor(state, active, figureState(tab)) : "no session",
+    sessionTask: tab ? activityFor(state, active) : "no session",
     sessionAccent: floorAwaiting ? "#FBBF24" : working ? "#22D3EE" : "#2A2A38",
     sessionState: floorAwaiting ? `${floorAwaiting} BLOCKED` : working ? `${working} WORKING` : "PARKED",
     sessionStateColor: floorAwaiting ? "#FBBF24" : working ? "#22D3EE" : "#6B6B7B",

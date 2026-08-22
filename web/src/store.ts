@@ -115,16 +115,13 @@ export function reducer(state: State, action: Action): State {
     case "agent.busy":
       return patchAgent(state, action.tabId, (a) => ({ ...a, busy: action.busy }));
     case "turn.end": {
-      // A turn just finished → the agent 'spoke' for a beat; its action becomes the
-      // last thing it said (or the last tool result).
-      const items = state.transcripts[action.tabId] ?? [];
-      const last = [...items].reverse().find((it) => (it.kind === "line" || it.kind === "system") && !!it.text);
-      const said = last && "text" in last ? last.text.slice(0, 60) : undefined;
+      // A turn just finished → the agent 'spoke' for a beat (drives the speaking
+      // cue). The activity line is derived from live state (activityFor), never the
+      // last sentence, so we no longer stash message text as the action.
       const withCost = patchAgent(state, action.tabId, (a) => ({ ...a, cost: a.cost + action.cost, tokens: a.tokens + action.tokens }));
       return {
         ...withCost,
         speaking: { ...withCost.speaking, [action.tabId]: true },
-        actions: said ? { ...withCost.actions, [action.tabId]: said } : withCost.actions,
         // A finished turn ends the current message block and closes any open fence.
         turnEpoch: { ...withCost.turnEpoch, [action.tabId]: (withCost.turnEpoch[action.tabId] ?? 0) + 1 },
         inCode: { ...withCost.inCode, [action.tabId]: false },

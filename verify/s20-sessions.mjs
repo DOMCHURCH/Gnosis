@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const S = await import(pathToFileURL(path.resolve(here, "../web/src/sessions.js")).href);
-const { ZONES, ZONE_BY_ID, figureState, zoneForTab, floorFigures, layoutFloor, sessionsModel } = S;
+const { ZONES, ZONE_BY_ID, figureState, zoneForTab, floorFigures, layoutFloor, sessionsModel, activityFor } = S;
 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
@@ -45,11 +45,19 @@ ok("the tab's own figure is present and named", figs.some((f) => f.kind === "tab
 ok("a running job becomes an application figure with its command", figs.some((f) => f.kind === "job" && f.zone === "application" && f.action === "vite build"));
 ok("each task() sub-agent becomes a subagents figure", figs.filter((f) => f.kind === "subagent" && f.zone === "subagents").length === 2);
 ok("the busy tab in ask mode with sub-agents sits in coordinator (owns the task)", figs.find((f) => f.kind === "tab").zone === "coordinator");
-ok("the tab figure's action comes from state.actions", figs.find((f) => f.kind === "tab").action === "reconcile.ts");
+ok("the tab figure's action is its live activity (tool + target)", figs.find((f) => f.kind === "tab").action === "reconcile.ts");
 ok("RECENT OUTPUT is drawn from tool results", figs.find((f) => f.kind === "tab").output.some((o) => /read/.test(o)));
 
 // a plain plan-mode tab with no sub-agents → planning
 ok("a plan-mode tab with no sub-agents sits in planning", floorFigures(state, 2).find((f) => f.kind === "tab").zone === "planning");
+
+// --- activityFor: state, never message text ---------------------------------
+const A = (over) => ({ ...state, running: {}, actions: {}, ...over });
+ok("activity: running a tool shows the tool + target", activityFor(state, 1) === "reconcile.ts");
+ok("activity: awaiting approval", activityFor(A({ agents: { ...state.agents, 1: mk(1, "L", "ask", { awaitingPermission: true }) } }), 1) === "awaiting approval");
+ok("activity: streaming a reply (busy, no tool) → responding", activityFor(A({ agents: { ...state.agents, 1: mk(1, "L", "ask", { busy: true }) } }), 1) === "responding");
+ok("activity: otherwise idle", activityFor(A({ agents: { ...state.agents, 1: mk(1, "L", "ask", {}) } }), 1) === "idle");
+ok("activity is NEVER the last assistant sentence", activityFor(A({ actions: { 1: "double-entry passes" }, agents: { ...state.agents, 1: mk(1, "L", "ask", { busy: true }) } }), 1) === "responding");
 
 // --- layout: slot fill + overflow to OFF-FLOOR + "N/total" label ------------
 // 10 coding figures on one floor: 8 seated, 2 off-floor, label shows "8/10 · 2 off-floor".
