@@ -48,6 +48,8 @@ export interface ToolResult {
  * when several tabs' turns run concurrently. Absent outside the multi-tab TUI. */
 export interface TabRuntime {
   selfName(): string;
+  /** This tab's numeric id (for placing background-job figures on the web floor). */
+  selfId(): number;
   sendMessage(to: string, text: string): { ok: boolean; message: string };
   listTabs(): { name: string; purpose: string; active: boolean; busy: boolean }[];
 }

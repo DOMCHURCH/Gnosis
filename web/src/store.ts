@@ -37,6 +37,9 @@ export interface State {
   /** Bumped on every tool.end so the File Browser re-reads the tree after a write/
    * edit/bash may have changed files on disk (reuses the existing event stream). */
   fileEpoch: number;
+  /** Bumped on every job.start/job.end so the Background panel re-reads /api/jobs
+   * (pid/port/status come from that snapshot, not the lean lifecycle events). */
+  jobEpoch: number;
 }
 
 /** One raw chat line before grouping. `rule` marks a code-fence boundary; `text`
@@ -60,7 +63,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0 };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0 };
 
 /** Append a raw chat line, capping the buffer so the feed can't grow unbounded. */
 function pushLine(state: State, ln: RawLine): State {
@@ -200,13 +203,13 @@ export function reducer(state: State, action: Action): State {
     case "job.start": {
       const tid = action.tabId ?? state.selected;
       const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: [...(state.jobs[action.tabId] ?? []), { id: action.jobId, command: action.command }] } : state.jobs;
-      const next = { ...state, jobs };
+      const next = { ...state, jobs, jobEpoch: state.jobEpoch + 1 };
       return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId}: ${action.command}` });
     }
     case "job.end": {
       const tid = action.tabId ?? state.selected;
       const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: (state.jobs[action.tabId] ?? []).filter((j) => j.id !== action.jobId) } : state.jobs;
-      const next = { ...state, jobs };
+      const next = { ...state, jobs, jobEpoch: state.jobEpoch + 1 };
       return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId} ${action.status}` });
     }
     case "message.sent": {

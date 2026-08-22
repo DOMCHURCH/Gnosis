@@ -79,7 +79,21 @@ export type ClientMessage =
   | { type: "overlay.select"; id: string; value: string }
   | { type: "overlay.cancel"; id: string }
   | { type: "agent.create"; name?: string; purpose?: string }
-  | { type: "agent.close"; tabId: number };
+  | { type: "agent.close"; tabId: number }
+  | { type: "job.kill"; jobId: string };
+
+/** One background job as returned by GET /api/jobs (mirrors src/jobs.ts Job). */
+export interface JobInfo {
+  id: string;
+  command: string;
+  owner: string | null;
+  ownerTabId: number | null;
+  startedAt: number;
+  status: "running" | "done" | "error" | "killed";
+  exitCode: number | null;
+  pid?: number;
+  port: number | null;
+}
 
 /** A live selection overlay mirrored from the TUI (model/session/file/history). */
 export interface OverlayState {

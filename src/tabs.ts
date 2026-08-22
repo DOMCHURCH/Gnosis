@@ -327,6 +327,7 @@ export class TabsController {
   private runtimeFor(tab: Tab): TabRuntime {
     return {
       selfName: () => tab.name,
+      selfId: () => tab.id,
       sendMessage: (to, text) => this.route(tab.name, to, text),
       listTabs: () =>
         this.tabs.map((t) => ({

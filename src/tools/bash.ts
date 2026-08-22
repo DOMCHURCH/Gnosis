@@ -95,7 +95,7 @@ export async function runBash(args: BashArgs, signal?: AbortSignal, ctx?: ToolCo
   // NOT tied to the turn's AbortSignal — it outlives the turn and dies only with
   // the session or an explicit /kill.
   if (args.run_in_background) {
-    const job = jobs.launch(args.command, cwd, ctx?.tab?.selfName() ?? null);
+    const job = jobs.launch(args.command, cwd, ctx?.tab?.selfName() ?? null, ctx?.tab?.selfId() ?? null);
     return {
       output:
         `Started background job ${job.id}: ${args.command}\n` +

@@ -19,6 +19,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { WEB_ASSETS_DIR } from "./install.js";
 import { buildTree, readFileInRoot } from "./filetree.js";
+import { jobs, bridgeJobsToBus } from "./jobs.js";
 import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
 
@@ -165,6 +166,20 @@ async function handleApi(url: URL, bridge: AppBridge, res: http.ServerResponse):
     sendJson(res, 200, preview);
     return true;
   }
+  // Background jobs: the whole live list (pid/port/status/runtime source), and one
+  // job's captured output for the "view output" modal. Kill is a WS action, not a
+  // GET, so it can't be triggered by a stray navigation.
+  if (url.pathname === "/api/jobs") {
+    sendJson(res, 200, { jobs: jobs.list() });
+    return true;
+  }
+  if (url.pathname === "/api/job") {
+    const id = url.searchParams.get("id") ?? "";
+    const output = jobs.output(id);
+    if (output == null) { sendJson(res, 404, { error: "unknown job" }); return true; }
+    sendJson(res, 200, { id, output });
+    return true;
+  }
   return false;
 }
 
@@ -226,6 +241,11 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
     case "agent.close":
       bridge.onCloseAgent?.(Number(msg.tabId));
       break;
+    case "job.kill":
+      // SIGTERM the whole tree, escalating to SIGKILL (killTree's own behavior).
+      // The resulting job.end flows back through the bus like any other event.
+      jobs.kill(String(msg.jobId ?? ""));
+      break;
   }
 }
 
@@ -256,6 +276,9 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     if (ring.length > RING) ring.shift();
     for (const c of clients) c.send(w);
   });
+  // Forward background-job lifecycle (start/end) onto the same bus so browsers see
+  // jobs appear and finish. Torn down with the server (close()).
+  const jobsUnsub = bridgeJobsToBus(bridge.bus);
 
   const server = http.createServer((req, res) => {
     if (!hostOk(req.headers.host)) {
@@ -372,6 +395,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     close: () =>
       new Promise<void>((resolve) => {
         busUnsub();
+        jobsUnsub();
         for (const c of clients) {
           try {
             c.socket.destroy();

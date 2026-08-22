@@ -3,6 +3,7 @@ import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { OverlayModal } from "./OverlayModal";
 import { FileBrowser } from "./FileBrowser";
+import { BackgroundPanel } from "./BackgroundPanel";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 
@@ -103,6 +104,7 @@ export function App() {
         onApproveMsg={(permId) => answerId(permId, "yes")}
         onDenyMsg={(permId) => answerId(permId, "no")}
         leftPanel={<FileBrowser tabId={activeId} fileEpoch={state.fileEpoch} onAttach={attachFile} />}
+        rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
       />
       {state.overlay && (
         <OverlayModal

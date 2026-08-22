@@ -35,6 +35,8 @@ export interface SessionsProps {
   onDenyMsg: (permId?: string) => void;
   /** Optional collapsible panel rendered at the far left (the File Browser). */
   leftPanel?: ReactNode;
+  /** Optional collapsible panel rendered at the far right (the Background jobs panel). */
+  rightPanel?: ReactNode;
 }
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -62,6 +64,7 @@ export function SessionsFloor(props: SessionsProps) {
   const narrow = vw > 0 && vw < 900; // tablets: floor collapses to a zone strip
   const [floorOpen, setFloorOpen] = useState(false); // narrow: expand the full floor
   const [filesOpen, setFilesOpen] = useState(false);  // narrow/mobile: file browser bottom sheet
+  const [jobsOpen, setJobsOpen] = useState(false);    // narrow/mobile: background jobs bottom sheet
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
@@ -82,7 +85,7 @@ export function SessionsFloor(props: SessionsProps) {
         <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
           {/* File Browser: inline when there's room; a bottom sheet on narrow/mobile. */}
           {!narrow && props.leftPanel}
-          <div style={{ flex: "1 1 780px", minWidth: 0, display: mobile ? "none" : "flex", gap: 16, alignItems: "stretch" }}>
+          <div style={{ flex: "1 1 640px", minWidth: 0, display: mobile ? "none" : "flex", gap: 16, alignItems: "stretch" }}>
             {/* left rail — session selector (becomes a bottom tab bar on mobile) */}
             <div style={{ flex: "0 0 64px", width: 64, display: "flex", flexDirection: "column", gap: 8 }}>
               {model.floorTabs.map((f) => (
@@ -389,6 +392,8 @@ export function SessionsFloor(props: SessionsProps) {
               </div>
             </div>
           </div>
+          {/* Background jobs: inline when there's room; a bottom sheet on narrow/mobile. */}
+          {!narrow && props.rightPanel}
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2A2A38", paddingTop: 10 }}>
@@ -410,6 +415,21 @@ export function SessionsFloor(props: SessionsProps) {
               <button type="button" onClick={() => setFilesOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
             </div>
             <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", padding: "0 8px 8px" }}>{props.leftPanel}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Narrow/mobile: a JOBS button that opens the background panel as a bottom sheet. */}
+      {narrow && props.rightPanel && (
+        <button type="button" onClick={() => setJobsOpen(true)} title="background jobs" style={{ position: "fixed", right: 14, bottom: mobile ? 112 : 58, zIndex: 30, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#4ADE80", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>⎈ JOBS</button>
+      )}
+      {narrow && jobsOpen && props.rightPanel && (
+        <div onClick={() => setJobsOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: 45, display: "flex", alignItems: "flex-end" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2A2A38" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}>
+              <button type="button" onClick={() => setJobsOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
+            </div>
+            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", padding: "0 8px 8px" }}>{props.rightPanel}</div>
           </div>
         </div>
       )}
