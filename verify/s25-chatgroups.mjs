@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { groupChat } = await import(pathToFileURL(path.resolve(here, "../web/src/chatgroups.js")).href);
+const { groupChat, resolveApproval } = await import(pathToFileURL(path.resolve(here, "../web/src/chatgroups.js")).href);
 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
@@ -67,6 +67,27 @@ const L = (over) => ({ key: "k", from: "main", kind: "assistant", epoch: 0, time
 {
   const g = groupChat([L({ key: "blank", text: "   " })]);
   ok("a whitespace-only line produces no bubble", g.length === 0);
+}
+
+// 8) a tool call is its own block carrying the compact parts + full detail.
+{
+  const g = groupChat([L({ key: "t1", kind: "tool", tool: "Write", primary: "greet.py", secondary: "", ok: true, summary: "Wrote 9 lines to greet.py", detail: "print('hi')\n" })]);
+  ok("a tool call is its own block", g.length === 1 && g[0].kind === "tool");
+  ok("the tool block keeps the compact call parts + summary", g[0].tool.tool === "Write" && g[0].tool.primary === "greet.py" && g[0].tool.summary === "Wrote 9 lines to greet.py");
+  ok("the tool block carries the full detail for expansion", g[0].tool.detail === "print('hi')\n" && g[0].tool.ok === true);
+}
+
+// 9) resolveApproval rewrites the pending card to its outcome, in place.
+{
+  const lines = [L({ key: "p1", kind: "approval", text: "Needs approval: write greet.py", permId: "1:2", label: "write greet.py" })];
+  const approved = resolveApproval(lines, "1:2", "yes");
+  ok("resolveApproval marks it resolved with the outcome text", approved[0].resolved === "yes" && approved[0].text === "approved: write greet.py");
+  const denied = resolveApproval(lines, "1:2", "no");
+  ok("a 'no' answer denies", denied[0].resolved === "no" && denied[0].text === "denied: write greet.py");
+  ok("an unrelated id leaves the card untouched", resolveApproval(lines, "9:9", "yes")[0].resolved === undefined);
+  // a resolved card surfaces through groupChat with its outcome + no pending buttons.
+  const g = groupChat(approved);
+  ok("a resolved approval groups with resolved set (styled as outcome, no buttons)", g.length === 1 && g[0].isApproval === true && g[0].resolved === "yes" && g[0].segments[0].text === "approved: write greet.py");
 }
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");

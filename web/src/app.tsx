@@ -54,13 +54,19 @@ export function App() {
   const rawLines = activeId != null ? state.chatLines.filter((l) => l.tabId === activeId) : [];
   const chat: ChatMsg[] = groupChat(rawLines)
     .slice(-40)
-    .map((g) => ({
-      key: g.key, from: g.from, time: g.time, segments: g.segments,
-      color: g.from === "YOU" ? "#C9C9D6" : tabColor,
-      border: g.isApproval ? "#FBBF24" : "#2A2A38",
-      isApproval: g.isApproval && !!state.permission && state.permission.id === g.permId,
-      permId: g.permId,
-    }));
+    .map((g) => {
+      const pending = g.isApproval && !!state.permission && state.permission.id === g.permId && !g.resolved;
+      const border = g.resolved ? (g.resolved === "no" ? "#F87171" : "#4ADE80") : g.isApproval ? "#FBBF24" : "#2A2A38";
+      return {
+        key: g.key, from: g.from, time: g.time, kind: g.kind, segments: g.segments,
+        color: g.from === "YOU" ? "#C9C9D6" : tabColor,
+        border,
+        isApproval: pending,
+        permId: g.permId,
+        resolved: g.resolved,
+        tool: g.tool,
+      };
+    });
 
   const answer = (a: string) => { if (state.permission) send({ type: "permission", id: state.permission.id, answer: a }); if (debugRef.current.approvalCb) debugRef.current.approvalCb({ approved: a !== "no" }); };
   const answerId = (permId: string | undefined, a: string) => { if (permId) send({ type: "permission", id: permId, answer: a }); };

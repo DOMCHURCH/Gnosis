@@ -11,7 +11,7 @@ import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
 import { fetchModels } from "./models.js";
 import { listSessions, loadSession } from "./config.js";
-import { callParts, resultBody } from "./ui/toolrender.js";
+import { callParts, resultBody, toolDetail } from "./ui/toolrender.js";
 
 /** Build bus-mirroring callbacks for a tab's turn (no terminal rendering). The
  * engine itself already emits tool.start + permission.request; the controller
@@ -33,8 +33,9 @@ function mirrorCallbacks(tab: Tab, bridge: AppBridge): Callbacks {
         /* keep {} */
       }
       const { tool, primary, secondary } = callParts(call.name, args as Record<string, unknown>);
-      const body = resultBody({ isError: result.isError, verbose: false, name: call.name, args, output: result.output });
-      bus.emit({ type: "tool.end", tabId: id, tool, primary, secondary, ok: !result.isError, summary: body });
+      const summary = resultBody({ isError: result.isError, verbose: false, name: call.name, args, output: result.output });
+      const detail = toolDetail(call.name, args, result.output);
+      bus.emit({ type: "tool.end", tabId: id, tool, primary, secondary, ok: !result.isError, summary, detail });
     },
     onSystem: (text) => bus.emit({ type: "line", tabId: id, item: { kind: "system", text } }),
     onTurnCost: () => {}, // controller emits turn.end

@@ -4,7 +4,7 @@
 // indicator and the committed transcript entry share them, and so they're
 // unit-testable. Errors are never summarized — the caller passes the full text.
 
-import { diffLines } from "diff";
+import { diffLines, createPatch } from "diff";
 import { redactSecrets } from "../redact.js";
 
 const CONNECTOR = "  ⎿ ";
@@ -194,6 +194,31 @@ export function summarizeResult(name: string, args: any, output: string): string
 export function resultBody(opts: { isError: boolean; verbose: boolean; name: string; args: any; output: string }): string {
   if (opts.isError || opts.verbose) return opts.output;
   return summarizeResult(opts.name, opts.args, opts.output);
+}
+
+/** The full, expandable detail behind a tool line (the web chat's click-to-expand):
+ * the file content for write, a unified diff for edit, the full output for bash and
+ * everything else. Secrets are redacted, same as the compact call line. */
+export function toolDetail(name: string, args: any, output: string): string {
+  const a = args ?? {};
+  let detail: string;
+  if (name === "write") {
+    detail = String(a.content ?? output);
+  } else if (name === "edit") {
+    const list = Array.isArray(a.edits) && a.edits.length ? a.edits : [{ old_str: a.old_str, new_str: a.new_str }];
+    const diffs = list.map((ed: any, i: number) => {
+      const patch = createPatch(`edit ${i + 1}`, String(ed.old_str ?? ""), String(ed.new_str ?? ""));
+      return patch
+        .split("\n")
+        .filter((l) => !/^(Index:|={3,}|---|\+\+\+)/.test(l) && !l.startsWith("\\"))
+        .join("\n")
+        .trim();
+    });
+    detail = diffs.filter(Boolean).join("\n\n") || output;
+  } else {
+    detail = output;
+  }
+  return redactSecrets(detail).text;
 }
 
 /** The indented result block: a connector line plus aligned continuation lines. */

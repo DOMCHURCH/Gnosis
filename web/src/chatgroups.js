@@ -11,6 +11,18 @@
 //   { key, from, kind, epoch, time, text?, rule?: "open"|"close", lang?, permId? }
 // where kind is "user" | "assistant" | "system" | "approval".
 
+// Replace the pending approval card for `id` with its outcome, in place among the
+// raw lines: mark it resolved and rewrite the text to "approved: …" / "denied: …".
+// Shared by the store (on permission.resolved) so the render + logic can't drift.
+export function resolveApproval(lines, id, answer) {
+  const verb = answer === "no" ? "denied" : "approved";
+  return lines.map((l) =>
+    l.kind === "approval" && l.permId === id && !l.resolved
+      ? { ...l, resolved: answer, text: `${verb}: ${l.label ?? (l.text || "").replace(/^Needs approval:\s*/, "")}` }
+      : l,
+  );
+}
+
 export function groupChat(lines) {
   const groups = [];
   let cur = null;
@@ -28,9 +40,16 @@ export function groupChat(lines) {
   };
 
   for (const ln of lines) {
-    // Approvals are always their own sealed block (they carry action buttons).
+    // Approvals are always their own sealed block (buttons while pending; the
+    // outcome once resolved).
     if (ln.kind === "approval") {
-      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "approval", epoch: ln.epoch, segments: [{ type: "text", text: ln.text || "" }], code: false, isApproval: true, permId: ln.permId });
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "approval", epoch: ln.epoch, segments: [{ type: "text", text: ln.text || "" }], code: false, isApproval: true, permId: ln.permId, resolved: ln.resolved });
+      cur = null;
+      continue;
+    }
+    // Tool calls are their own sealed block (compact line, expandable to detail).
+    if (ln.kind === "tool") {
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "tool", epoch: ln.epoch, segments: [], code: false, isApproval: false, tool: { tool: ln.tool, primary: ln.primary, secondary: ln.secondary, ok: ln.ok, summary: ln.summary, detail: ln.detail } });
       cur = null;
       continue;
     }
@@ -50,6 +69,7 @@ export function groupChat(lines) {
 
   return groups
     .map((g) => ({ ...g, segments: g.segments.filter((s) => !(s.type === "code" && s.text === "")) }))
-    .filter((g) => g.segments.some((s) => s.type === "code" || s.text.trim() !== ""))
-    .map((g) => ({ key: g.key, from: g.from, time: g.time, kind: g.kind, isApproval: g.isApproval, permId: g.permId, segments: g.segments.map((s) => ({ type: s.type, lang: s.lang, text: s.text })) }));
+    // Keep tool + approval blocks (no text segments); drop empty text/code blocks.
+    .filter((g) => g.kind === "tool" || g.isApproval || g.segments.some((s) => s.type === "code" || s.text.trim() !== ""))
+    .map((g) => ({ key: g.key, from: g.from, time: g.time, kind: g.kind, isApproval: g.isApproval, permId: g.permId, resolved: g.resolved, tool: g.tool, segments: g.segments.map((s) => ({ type: s.type, lang: s.lang, text: s.text })) }));
 }

@@ -32,7 +32,7 @@ export type DomEvent =
   | { type: "turn.end"; tabId: number; cost: number; tokens: number }
   | { type: "line"; tabId: number; item: unknown }
   | { type: "tool.start"; tabId: number; tool: string; args: unknown }
-  | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string }
+  | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }
   | { type: "subagent.start"; tabId: number; description: string }
   | { type: "subagent.end"; tabId: number; description: string; result: string }
   | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }

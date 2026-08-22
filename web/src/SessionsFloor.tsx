@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { SessionsModel } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
-import type { ChatSegment } from "./chatgroups";
+import type { ChatSegment, ToolPayload } from "./chatgroups";
 
-export interface ChatMsg { key: string; from: string; color: string; time: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; }
+export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
@@ -329,26 +329,30 @@ export function SessionsFloor(props: SessionsProps) {
                 <span style={{ fontSize: 9, letterSpacing: 1, color: "#22D3EE" }}>LIVE</span>
               </div>
               <div style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-                {props.chat.map((m) => (
-                  <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
-                      <span style={{ width: 8, height: 8, background: m.color }} />
-                      <span style={{ color: m.color }}>{m.from}</span>
-                      <span style={{ color: "#6B6B7B" }}>{m.time}</span>
-                    </div>
-                    <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                      {m.segments.map((s, i) => s.type === "code"
-                        ? <CodeBlock key={i} lang={s.lang} text={s.text} />
-                        : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap" }}>{s.text}</div>)}
-                    </div>
-                    {m.isApproval && (
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button type="button" onClick={() => props.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
-                        <button type="button" onClick={() => props.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
+                {props.chat.map((m) => {
+                  if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
+                  const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
+                  return (
+                    <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
+                        <span style={{ width: 8, height: 8, background: m.color }} />
+                        <span style={{ color: m.color }}>{m.from}</span>
+                        <span style={{ color: "#6B6B7B" }}>{m.time}</span>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div style={{ fontSize: 11, lineHeight: 1.6, color: resolvedColor ?? "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {m.segments.map((s, i) => s.type === "code"
+                          ? <CodeBlock key={i} lang={s.lang} text={s.text} />
+                          : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap", color: resolvedColor ?? undefined }}>{s.text}</div>)}
+                      </div>
+                      {m.isApproval && (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" onClick={() => props.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
+                          <button type="button" onClick={() => props.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
                 <ChatInput value={props.draft} onChange={props.onDraft} onSubmit={props.onSend} commands={props.commands} requestFiles={props.requestFiles} tabId={props.activeTabId} />
@@ -377,6 +381,30 @@ function CodeBlock(props: { lang?: string; text: string }) {
     <div style={{ background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: "3px solid #22D3EE", padding: "6px 8px", overflowX: "auto" }}>
       <div style={{ fontSize: 9, letterSpacing: 1, color: "#4A4A58", marginBottom: 4, whiteSpace: "nowrap" }}>─── {props.lang || "code"}</div>
       <pre style={{ margin: 0, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre" }}>{props.text}</pre>
+    </div>
+  );
+}
+
+// A tool call in the chat rail: the compact TUI form — ● Write(greet.py) with a
+// ⎿ one-line summary — that expands on click to the full result (file content for
+// write, the diff for edit, the full output for bash). Collapsed by default.
+function ToolLine(props: { tool: ToolPayload }) {
+  const t = props.tool;
+  const [open, setOpen] = useState(false);
+  const dot = t.ok ? "#22D3EE" : "#F87171";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <div onClick={() => setOpen((o) => !o)} title="click to expand" style={{ cursor: "pointer", fontFamily: MONO, fontSize: 11, lineHeight: 1.5 }}>
+        <div style={{ color: "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <span style={{ color: dot }}>●</span> {t.tool}({t.primary}{t.secondary})
+        </div>
+        <div style={{ color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          ⎿ {t.summary || (t.ok ? "done" : "error")} <span style={{ color: "#4A4A58" }}>{open ? "▾" : "▸"}</span>
+        </div>
+      </div>
+      {open && t.detail ? (
+        <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: `3px solid ${dot}`, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre-wrap", maxHeight: 320, overflowY: "auto" }}>{t.detail}</pre>
+      ) : null}
     </div>
   );
 }

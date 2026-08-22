@@ -11,7 +11,7 @@ import { InputBar } from "./InputBar.js";
 import { Permission } from "./Permission.js";
 import { Picker, type PickItem } from "./Picker.js";
 import { C } from "./theme.js";
-import { callParts, callLine, resultLines, resultBody } from "./toolrender.js";
+import { callParts, callLine, resultLines, resultBody, toolDetail } from "./toolrender.js";
 import { AllTabs } from "./AllTabsView.js";
 import { layoutAllTabs, gridColumns } from "./alltabs.js";
 import type { Caps } from "./terminal.js";
@@ -50,7 +50,7 @@ type Log =
   | { id: number; kind: "user"; text: string }
   | { id: number; kind: "line"; text: string }
   | { id: number; kind: "rule"; lang: string }
-  | { id: number; kind: "tool"; tool: string; primary: string; secondary: string; ok: boolean; body: string }
+  | { id: number; kind: "tool"; tool: string; primary: string; secondary: string; ok: boolean; body: string; summary?: string; detail?: string }
   | { id: number; kind: "system"; text: string };
 
 type Overlay =
@@ -434,7 +434,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (!bus) return;
     try {
       if (item.kind === "tool") {
-        bus.emit({ type: "tool.end", tabId, tool: item.tool, primary: item.primary, secondary: item.secondary, ok: item.ok, summary: item.body });
+        // summary is the compact one-liner; detail is the full result (both computed
+        // in onToolResult so the web is independent of the TUI's /verbose toggle).
+        bus.emit({ type: "tool.end", tabId, tool: item.tool, primary: item.primary, secondary: item.secondary, ok: item.ok, summary: item.summary ?? item.body, detail: item.detail ?? item.body });
       } else if (item.kind !== "banner") {
         bus.emit({ type: "line", tabId, item });
       }
@@ -532,7 +534,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       try { args = call.args ? JSON.parse(call.args) : {}; } catch { /* keep {} */ }
       const { tool, primary, secondary } = callParts(call.name, args);
       const body = resultBody({ isError: result.isError, verbose: verboseRef.current, name: call.name, args, output: result.output });
-      emitToTab(tab, { kind: "tool", tool, primary, secondary, ok: !result.isError, body });
+      // The web chat wants the compact summary (always) + the full detail (for
+      // click-to-expand), independent of the TUI's /verbose setting.
+      const summary = resultBody({ isError: result.isError, verbose: false, name: call.name, args, output: result.output });
+      const detail = toolDetail(call.name, args, result.output);
+      emitToTab(tab, { kind: "tool", tool, primary, secondary, ok: !result.isError, body, summary, detail });
     },
     onSystem: (text) => emitToTab(tab, { kind: "system", text }),
     onTurnCost: (c) => {

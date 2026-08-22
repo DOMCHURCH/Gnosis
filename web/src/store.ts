@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { Agent, ClientMessage, DomEvent, MessageLink, OverlayState, PermissionRequest, SubAgent, TranscriptItem } from "./types";
+import { resolveApproval } from "./chatgroups.js";
 
 export interface State {
   connected: boolean;
@@ -36,8 +37,15 @@ export interface State {
 }
 
 /** One raw chat line before grouping. `rule` marks a code-fence boundary; `text`
- * is a prose/code/approval line. `kind`: user | assistant | system | approval. */
-export interface RawLine { key: string; tabId: number; from: string; kind: string; epoch: number; time: string; text?: string; rule?: "open" | "close"; lang?: string; permId?: string; }
+ * is a prose/approval line. `kind`: user | assistant | system | approval | tool. */
+export interface RawLine {
+  key: string; tabId: number; from: string; kind: string; epoch: number; time: string;
+  text?: string; rule?: "open" | "close"; lang?: string;
+  // approval (kind "approval"): the previewed action, and the answer once resolved.
+  permId?: string; label?: string; resolved?: string;
+  // tool call (kind "tool"): the compact call parts + summary, and the full detail.
+  tool?: string; primary?: string; secondary?: string; ok?: boolean; summary?: string; detail?: string;
+}
 export interface CommandItem { name: string; args?: string; desc: string; }
 
 function previewLabel(p: unknown): string {
@@ -160,8 +168,8 @@ export function reducer(state: State, action: Action): State {
         running: { ...state.running, [action.tabId]: action.tool },
         actions: { ...state.actions, [action.tabId]: `${action.tool}${argLabel(action.args) ? " " + argLabel(action.args) : ""}` },
       };
-    case "tool.end":
-      return withItem({ ...state, running: { ...state.running, [action.tabId]: null } }, action.tabId, {
+    case "tool.end": {
+      const withTx = withItem({ ...state, running: { ...state.running, [action.tabId]: null } }, action.tabId, {
         kind: "tool",
         tool: action.tool,
         primary: action.primary,
@@ -169,6 +177,12 @@ export function reducer(state: State, action: Action): State {
         ok: action.ok,
         summary: action.summary,
       });
+      // Also render the call in the chat rail (compact line, expandable to detail).
+      const epoch = state.turnEpoch[action.tabId] ?? 0;
+      const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
+      const ln: RawLine = { key: `t${action.tabId}-${withTx.chatLines.length}-${Date.now()}`, tabId: action.tabId, from, kind: "tool", epoch, time: clock(), tool: action.tool, primary: action.primary, secondary: action.secondary, ok: action.ok, summary: action.summary, detail: action.detail };
+      return pushLine(withTx, ln);
+    }
     case "subagent.start":
       return withItem(
         { ...state, subagents: [...state.subagents, { parentId: action.tabId, description: action.description, key: `${action.tabId}:${action.description}:${state.subagents.length}` }] },
@@ -204,12 +218,16 @@ export function reducer(state: State, action: Action): State {
       const withFlag = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: true }));
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
       const epoch = state.turnEpoch[action.tabId] ?? 0;
-      const ln: RawLine = { key: `p${action.id}`, tabId: action.tabId, from, kind: "approval", epoch, time: clock(), text: `Needs approval: ${previewLabel(action.preview)}`, permId: action.id };
+      const label = previewLabel(action.preview);
+      const ln: RawLine = { key: `p${action.id}`, tabId: action.tabId, from, kind: "approval", epoch, time: clock(), text: `Needs approval: ${label}`, permId: action.id, label };
       return { ...pushLine(withFlag, ln), permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
     }
     case "permission.resolved": {
       const cleared = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: false }));
-      return cleared.permission?.id === action.id ? { ...cleared, permission: null } : cleared;
+      // Replace the pending amber card with the outcome, in resolved styling —
+      // whichever client answered first, the card here updates.
+      const next = { ...cleared, chatLines: resolveApproval(cleared.chatLines, action.id, action.answer) };
+      return next.permission?.id === action.id ? { ...next, permission: null } : next;
     }
     case "overlay.open":
       return { ...state, overlay: { id: action.id, tabId: action.tabId, kind: action.kind, title: action.title, items: action.items, selected: action.selected } };
