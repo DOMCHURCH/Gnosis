@@ -62,9 +62,15 @@ const dim = (s: string): string => `\x1b[2m${s}\x1b[0m`;
 export function maybeRebuild(argv: string[]): void {
   if (process.env.DOM_NO_BUILD) return;
   if (!isStale()) return;
+  // Guard: only ever build a real package root. INSTALL_ROOT is resolved from the
+  // binary; if it has no package.json (an odd/global install with no sources) there
+  // is nothing to build — never fall back to spawning npm in the wrong directory.
+  if (!existsSync(path.join(INSTALL_ROOT, "package.json"))) return;
 
   process.stderr.write(dim("rebuilding…") + "\n");
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  // The build ALWAYS runs in INSTALL_ROOT (the repo), never process.cwd() — the
+  // working directory follows the user, the install root does not.
   const build = spawnSync(npm, ["run", "build"], {
     cwd: INSTALL_ROOT,
     stdio: ["ignore", "pipe", "pipe"],
