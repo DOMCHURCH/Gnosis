@@ -1,0 +1,369 @@
+import type { SessionsModel } from "./sessions";
+import { ZONE_BY_ID } from "./sessions.js";
+
+export interface ChatMsg { key: string; from: string; color: string; time: string; text: string; border: string; isApproval: boolean; permId?: string; }
+export interface SelDetail {
+  id: string; name: string; zone: string; color: string; stateColor: string; state: string;
+  action: string; output: string[]; thinking: string[]; awaiting: boolean;
+}
+
+export interface SessionsProps {
+  model: SessionsModel;
+  chat: ChatMsg[];
+  sel: SelDetail | null;
+  draft: string;
+  steer: string;
+  onSelectFloor: (id: number) => void;
+  onAddFloor: () => void;
+  onSpawn: () => void;
+  onCycle: () => void;
+  onReset: () => void;
+  onSelectFig: (id: string | null) => void;
+  onClose: () => void;
+  onApprove: () => void;
+  onDeny: () => void;
+  onDismiss: () => void;
+  onSteer: () => void;
+  onSteerDraft: (v: string) => void;
+  onDraft: (v: string) => void;
+  onSend: () => void;
+  onApproveMsg: (permId?: string) => void;
+  onDenyMsg: (permId?: string) => void;
+}
+
+const MONO = "'JetBrains Mono', ui-monospace, monospace";
+
+export function SessionsFloor(props: SessionsProps) {
+  const { model, sel } = props;
+  const L = model.layout;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 1560, display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* header */}
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2A2A38", paddingBottom: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+            <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>dom</span>
+            <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2, whiteSpace: "nowrap" }}>TERMINAL SESSIONS · ONE FLOOR EACH</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 11, letterSpacing: 2, color: "#6B6B7B" }}>
+            <span style={{ color: "#FBBF24", whiteSpace: "nowrap" }}>{model.awaitingLine}</span>
+            <span style={{ whiteSpace: "nowrap" }}>{model.globalLine}</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 780px", minWidth: 0, display: "flex", gap: 16, alignItems: "stretch" }}>
+            {/* left rail — session selector */}
+            <div style={{ flex: "0 0 64px", width: 64, display: "flex", flexDirection: "column", gap: 8 }}>
+              {model.floorTabs.map((f) => (
+                <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} style={{ fontFamily: "inherit", width: 64, height: 62, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderLeft: `5px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: 0 }}>
+                  <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: 1 }}>{f.num}</span>
+                  <span style={{ width: 8, height: 8, background: f.dot, ...(f.dotAnim || {}) }} />
+                </button>
+              ))}
+              <button type="button" onClick={props.onAddFloor} style={{ fontFamily: "inherit", width: 64, height: 40, background: "#101017", color: "#6B6B7B", border: "2px dashed #2A2A38", cursor: "pointer", fontSize: 15 }}>+</button>
+              <div style={{ fontSize: 8, letterSpacing: 1, color: "#4A4A58", textAlign: "center", lineHeight: 1.5, paddingTop: 4 }}>CLI<br />WINDOWS</div>
+            </div>
+
+            {/* center column */}
+            <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 3, whiteSpace: "nowrap" }}>{model.sessionTitle}</span>
+                <span style={{ fontSize: 13, color: "#6B6B7B", letterSpacing: 1, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTask}</span>
+                <span style={{ fontSize: 10, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
+              </div>
+
+              <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>OFFICE FLOOR · CLICK AN AGENT</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" onClick={props.onSpawn} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #22D3EE", padding: "5px 10px", cursor: "pointer" }}>+ AGENT</button>
+                    <button type="button" onClick={props.onCycle} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer" }}>STEP STATES</button>
+                    <button type="button" onClick={props.onReset} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#6B6B7B", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer" }}>RESET</button>
+                  </div>
+                </div>
+
+                <div style={{ position: "relative" }}>
+                  <div style={{ overflowX: "auto", overflowY: "hidden" }}>
+                    <div style={{ position: "relative", minWidth: 1120 }}>
+                      <svg viewBox="0 0 1440 900" width="100%" shapeRendering="crispEdges" style={{ display: "block" }} xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <pattern id="tile" width="32" height="32" patternUnits="userSpaceOnUse">
+                            <rect x="0" y="0" width="32" height="32" fill="#23202A" />
+                            <rect x="0" y="0" width="32" height="2" fill="#282430" />
+                            <rect x="0" y="0" width="2" height="32" fill="#282430" />
+                          </pattern>
+                          <g id="agBody">
+                            <rect x="16" y="4" width="32" height="12" fill="#3A3038" />
+                            <rect x="16" y="16" width="32" height="20" fill="#C9C9D6" />
+                            <rect x="20" y="24" width="8" height="8" fill="#0D0D12" />
+                            <rect x="36" y="24" width="8" height="8" fill="#0D0D12" />
+                            <rect x="12" y="36" width="40" height="32" fill="currentColor" />
+                            <rect x="24" y="36" width="16" height="8" fill="#C9C9D6" />
+                            <rect x="16" y="68" width="12" height="24" fill="#3A3038" />
+                            <rect x="36" y="68" width="12" height="24" fill="#3A3038" />
+                            <rect x="12" y="92" width="16" height="4" fill="#0D0D12" />
+                            <rect x="36" y="92" width="16" height="4" fill="#0D0D12" />
+                          </g>
+                          <g id="armL"><rect x="4" y="40" width="8" height="24" fill="currentColor" fillOpacity="0.6" /></g>
+                          <g id="armR"><rect x="52" y="40" width="8" height="24" fill="currentColor" fillOpacity="0.6" /></g>
+                          <g id="desk">
+                            <rect x="4" y="-48" width="52" height="32" fill="#0F0D16" stroke="#CFC8B7" strokeWidth="2" />
+                            <rect x="56" y="-44" width="8" height="32" fill="#8E8878" />
+                            <rect x="8" y="-44" width="44" height="14" fill="currentColor" fillOpacity="0.9" />
+                            <rect x="8" y="-28" width="26" height="4" fill="#3A3038" />
+                            <rect x="24" y="-16" width="12" height="8" fill="#B4AC9A" />
+                            <rect x="16" y="-8" width="28" height="6" fill="#CFC8B7" />
+                            <rect x="16" y="-2" width="28" height="4" fill="#8E8878" />
+                            <rect x="0" y="0" width="112" height="22" fill="#4A4252" />
+                            <rect x="0" y="0" width="112" height="4" fill="#584F62" />
+                            <rect x="0" y="22" width="112" height="14" fill="#332C3B" />
+                            <rect x="112" y="4" width="8" height="32" fill="#292330" />
+                            <rect x="0" y="36" width="120" height="4" fill="#1A171F" />
+                            <rect x="60" y="4" width="40" height="10" fill="#2A2A38" />
+                            <rect x="60" y="14" width="40" height="4" fill="#1B1B24" />
+                          </g>
+                          <g id="deskEmpty">
+                            <rect x="4" y="-48" width="52" height="32" fill="#12101A" stroke="#3A3441" strokeWidth="2" />
+                            <rect x="56" y="-44" width="8" height="32" fill="#3A3441" />
+                            <rect x="24" y="-16" width="12" height="8" fill="#3A3441" />
+                            <rect x="16" y="-8" width="28" height="6" fill="#4A4252" />
+                            <rect x="0" y="0" width="112" height="22" fill="#332C3B" />
+                            <rect x="0" y="0" width="112" height="4" fill="#3D3547" />
+                            <rect x="0" y="22" width="112" height="14" fill="#241F2B" />
+                            <rect x="112" y="4" width="8" height="32" fill="#1F1B25" />
+                            <rect x="60" y="4" width="40" height="10" fill="#2A2430" />
+                          </g>
+                          <g id="busy">
+                            <rect x="0" y="0" width="8" height="8" fill="currentColor" style={{ animation: "domDot 1.2s steps(1) infinite" }} />
+                            <rect x="12" y="0" width="8" height="8" fill="currentColor" style={{ animation: "domDot 1.2s steps(1) .2s infinite" }} />
+                            <rect x="24" y="0" width="8" height="8" fill="currentColor" style={{ animation: "domDot 1.2s steps(1) .4s infinite" }} />
+                          </g>
+                          <g id="await" style={{ animation: "domBlink 1.1s steps(1) infinite" }}>
+                            <rect x="0" y="0" width="24" height="24" fill="#FBBF24" />
+                            <rect x="10" y="4" width="4" height="10" fill="#0D0D12" />
+                            <rect x="10" y="16" width="4" height="4" fill="#0D0D12" />
+                          </g>
+                          <g id="speak" style={{ animation: "domBob 1.6s ease-in-out infinite" }}>
+                            <rect x="0" y="0" width="24" height="24" fill="#12101A" stroke="#CFC8B7" strokeWidth="2" />
+                            <rect x="6" y="10" width="4" height="4" fill="#C9C9D6" />
+                            <rect x="14" y="10" width="4" height="4" fill="#C9C9D6" />
+                          </g>
+                          <g id="plant">
+                            <rect x="4" y="8" width="8" height="16" fill="#4ADE80" fillOpacity="0.55" />
+                            <rect x="12" y="0" width="8" height="24" fill="#4ADE80" fillOpacity="0.7" />
+                            <rect x="20" y="10" width="8" height="14" fill="#4ADE80" fillOpacity="0.45" />
+                            <rect x="6" y="24" width="20" height="6" fill="#4A4252" />
+                            <rect x="6" y="30" width="20" height="12" fill="#332C3B" />
+                            <rect x="26" y="26" width="6" height="16" fill="#241F2B" />
+                            <rect x="6" y="42" width="26" height="4" fill="#1A171F" />
+                          </g>
+                        </defs>
+
+                        <rect x="0" y="0" width="1440" height="900" fill="#12111A" />
+                        <rect x="16" y="16" width="1408" height="868" fill="#CFC8B7" />
+                        <rect x="32" y="32" width="1376" height="836" fill="url(#tile)" />
+
+                        {L.zonePlates.map((z) => (
+                          <rect key={z.key} x={z.x} y={z.y} width={z.w} height={z.h} fill={z.fill} fillOpacity={z.op} />
+                        ))}
+                        {L.zoneCurbs.map((c) => (
+                          <rect key={c.key} x={c.x} y={c.y} width={c.w} height={c.h} fill={c.fill} fillOpacity={c.op} />
+                        ))}
+
+                        <rect x="32" y="32" width="1376" height="56" fill="#6B3335" />
+                        <rect x="32" y="32" width="1376" height="8" fill="#5E2C2F" />
+                        <rect x="32" y="80" width="1376" height="8" fill="#B4AC9A" />
+                        <rect x="120" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="360" y="44" width="112" height="28" fill="#22D3EE" fillOpacity="0.2" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="600" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="840" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="1080" y="44" width="112" height="28" fill="#FBBF24" fillOpacity="0.18" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="1272" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
+
+                        <rect x="408" y="96" width="8" height="120" fill="#CFC8B7" />
+                        <rect x="408" y="280" width="8" height="120" fill="#CFC8B7" />
+                        <rect x="768" y="96" width="8" height="176" fill="#CFC8B7" />
+                        <rect x="768" y="336" width="8" height="524" fill="#CFC8B7" />
+                        <rect x="32" y="400" width="280" height="8" fill="#CFC8B7" />
+                        <rect x="392" y="400" width="384" height="8" fill="#CFC8B7" />
+                        <rect x="776" y="400" width="200" height="8" fill="#CFC8B7" />
+                        <rect x="1056" y="400" width="352" height="8" fill="#CFC8B7" />
+
+                        <rect x="600" y="852" width="176" height="16" fill="#B4AC9A" />
+                        <rect x="608" y="856" width="80" height="12" fill="#22D3EE" fillOpacity="0.35" />
+                        <rect x="696" y="856" width="72" height="12" fill="#12101A" />
+
+                        <rect x="264" y="196" width="140" height="88" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="276" y="208" width="88" height="12" fill="#E879F9" style={{ animation: "domScan 2.4s ease-in-out infinite" }} />
+                        <rect x="276" y="228" width="24" height="12" fill="#818CF8" />
+                        <rect x="308" y="228" width="24" height="12" fill="#22D3EE" />
+                        <rect x="340" y="228" width="24" height="12" fill="#4ADE80" />
+                        <rect x="276" y="248" width="108" height="8" fill="#3A3038" />
+                        <use href="#plant" x="60" y="196" />
+
+                        <rect x="1136" y="150" width="248" height="152" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
+                        <rect x="1148" y="162" width="224" height="20" fill="#1B1922" />
+                        <rect x="1156" y="168" width="8" height="8" fill="#4ADE80" />
+                        <rect x="1172" y="168" width="8" height="8" fill="#3A3038" />
+                        <rect x="1188" y="168" width="8" height="8" fill="#3A3038" />
+                        <rect x="1148" y="194" width="120" height="24" fill="#4ADE80" fillOpacity="0.85" />
+                        <rect x="1148" y="228" width="176" height="10" fill="#3A3038" />
+                        <rect x="1148" y="246" width="136" height="10" fill="#3A3038" />
+                        <rect x="1148" y="266" width="88" height="12" fill="#4ADE80" style={{ animation: "domScan 1.8s ease-in-out infinite" }} />
+                        <use href="#plant" x="728" y="188" />
+
+                        <rect x="1320" y="548" width="72" height="12" fill="#4A4252" />
+                        <rect x="1320" y="560" width="72" height="180" fill="#2A2328" stroke="#3A3441" strokeWidth="2" />
+                        <rect x="1332" y="576" width="48" height="8" fill="#22D3EE" fillOpacity="0.5" />
+                        <rect x="1332" y="594" width="48" height="8" fill="#3A3038" />
+                        <rect x="1332" y="612" width="48" height="8" fill="#3A3038" />
+                        <rect x="1332" y="630" width="48" height="8" fill="#3A3038" />
+                        <rect x="1332" y="648" width="48" height="8" fill="#22D3EE" fillOpacity="0.35" />
+                        <rect x="1332" y="666" width="48" height="8" fill="#3A3038" />
+                        <rect x="1320" y="740" width="80" height="4" fill="#1A171F" />
+
+                        {L.freeDesks.map((d) => (
+                          <use key={d.key} href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
+                        ))}
+
+                        {L.placed.map((a) => (
+                          <g key={a.key} onClick={() => props.onSelectFig(a.id)} style={{ cursor: "pointer" }}>
+                            <use href="#desk" x={a.deskX} y={a.deskY} style={{ color: a.color }} />
+                            <use href="#agBody" x={a.agX} y={a.agY} style={{ color: a.color }} opacity={a.opacity} />
+                            <use href="#armL" x={a.agX} y={a.agY} style={{ color: a.color, ...(a.armL || {}) }} opacity={a.opacity} />
+                            <use href="#armR" x={a.agX} y={a.agY} style={{ color: a.color, ...(a.armR || {}) }} opacity={a.opacity} />
+                            {a.isThinking && <use href="#busy" x={a.cueX} y={a.cueY} style={{ color: a.color }} />}
+                            {a.isAwaiting && <use href="#await" x={a.cueX} y={a.cueYBig} />}
+                            {a.isSpeaking && <use href="#speak" x={a.cueX} y={a.cueYBig} />}
+                            {a.selected && <rect x={a.ringX} y={a.ringY} width="80" height="112" fill="none" stroke={a.color} strokeWidth="4" />}
+                          </g>
+                        ))}
+                      </svg>
+
+                      <div style={{ position: "absolute", inset: 0, containerType: "size", pointerEvents: "none" }}>
+                        {L.zoneLabels.map((z) => (
+                          <div key={z.key} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap" }}>
+                            <span style={{ fontSize: "1.45cqw", fontWeight: 700, letterSpacing: "0.22cqw", color: z.accent }}>{z.name}</span>
+                            <span style={{ fontSize: "1.05cqw", letterSpacing: "0.08cqw", color: z.countColor }}>{z.count}</span>
+                          </div>
+                        ))}
+                        {L.nameTags.map((n) => (
+                          <div key={n.key} style={{ position: "absolute", left: n.left, top: n.top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "0.4cqw", background: "#0D0D12E6", border: `0.16cqw solid ${n.border}`, padding: "0.25cqw 0.5cqw", whiteSpace: "nowrap" }}>
+                            <span style={{ width: "0.6cqw", height: "0.6cqw", background: n.stateColor }} />
+                            <span style={{ fontSize: "1cqw", letterSpacing: "0.08cqw", color: "#C9C9D6" }}>{n.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {sel && (
+                    <div style={{ position: "absolute", right: 12, bottom: 12, width: "min(330px, 92%)", maxHeight: "92%", overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: "2px solid #2A2A38" }}>
+                        <span style={{ width: 8, height: 8, background: sel.stateColor }} />
+                        <span style={{ fontSize: 12, letterSpacing: 2, color: sel.color }}>{sel.name}</span>
+                        <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", marginLeft: "auto" }}>{sel.zone}</span>
+                        <button type="button" onClick={props.onClose} style={{ fontFamily: "inherit", fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
+                      </div>
+                      <div style={{ padding: 11, display: "flex", flexDirection: "column", gap: 9 }}>
+                        <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 8, textWrap: "pretty" }}>{sel.action}</div>
+                        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>RECENT OUTPUT</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, background: "#0B0B10", border: "2px solid #2A2A38", padding: 8, maxHeight: 88, overflowY: "auto" }}>
+                          {(sel.output.length ? sel.output : ["no output yet"]).map((o, i) => (
+                            <div key={i} style={{ fontSize: 10, lineHeight: 1.5, color: "#6B6B7B", whiteSpace: "pre-wrap" }}>{o}</div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>THINKING</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 88, overflowY: "auto" }}>
+                          {(sel.thinking.length ? sel.thinking : ["no thinking recorded"]).map((t, i) => (
+                            <div key={i} style={{ fontSize: 10, lineHeight: 1.5, color: "#8A8A9B", textWrap: "pretty" }}>{t}</div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" onClick={props.onApprove} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: sel.awaiting ? "#FBBF24" : "#15151C", color: sel.awaiting ? "#0D0D12" : "#6B6B7B", border: 0, padding: "7px 8px", cursor: "pointer", flex: 1 }}>APPROVE</button>
+                          <button type="button" onClick={props.onDeny} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DENY</button>
+                          <button type="button" onClick={props.onDismiss} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#E879F9", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DISMISS</button>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: "6px 7px", outline: "none", fontFamily: MONO }} />
+                          <button type="button" onClick={props.onSteer} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "6px 9px", cursor: "pointer" }}>STEER</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* right column — roster + chat */}
+          <div style={{ flex: "1 1 320px", minWidth: "min(100%, 300px)", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", maxHeight: 320 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+                <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>WHO IS WORKING</span>
+                <span style={{ fontSize: 9, letterSpacing: 1, color: model.offFloorColor }}>{model.offFloorLine}</span>
+              </div>
+              <div style={{ overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                {L.roster.map((r) => (
+                  <div key={r.key} onClick={() => props.onSelectFig(r.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", cursor: "pointer", borderLeft: `3px solid ${r.accent}`, background: r.bg, opacity: r.opacity }}>
+                    <span style={{ fontSize: 11, letterSpacing: 1, color: r.color, whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.action}</span>
+                    <span style={{ fontSize: 9, letterSpacing: 1, color: r.stateColor, whiteSpace: "nowrap" }}>{r.tag}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ background: "#15151C", border: "2px solid #2A2A38", flex: "1 1 auto", minHeight: 340, display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+                <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
+                <span style={{ fontSize: 9, letterSpacing: 1, color: "#22D3EE" }}>LIVE</span>
+              </div>
+              <div style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+                {props.chat.map((m) => (
+                  <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
+                      <span style={{ width: 8, height: 8, background: m.color }} />
+                      <span style={{ color: m.color }}>{m.from}</span>
+                      <span style={{ color: "#6B6B7B" }}>{m.time}</span>
+                    </div>
+                    <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, textWrap: "pretty" }}>{m.text}</div>
+                    {m.isApproval && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button type="button" onClick={() => props.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
+                        <button type="button" onClick={() => props.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: "2px solid #2A2A38", padding: "7px 9px" }}>
+                  <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
+                  <input type="text" value={props.draft} onChange={(e) => props.onDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSend(); }} placeholder="message this session…" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
+                  <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
+                  <button type="button" onClick={props.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2A2A38", paddingTop: 10 }}>
+          <span>window.domOffice · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
+          <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// re-export so App can resolve a figure's zone label without importing sessions.js twice
+export function zoneLabel(zoneId: string): string {
+  return (ZONE_BY_ID as Record<string, { name: string }>)[zoneId]?.name ?? "";
+}

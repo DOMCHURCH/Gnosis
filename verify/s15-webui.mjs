@@ -170,7 +170,7 @@ let html = "";
 try { html = await fs.readFile(webIndex, "utf8"); } catch {}
 ok("dist/web/index.html exists (vite build ran)", html.length > 1000);
 ok("the bundle is a single self-contained file (JS inlined)", /<script/.test(html) && !/src=["']\.\/assets/.test(html));
-ok("the bundle contains the real app (not the placeholder)", html.includes("new agent") && html.includes("approval needed"));
+ok("the bundle contains the real app (not the placeholder)", html.includes("TERMINAL SESSIONS") && html.includes("WHO IS WORKING"));
 
 b.close();
 await server.close();

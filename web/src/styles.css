@@ -105,9 +105,9 @@ body {
 .viewtabs button { flex: 1; padding: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--dim); border-radius: 8px; cursor: pointer; font: inherit; }
 .viewtabs button.on { color: var(--cyan); border-color: var(--cyan); }
 
-/* --- office floor (ported mockup animations) --- */
-.office-wrap { flex: 1; overflow: auto; }
-.office-wrap button:hover { filter: brightness(1.12); }
+/* --- session floors (ported mockup animations) --- */
+button:hover { filter: brightness(1.12); }
+@keyframes domTab { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 @keyframes domArmA { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
 @keyframes domArmB { 0%, 100% { transform: translateY(6px); } 50% { transform: translateY(0); } }
 @keyframes domDot { 0%, 30% { opacity: 0.15; } 40%, 70% { opacity: 1; } 80%, 100% { opacity: 0.15; } }

@@ -8,8 +8,8 @@ export interface State {
   transcripts: Record<number, TranscriptItem[]>;
   /** Currently-running tool label per agent (from tool.start), cleared on end. */
   running: Record<number, string | null>;
-  /** Running background job ids per agent (job.start/end). */
-  jobs: Record<number, string[]>;
+  /** Running background jobs per agent (job.start/end) — id + command for the figure. */
+  jobs: Record<number, { id: string; command: string }[]>;
   /** Live sub-agents (subagent.start/end) — figures on the Sub-agents floor. */
   subagents: SubAgent[];
   /** Transient tab-to-tab message links (message.sent), cleared after a moment. */
@@ -24,7 +24,16 @@ export interface State {
   permission: PermissionRequest | null;
 }
 
-export interface FeedItem { key: string; tabId: number; from: string; text: string; kind: string; time: string; }
+export interface FeedItem { key: string; tabId: number; from: string; text: string; kind: string; time: string; permId?: string; }
+
+function previewLabel(p: unknown): string {
+  const q = p as { kind?: string; command?: string; method?: string; url?: string; tool?: string; path?: string };
+  if (!q) return "";
+  if (q.kind === "bash") return q.command ?? "";
+  if (q.kind === "http") return `${q.method} ${q.url}`;
+  if (q.kind === "diff") return `${q.tool} ${q.path}`;
+  return "";
+}
 
 const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], selected: null, permission: null };
 
@@ -138,13 +147,13 @@ export function reducer(state: State, action: Action): State {
     }
     case "job.start": {
       const tid = action.tabId ?? state.selected;
-      const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: [...(state.jobs[action.tabId] ?? []), action.jobId] } : state.jobs;
+      const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: [...(state.jobs[action.tabId] ?? []), { id: action.jobId, command: action.command }] } : state.jobs;
       const next = { ...state, jobs };
       return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId}: ${action.command}` });
     }
     case "job.end": {
       const tid = action.tabId ?? state.selected;
-      const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: (state.jobs[action.tabId] ?? []).filter((j) => j !== action.jobId) } : state.jobs;
+      const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: (state.jobs[action.tabId] ?? []).filter((j) => j.id !== action.jobId) } : state.jobs;
       const next = { ...state, jobs };
       return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId} ${action.status}` });
     }
@@ -156,11 +165,12 @@ export function reducer(state: State, action: Action): State {
     }
     case "@clearLink":
       return { ...state, links: state.links.filter((l) => l.key !== action.key) };
-    case "permission.request":
-      return {
-        ...patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: true })),
-        permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options },
-      };
+    case "permission.request": {
+      const withFlag = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: true }));
+      const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
+      const feed = [...withFlag.officeFeed, { key: `p${action.id}`, tabId: action.tabId, from, text: `Needs approval: ${previewLabel(action.preview)}`, kind: "approval", time: clock(), permId: action.id }];
+      return { ...withFlag, officeFeed: feed.slice(-60), permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
+    }
     case "permission.resolved": {
       const cleared = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: false }));
       return cleared.permission?.id === action.id ? { ...cleared, permission: null } : cleared;
