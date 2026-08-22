@@ -17,7 +17,7 @@ import type { Duplex } from "node:stream";
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { WEB_ASSETS_DIR } from "./install.js";
 import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
 
@@ -199,7 +199,9 @@ export interface ServerHandle {
 
 export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
-  const staticDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "web");
+  // Resolved from the binary's own location (not the cwd) so assets are found no
+  // matter where `dom serve` was launched.
+  const staticDir = WEB_ASSETS_DIR;
 
   // Broadcast + reconnect ring buffer. Every bus event is tagged with a monotonic
   // seq and kept (last RING) so a client that drops can replay what it missed via
