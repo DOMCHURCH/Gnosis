@@ -34,6 +34,14 @@ const ZONE_HINT = {
 export const pctX = (v) => `${((v / 1440) * 100).toFixed(2)}%`;
 export const pctY = (v) => `${((v / 900) * 100).toFixed(2)}%`;
 
+/** Compact token count for the header (1_234 → "1.2k", 45_000 → "45k"). */
+function fmtTokens(n) {
+  if (!n || n < 0) return "0";
+  if (n >= 10000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
 function colorOf(zoneId, idx) {
   const pal = VARIANTS[zoneId] || [(ZONE_BY_ID[zoneId] || {}).color || "#6B6B7B"];
   return pal[Math.max(0, idx) % pal.length];
@@ -204,6 +212,8 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor) {
     layout,
     awaitingLine: `${awaitingAll}${awaitingAll === 1 ? " AWAITING APPROVAL" : " AWAITING APPROVALS"}`,
     globalLine: `${order.length} SESSIONS · ${totalAgents} AGENTS`,
+    // Live session totals for the active tab (per-message cost stays gone).
+    costLine: tab ? `${fmtTokens(tab.tokens)} tok · $${(tab.cost || 0).toFixed(4)}` : "",
     sessionTitle: tab ? `${String(idx + 1).padStart(2, "0")} · ${tab.name}` : "—",
     sessionTask: tab ? actionFor(state, active, figureState(tab)) : "no session",
     sessionAccent: floorAwaiting ? "#FBBF24" : working ? "#22D3EE" : "#2A2A38",

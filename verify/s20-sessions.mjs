@@ -73,6 +73,10 @@ ok("one floor per tab in the rail", m.floorTabs.length === 2 && m.floorTabs[0].n
 ok("the active floor's dot animates when working", !!m.floorTabs[0].dotAnim);
 ok("a tab with an awaiting figure shows an amber dot", (() => { const s2 = { ...state, agents: { ...state.agents, 1: mk(1, "LEDGER", "ask", { awaitingPermission: true }) } }; return sessionsModel(s2, 1, null).floorTabs[0].dot === "#FBBF24"; })());
 ok("the global line counts sessions + agents", /2 SESSIONS · \d+ AGENTS/.test(m.globalLine));
+ok("the header carries the active session's live tokens + cost", (() => {
+  const s2 = { ...state, agents: { ...state.agents, 1: mk(1, "LEDGER", "ask", { busy: true, tokens: 45230, cost: 0.1234 }) } };
+  return sessionsModel(s2, 1, null).costLine === "45k tok · $0.1234";
+})());
 ok("the session header shows the tab name", m.sessionTitle.includes("LEDGER"));
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");

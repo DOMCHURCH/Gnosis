@@ -54,6 +54,7 @@ export function SessionsFloor(props: SessionsProps) {
           <div style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 11, letterSpacing: 2, color: "#6B6B7B" }}>
             <span style={{ color: "#FBBF24", whiteSpace: "nowrap" }}>{model.awaitingLine}</span>
             <span style={{ whiteSpace: "nowrap" }}>{model.globalLine}</span>
+            {model.costLine && <span style={{ color: "#22D3EE", whiteSpace: "nowrap" }}>{model.costLine}</span>}
           </div>
         </div>
 

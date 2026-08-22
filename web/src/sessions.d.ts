@@ -58,6 +58,7 @@ export interface SessionsModel {
   layout: FloorLayout;
   awaitingLine: string;
   globalLine: string;
+  costLine: string;
   sessionTitle: string;
   sessionTask: string;
   sessionAccent: string;
