@@ -4,7 +4,7 @@ import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./Sessio
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 
 export function App() {
-  const { state, send, select } = useDomSocket();
+  const { state, send, select, requestFiles } = useDomSocket();
   const [selFig, setSelFig] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [steer, setSteer] = useState("");
@@ -71,11 +71,11 @@ export function App() {
       sel={sel}
       draft={draft}
       steer={steer}
+      commands={state.commands}
+      activeTabId={activeId}
+      requestFiles={requestFiles}
       onSelectFloor={(id) => { select(id); setSelFig(null); }}
       onAddFloor={() => send({ type: "agent.create" })}
-      onSpawn={() => (window as any).domOffice?.add({ action: "picking up a ticket" })}
-      onCycle={() => {}}
-      onReset={() => { debugRef.current.byFloor = {}; setSelFig(null); bump((n) => n + 1); }}
       onSelectFig={setSelFig}
       onClose={() => setSelFig(null)}
       onApprove={() => answer("yes")}

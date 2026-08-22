@@ -39,6 +39,8 @@ import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as w
 import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
 import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
 import type { AppBridge } from "../events.js";
+import { helpText } from "../commands.js";
+import { rankedFiles } from "../filesearch.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -75,43 +77,7 @@ interface Props {
   bridge?: AppBridge;
 }
 
-const HELP = [
-  "commands:",
-  "  /model [id]   switch model (no arg opens the picker)",
-  "  /mode <ask|plan|yolo>   change permission mode",
-  "  /approve      (plan mode) switch to ask and execute the written plan",
-  "  /revise <text>  (plan mode) amend the plan without executing",
-  "  /new [name] [purpose]   open a new tab (its own history + engine)",
-  "  /tabs         list open tabs    /tab <n|name>  switch tabs    /close  close the active tab",
-  "  /alltabs      tiled read-only overview of every tab (again, or /tab, exits)",
-  "  /worktree <name>   isolate work in a git worktree + tab (branch dom/<name>)",
-  "  /worktree list | merge <name> | remove <name>",
-  "  /workspace add <path>   add a search root (grep/glob without a path span all)",
-  "  /workspace list | remove <path>",
-  "  /memory       show the durable project memory bank (add <note> | clear)",
-  "  /schedule     list scheduled runs (add <spec> | <prompt>  ·  remove <id>)",
-  "  /skills       list loaded skills",
-  "  /clear        clear the conversation",
-  "  /compact      summarize and shrink history",
-  "  /tools        list available tools",
-  "  /cost         show token + dollar usage",
-  "  /budget [usd]   show or set the session dollar ceiling",
-  "  /context      what fills the context window, by category",
-  "  /verify       skeptically verify the last change (diff vs request)",
-  "  /trace        summarize this session's trajectory trace",
-  "  /verbose      toggle full (unsummarized) tool output",
-  "  /resume       pick a prior session for this directory",
-  "  /vault [set <path>]   switch working root to your Obsidian vault",
-  "  /undo         revert dom's most recent commit (or checkpointed edit)",
-  "  /checkpoints  list recent dom checkpoints",
-  "  /jobs         list background jobs    /job <id>  show output    /kill <id>  stop it",
-  "  /hooks        list registered lifecycle hooks",
-  "  /init [--force]   scan the repo and write an AGENTS.md",
-  "  /map          print the repo map and its token count",
-  "  /help         this help    /exit  quit",
-  "  @  insert a file path    !cmd  run a shell command    ctrl+r  search prompt history",
-  "  ctrl+1..9  best-effort tab-switch alias for /tab (some terminals don't send it)",
-].join("\n");
+const HELP = helpText();
 
 // Image @references in a submitted message: `@path` tokens that name an existing
 // image file. These get loaded and attached to the message for a vision model.
@@ -1407,6 +1373,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       if (t.id !== controller.active().id) switchToTab(t.id);
       closeActiveTab();
     };
+    bridge.onFiles = (tabId, query) => rankedFiles(controller.byId(tabId)?.engine.cwd ?? controller.active().engine.cwd, query);
   }
 
   // Bridge background-job lifecycle to the bus, and let a web answer dismiss the

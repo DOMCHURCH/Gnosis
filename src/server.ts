@@ -152,7 +152,7 @@ async function serveStatic(pathname: string, staticDir: string, res: http.Server
   }
 }
 
-function handleClientMessage(bridge: AppBridge, text: string): void {
+function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown) => void): void {
   let msg: any;
   try {
     msg = JSON.parse(text);
@@ -165,6 +165,11 @@ function handleClientMessage(bridge: AppBridge, text: string): void {
       break;
     case "command":
       bridge.onCommand?.(Number(msg.tabId), String(msg.command ?? ""));
+      break;
+    case "files":
+      void Promise.resolve(bridge.onFiles ? bridge.onFiles(Number(msg.tabId), String(msg.query ?? "")) : [])
+        .then((list) => send({ type: "files", reqId: msg.reqId, list }))
+        .catch(() => send({ type: "files", reqId: msg.reqId, list: [] }));
       break;
     case "permission":
       bridge.answerPermission(String(msg.id ?? ""), String(msg.answer ?? "no") as PermissionAnswer);
@@ -265,6 +270,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     } else {
       sendSnapshot();
     }
+    send({ type: "commands", list: bridge.getCommands() }); // slash-command registry
     send({ type: "@sync", seq: cutoff }); // high-water mark for the next reconnect
     clients.add(client);
 
@@ -277,7 +283,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       }
     };
     const decode = makeDecoder(
-      (text) => handleClientMessage(bridge, text),
+      (text) => handleClientMessage(bridge, text, send),
       cleanup,
       (p) => {
         try {

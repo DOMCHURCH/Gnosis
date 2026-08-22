@@ -8,6 +8,7 @@
 // write to a socket). Anything heavier a listener does on its own time.
 
 import type { PermissionAnswer } from "./permissions.js";
+import { COMMANDS } from "./commands.js";
 
 /** A snapshot of one agent (tab), sent to a client when it first connects. */
 export interface AgentSnapshot {
@@ -73,12 +74,16 @@ export interface AppBridge {
   bus: EventBus;
   /** Current agents, sent to a client on connect so it starts in sync. */
   getAgents(): AgentSnapshot[];
+  /** The slash-command registry (same one the TUI's /help uses), sent on connect. */
+  getCommands(): { name: string; args?: string; desc: string }[];
 
   // Client → server actions (set by the UI; absent until it mounts).
   onInput?(tabId: number, text: string): void;
   onCommand?(tabId: number, command: string): void;
   onCreateAgent?(name?: string, purpose?: string): void;
   onCloseAgent?(tabId: number): void;
+  /** @-autocomplete: ranked file paths under the tab's cwd matching `query`. */
+  onFiles?(tabId: number, query: string): Promise<string[]>;
 
   // Permission coordination. The engine registers a pending request keyed by id;
   // either the TUI overlay or a web client resolves it (first wins).
@@ -93,6 +98,7 @@ export function createBridge(bus: EventBus): AppBridge {
   return {
     bus,
     getAgents: () => [],
+    getCommands: () => COMMANDS,
     registerPermission: (id, resolve) => {
       pending.set(id, resolve);
     },

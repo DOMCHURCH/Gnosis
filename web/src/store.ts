@@ -20,11 +20,14 @@ export interface State {
   speaking: Record<number, boolean>;
   /** Rolling floor-wide chat feed for the office view (from line events). */
   officeFeed: FeedItem[];
+  /** Slash-command registry, sent by the server on connect (same as the TUI). */
+  commands: CommandItem[];
   selected: number | null;
   permission: PermissionRequest | null;
 }
 
 export interface FeedItem { key: string; tabId: number; from: string; text: string; kind: string; time: string; permId?: string; }
+export interface CommandItem { name: string; args?: string; desc: string; }
 
 function previewLabel(p: unknown): string {
   const q = p as { kind?: string; command?: string; method?: string; url?: string; tool?: string; path?: string };
@@ -35,9 +38,9 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], selected: null, permission: null };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], commands: [], selected: null, permission: null };
 
-type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number };
+type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number } | { type: "@commands"; list: CommandItem[] };
 
 function clock(): string {
   const d = new Date();
@@ -109,7 +112,12 @@ export function reducer(state: State, action: Action): State {
     }
     case "@clearSpeaking":
       return { ...state, speaking: { ...state.speaking, [action.tabId]: false } };
+    case "@commands":
+      return { ...state, commands: action.list };
     case "line": {
+      // Drop the per-turn cost line ("· turn: 5930 in · 45 out · $0.0005") — the
+      // header carries session totals; it must not clutter the chat or the roster.
+      if (action.item.kind === "system" && "text" in action.item && /turn:.*\bin\b.*\bout\b.*\$/.test(action.item.text)) return state;
       const next = withItem(state, action.tabId, action.item);
       // Feed text lines (not rules) into the office chat rail.
       if (action.item.kind !== "rule" && "text" in action.item && action.item.text) {
@@ -185,6 +193,8 @@ export function useDomSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   // Highest server seq seen; sent as ?since on reconnect to replay missed events.
   const lastSeqRef = useRef<number | null>(null);
+  // Pending @-file requests keyed by reqId (resolved when the server replies).
+  const filesRef = useRef<{ seq: number; pending: Map<number, (list: string[]) => void> }>({ seq: 0, pending: new Map() });
 
   useEffect(() => {
     let closed = false;
@@ -223,6 +233,8 @@ export function useDomSocket() {
         }
         if (typeof ev.seq === "number") lastSeqRef.current = ev.seq;
         if (ev.type === "@sync") return; // control frame: only advances lastSeq
+        if ((ev as any).type === "commands") { dispatch({ type: "@commands", list: (ev as any).list ?? [] }); return; }
+        if ((ev as any).type === "files") { const r = filesRef.current.pending.get((ev as any).reqId); if (r) { filesRef.current.pending.delete((ev as any).reqId); r((ev as any).list ?? []); } return; }
         dispatch(ev);
         // A tab-to-tab message draws a link; fade it after a moment.
         if (ev.type === "message.sent") {
@@ -252,5 +264,17 @@ export function useDomSocket() {
 
   const select = useCallback((id: number) => dispatch({ type: "@select", id }), []);
 
-  return { state, send, select };
+  // @-autocomplete: ask the server for ranked files under the tab's cwd.
+  const requestFiles = useCallback((tabId: number, query: string): Promise<string[]> => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.resolve([]);
+    const reqId = ++filesRef.current.seq;
+    return new Promise<string[]>((resolve) => {
+      filesRef.current.pending.set(reqId, resolve);
+      setTimeout(() => { if (filesRef.current.pending.delete(reqId)) resolve([]); }, 2000);
+      ws.send(JSON.stringify({ type: "files", tabId, query, reqId }));
+    });
+  }, []);
+
+  return { state, send, select, requestFiles };
 }

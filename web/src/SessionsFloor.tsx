@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import type { SessionsModel } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
+import type { CommandItem } from "./store";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; text: string; border: string; isApproval: boolean; permId?: string; }
 export interface SelDetail {
@@ -13,11 +15,11 @@ export interface SessionsProps {
   sel: SelDetail | null;
   draft: string;
   steer: string;
+  commands: CommandItem[];
+  activeTabId: number | null;
+  requestFiles: (tabId: number, query: string) => Promise<string[]>;
   onSelectFloor: (id: number) => void;
   onAddFloor: () => void;
-  onSpawn: () => void;
-  onCycle: () => void;
-  onReset: () => void;
   onSelectFig: (id: string | null) => void;
   onClose: () => void;
   onApprove: () => void;
@@ -32,10 +34,12 @@ export interface SessionsProps {
 }
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
+const ZBTN = { fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer", minWidth: 30 } as const;
 
 export function SessionsFloor(props: SessionsProps) {
   const { model, sel } = props;
   const L = model.layout;
+  const [zoom, setZoom] = useState(1); // 1 = fit; > 1 scrolls
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
@@ -78,16 +82,16 @@ export function SessionsFloor(props: SessionsProps) {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>OFFICE FLOOR · CLICK AN AGENT</span>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={props.onSpawn} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #22D3EE", padding: "5px 10px", cursor: "pointer" }}>+ AGENT</button>
-                    <button type="button" onClick={props.onCycle} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer" }}>STEP STATES</button>
-                    <button type="button" onClick={props.onReset} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#6B6B7B", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer" }}>RESET</button>
+                    <button type="button" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))} style={ZBTN}>−</button>
+                    <button type="button" onClick={() => setZoom(1)} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2A2A38" }}>FIT</button>
+                    <button type="button" onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))} style={ZBTN}>+</button>
                   </div>
                 </div>
 
                 <div style={{ position: "relative" }}>
-                  <div style={{ overflowX: "auto", overflowY: "hidden" }}>
-                    <div style={{ position: "relative", minWidth: 1120 }}>
-                      <svg viewBox="0 0 1440 900" width="100%" shapeRendering="crispEdges" style={{ display: "block" }} xmlns="http://www.w3.org/2000/svg">
+                  <div style={{ overflowX: zoom > 1 ? "auto" : "hidden", overflowY: "hidden" }}>
+                    <div style={{ position: "relative", width: `${zoom * 100}%` }}>
+                      <svg viewBox="0 0 1440 900" width="100%" preserveAspectRatio="xMidYMid meet" shapeRendering="crispEdges" style={{ display: "block" }} xmlns="http://www.w3.org/2000/svg">
                         <defs>
                           <pattern id="tile" width="32" height="32" patternUnits="userSpaceOnUse">
                             <rect x="0" y="0" width="32" height="32" fill="#23202A" />
@@ -247,6 +251,7 @@ export function SessionsFloor(props: SessionsProps) {
                           <div key={z.key} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap" }}>
                             <span style={{ fontSize: "1.45cqw", fontWeight: 700, letterSpacing: "0.22cqw", color: z.accent }}>{z.name}</span>
                             <span style={{ fontSize: "1.05cqw", letterSpacing: "0.08cqw", color: z.countColor }}>{z.count}</span>
+                            {z.hint && <span style={{ fontSize: "0.92cqw", letterSpacing: "0.04cqw", color: "#4A4A58" }}>{z.hint}</span>}
                           </div>
                         ))}
                         {L.nameTags.map((n) => (
@@ -340,11 +345,7 @@ export function SessionsFloor(props: SessionsProps) {
                 ))}
               </div>
               <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: "2px solid #2A2A38", padding: "7px 9px" }}>
-                  <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
-                  <input type="text" value={props.draft} onChange={(e) => props.onDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSend(); }} placeholder="message this session…" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
-                  <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
-                </div>
+                <ChatInput value={props.draft} onChange={props.onDraft} onSubmit={props.onSend} commands={props.commands} requestFiles={props.requestFiles} tabId={props.activeTabId} />
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
                   <button type="button" onClick={props.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
@@ -366,4 +367,69 @@ export function SessionsFloor(props: SessionsProps) {
 // re-export so App can resolve a figure's zone label without importing sessions.js twice
 export function zoneLabel(zoneId: string): string {
   return (ZONE_BY_ID as Record<string, { name: string }>)[zoneId]?.name ?? "";
+}
+
+// Chat input with the SAME slash-command list the TUI shows (filtered as you type,
+// arrows to select, Enter/Tab to complete) plus @-file autocomplete.
+function ChatInput(props: { value: string; onChange: (v: string) => void; onSubmit: () => void; commands: CommandItem[]; requestFiles: (t: number, q: string) => Promise<string[]>; tabId: number | null }) {
+  const { value } = props;
+  const ref = useRef<HTMLInputElement>(null);
+  const [pick, setPick] = useState(0);
+  const [files, setFiles] = useState<string[]>([]);
+
+  const atMatch = /(^|\s)@(\S*)$/.exec(value);
+  const cmdMode = value.startsWith("/") && !/\s/.test(value);
+  const fileMode = !!atMatch && props.tabId != null;
+  const query = fileMode ? atMatch![2]! : "";
+
+  useEffect(() => {
+    if (!fileMode || props.tabId == null) { setFiles([]); return; }
+    let live = true;
+    props.requestFiles(props.tabId, query).then((list) => { if (live) { setFiles(list.slice(0, 8)); setPick(0); } });
+    return () => { live = false; };
+  }, [fileMode, query, props.tabId]);
+
+  const items: { label: string; hint?: string }[] = cmdMode
+    ? props.commands.filter((c) => c.name.startsWith(value.toLowerCase())).slice(0, 8).map((c) => ({ label: c.name, hint: (c.args ? c.args + "  " : "") + c.desc }))
+    : fileMode
+      ? files.map((f) => ({ label: f }))
+      : [];
+  const open = items.length > 0;
+
+  const complete = (label: string) => {
+    if (cmdMode) props.onChange(label + " ");
+    else if (atMatch) props.onChange(value.slice(0, atMatch.index) + atMatch[1] + "@" + label + " ");
+    setPick(0);
+    ref.current?.focus();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (open) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setPick((p) => (p + 1) % items.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setPick((p) => (p - 1 + items.length) % items.length); return; }
+      if (e.key === "Tab" || e.key === "Enter") { e.preventDefault(); complete(items[pick]!.label); return; }
+      if (e.key === "Escape") { setFiles([]); return; }
+    }
+    if (e.key === "Enter") props.onSubmit();
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      {open && (
+        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, maxHeight: 220, overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 -8px 24px rgba(0,0,0,0.6)", zIndex: 5 }}>
+          {items.map((it, i) => (
+            <div key={it.label} onMouseDown={(e) => { e.preventDefault(); complete(it.label); }} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "6px 9px", cursor: "pointer", background: i === pick ? "#1D1D27" : "transparent" }}>
+              <span style={{ fontSize: 11, color: "#22D3EE", whiteSpace: "nowrap" }}>{it.label}</span>
+              {it.hint && <span style={{ fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.hint}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: "2px solid #2A2A38", padding: "7px 9px" }}>
+        <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
+        <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files)" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
+        <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
+      </div>
+    </div>
+  );
 }

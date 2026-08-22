@@ -5,6 +5,7 @@
 // `dom serve` command is reachable/verifiable the way a user actually runs it.
 
 import path from "node:path";
+import { rankedFiles } from "./filesearch.js";
 import { Engine, type Callbacks } from "./engine.js";
 import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
@@ -98,6 +99,7 @@ export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise
   bridge.onCommand = (tabId, command) => handleCommand(controller, tabId, command, bridge);
   bridge.onCreateAgent = (name, purpose) => void controller.create(name, purpose);
   bridge.onCloseAgent = (tabId) => void controller.close(tabId);
+  bridge.onFiles = (tabId, query) => rankedFiles((controller.byId(tabId) ?? controller.active()).engine.cwd, query);
 
   return new Promise<void>(() => {}); // keep the process alive
 }

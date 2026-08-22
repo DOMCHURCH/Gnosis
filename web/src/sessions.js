@@ -23,6 +23,14 @@ const VARIANTS = {
   application: ["#4ADE80", "#86E9AC"], subagents: ["#C084FC", "#D6ACFD", "#818CF8", "#C084FC", "#D6ACFD", "#818CF8"],
 };
 
+const ZONE_HINT = {
+  coordinator: "routes work when sub-agents are running",
+  planning: "this session in plan mode",
+  coding: "this session editing",
+  application: "background jobs and dev servers",
+  subagents: "spawned by task()",
+};
+
 export const pctX = (v) => `${((v / 1440) * 100).toFixed(2)}%`;
 export const pctY = (v) => `${((v / 900) * 100).toFixed(2)}%`;
 
@@ -124,6 +132,8 @@ export function layoutFloor(figures, selectedId, debugFigures) {
       accent: collapsed ? "#6B6B7B" : zone.color, name: zone.name,
       count: collapsed ? `IDLE · 0/${zone.slots.length}` : (total > zone.slots.length ? `${list.length}/${total} · ${total - list.length} off-floor` : `${list.length}/${zone.slots.length}`),
       countColor: total > zone.slots.length ? "#FBBF24" : "#6B6B7B",
+      // When empty, one dim line explaining what would put an agent here.
+      hint: collapsed ? ZONE_HINT[zone.id] : "",
     });
     if (collapsed) return;
     zone.slots.forEach((sl, i) => { if (i >= list.length) freeDesks.push({ key: `${zone.id}-f${i}`, x: sl[0], y: sl[1] }); });
