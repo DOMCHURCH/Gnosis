@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { domDir } from "./config.js";
 import { resolveShell } from "./tools/bash.js";
 import { renderSkillsSection, type LoadedSkill } from "./skills.js";
 import { readMemory, formatMemoryForPrompt } from "./memory.js";
@@ -72,15 +73,23 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [],
     `Today is ${new Date().toISOString().slice(0, 10)}.`,
   ];
 
-  // AGENTS.md in cwd, if present, appends to the system prompt.
-  try {
-    const agents = await fs.readFile(path.join(cwd, "AGENTS.md"), "utf8");
-    if (agents.trim()) {
-      lines.push("", "--- Project instructions (AGENTS.md) ---", agents.trim());
+  // AGENTS.md instructions append to the system prompt: global (~/.dom/AGENTS.md)
+  // first, then project (<cwd>/AGENTS.md). Both optional; skip the global one if
+  // cwd IS ~/.dom so the same file isn't loaded twice.
+  const globalAgentsPath = path.join(domDir(), "AGENTS.md");
+  const projectAgentsPath = path.join(cwd, "AGENTS.md");
+  const readAgents = async (file: string, label: string) => {
+    try {
+      const agents = await fs.readFile(file, "utf8");
+      if (agents.trim()) lines.push("", `--- ${label} (AGENTS.md) ---`, agents.trim());
+    } catch {
+      /* no AGENTS.md at this path */
     }
-  } catch {
-    /* no AGENTS.md */
+  };
+  if (path.resolve(globalAgentsPath) !== path.resolve(projectAgentsPath)) {
+    await readAgents(globalAgentsPath, "Global instructions");
   }
+  await readAgents(projectAgentsPath, "Project instructions");
 
   // Memory bank: durable notes the model saved about this project in prior
   // sessions (best-effort; empty until the model saves something).
