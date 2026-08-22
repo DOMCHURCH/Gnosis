@@ -29,9 +29,12 @@ interface WalkOpts {
   maxEntries: number;
   /** Don't descend deeper than this many levels. */
   maxDepth: number;
+  /** Keep a file only when this returns true (by file name). When set, directories
+   * with no matching descendants are pruned. Default: keep every file. */
+  includeFile: (name: string) => boolean;
 }
 
-const DEFAULTS: WalkOpts = { maxEntries: 4000, maxDepth: 12 };
+const DEFAULTS: WalkOpts = { maxEntries: 4000, maxDepth: 12, includeFile: () => true };
 
 /** Sort dirs before files, each group case-insensitively by name. */
 function sortNodes(nodes: TreeNode[]): TreeNode[] {
@@ -66,8 +69,12 @@ export async function buildTree(root: string, opts: Partial<WalkOpts> = {}): Pro
       state.count++;
       if (isDir) {
         const children = await walk(path.join(abs, name), childRel, depth + 1);
+        // With a file filter active, drop directories that ended up empty so the
+        // tree shows only branches that lead to a matching file.
+        if (children.length === 0 && o.includeFile !== DEFAULTS.includeFile) continue;
         out.push({ name, path: childRel, type: "dir", children });
       } else if (e.isFile() || e.isSymbolicLink()) {
+        if (!o.includeFile(name)) continue;
         out.push({ name, path: childRel, type: "file" });
       }
     }

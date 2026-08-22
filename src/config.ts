@@ -161,6 +161,37 @@ export async function resolveApiKey(config: Config): Promise<string | undefined>
   return config.apiKey;
 }
 
+/** ~/.dom/AGENTS.md — the global agent-instructions file, also scanned for a
+ * vault directive (see resolveVaultPath). */
+export function globalAgentsPath(): string {
+  return path.join(domDir(), "AGENTS.md");
+}
+
+// A vault directive in AGENTS.md: `vault: <path>` or `obsidian vault: <path>`
+// (case-insensitive, `:` or `=`, optional surrounding quotes/backticks).
+const VAULT_DIRECTIVE_RE = /^\s*(?:obsidian\s+)?vault\s*[:=]\s*(.+?)\s*$/im;
+
+/** Resolve the Obsidian vault path. Precedence: config.obsidianVault, then a
+ * `vault:` directive in ~/.dom/AGENTS.md. Returns an absolute path (existence
+ * NOT checked — the caller decides), or undefined when none is configured. */
+export async function resolveVaultPath(config: Config): Promise<string | undefined> {
+  if (config.obsidianVault) return path.resolve(config.obsidianVault);
+  let txt: string;
+  try {
+    txt = await fs.readFile(globalAgentsPath(), "utf8");
+  } catch {
+    return undefined; // no global AGENTS.md
+  }
+  const m = txt.match(VAULT_DIRECTIVE_RE);
+  if (!m) return undefined;
+  let raw = m[1]!.trim();
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'")) || (raw.startsWith("`") && raw.endsWith("`"))) {
+    raw = raw.slice(1, -1);
+  }
+  raw = raw.replace(/^~(?=[/\\]|$)/, os.homedir());
+  return raw ? path.resolve(raw) : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------

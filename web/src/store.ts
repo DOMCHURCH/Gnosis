@@ -40,6 +40,9 @@ export interface State {
   /** Bumped on every job.start/job.end so the Background panel re-reads /api/jobs
    * (pid/port/status come from that snapshot, not the lean lifecycle events). */
   jobEpoch: number;
+  /** Bumped on tool.end and on vault.changed so the Obsidian panel re-reads the
+   * vault note tree after dom (or a "save to vault") writes a note. */
+  vaultEpoch: number;
   /** The goal bar's standing goal per tab (goal.state), null when cleared. */
   goals: Record<number, GoalState | null>;
   /** The latest goal review per tab (goal.review) — verdict shown above the rail. */
@@ -67,7 +70,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, goals: {}, reviews: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, goals: {}, reviews: {} };
 
 /** Append a raw chat line, capping the buffer so the feed can't grow unbounded. */
 function pushLine(state: State, ln: RawLine): State {
@@ -191,7 +194,7 @@ export function reducer(state: State, action: Action): State {
       const epoch = state.turnEpoch[action.tabId] ?? 0;
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
       const ln: RawLine = { key: `t${action.tabId}-${withTx.chatLines.length}-${Date.now()}`, tabId: action.tabId, from, kind: "tool", epoch, time: clock(), tool: action.tool, primary: action.primary, secondary: action.secondary, ok: action.ok, summary: action.summary, detail: action.detail };
-      return { ...pushLine(withTx, ln), fileEpoch: state.fileEpoch + 1 };
+      return { ...pushLine(withTx, ln), fileEpoch: state.fileEpoch + 1, vaultEpoch: state.vaultEpoch + 1 };
     }
     case "subagent.start":
       return withItem(
@@ -243,6 +246,8 @@ export function reducer(state: State, action: Action): State {
       return { ...state, overlay: { id: action.id, tabId: action.tabId, kind: action.kind, title: action.title, items: action.items, selected: action.selected } };
     case "overlay.resolved":
       return state.overlay?.id === action.id ? { ...state, overlay: null } : state;
+    case "vault.changed":
+      return { ...state, vaultEpoch: state.vaultEpoch + 1 };
     case "goal.state":
       return { ...state, goals: { ...state.goals, [action.tabId]: action.goal } };
     case "goal.review": {
@@ -268,6 +273,8 @@ export function useDomSocket() {
   const lastSeqRef = useRef<number | null>(null);
   // Pending @-file requests keyed by reqId (resolved when the server replies).
   const filesRef = useRef<{ seq: number; pending: Map<number, (list: string[]) => void> }>({ seq: 0, pending: new Map() });
+  // Pending vault.save requests keyed by reqId (resolved by the vault.saved ack).
+  const vaultRef = useRef<{ seq: number; pending: Map<number, (r: SaveResult) => void> }>({ seq: 0, pending: new Map() });
 
   useEffect(() => {
     let closed = false;
@@ -308,6 +315,7 @@ export function useDomSocket() {
         if (ev.type === "@sync") return; // control frame: only advances lastSeq
         if ((ev as any).type === "commands") { dispatch({ type: "@commands", list: (ev as any).list ?? [] }); return; }
         if ((ev as any).type === "files") { const r = filesRef.current.pending.get((ev as any).reqId); if (r) { filesRef.current.pending.delete((ev as any).reqId); r((ev as any).list ?? []); } return; }
+        if ((ev as any).type === "vault.saved") { const r = vaultRef.current.pending.get((ev as any).reqId); if (r) { vaultRef.current.pending.delete((ev as any).reqId); r({ ok: !!(ev as any).ok, path: (ev as any).path, error: (ev as any).error }); } return; }
         dispatch(ev);
         // A tab-to-tab message draws a link; fade it after a moment.
         if (ev.type === "message.sent") {
@@ -349,5 +357,19 @@ export function useDomSocket() {
     });
   }, []);
 
-  return { state, send, select, requestFiles };
+  // "Save to vault": write a chat message as a new note; resolves with the ack.
+  const saveVault = useCallback((filename: string, tags: string[], content: string): Promise<SaveResult> => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.resolve({ ok: false, error: "not connected" });
+    const reqId = ++vaultRef.current.seq;
+    return new Promise<SaveResult>((resolve) => {
+      vaultRef.current.pending.set(reqId, resolve);
+      setTimeout(() => { if (vaultRef.current.pending.delete(reqId)) resolve({ ok: false, error: "timed out" }); }, 8000);
+      ws.send(JSON.stringify({ type: "vault.save", reqId, filename, tags, content }));
+    });
+  }, []);
+
+  return { state, send, select, requestFiles, saveVault };
 }
+
+export interface SaveResult { ok: boolean; path?: string; error?: string }

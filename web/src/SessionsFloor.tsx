@@ -33,6 +33,10 @@ export interface SessionsProps {
   onSend: () => void;
   onApproveMsg: (permId?: string) => void;
   onDenyMsg: (permId?: string) => void;
+  /** When true, assistant messages show a "save to vault" button. */
+  canSaveVault?: boolean;
+  /** Save an assistant message's text to the vault (opens the filename/tags modal). */
+  onSaveMsg?: (content: string) => void;
   /** The goal bar, rendered directly above the chat rail. */
   goalBar?: ReactNode;
   /** Optional collapsible panel rendered at the far left (the File Browser). */
@@ -42,6 +46,15 @@ export interface SessionsProps {
 }
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
+
+/** Flatten a chat message's segments back to markdown text (code segments re-fenced)
+ * — the payload for "save to vault". */
+function messageToText(m: ChatMsg): string {
+  return m.segments
+    .map((s) => (s.type === "code" ? "```" + (s.lang ?? "") + "\n" + s.text + "\n```" : s.text))
+    .join("\n\n")
+    .trim();
+}
 const ZBTN = { fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer", minWidth: 30 } as const;
 
 // Live viewport width so we can branch layout (inline styles → no CSS media query).
@@ -381,6 +394,14 @@ export function SessionsFloor(props: SessionsProps) {
                         <div style={{ display: "flex", gap: 6 }}>
                           <button type="button" onClick={() => props.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
                           <button type="button" onClick={() => props.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
+                        </div>
+                      )}
+                      {props.canSaveVault && props.onSaveMsg && m.kind === "assistant" && (
+                        <div style={{ display: "flex" }}>
+                          <button type="button" title="save this message as an Obsidian note" onClick={() => props.onSaveMsg!(messageToText(m))}
+                            style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#A78BFA", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
+                            ⬇ SAVE TO VAULT
+                          </button>
                         </div>
                       )}
                     </div>

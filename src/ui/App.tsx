@@ -33,6 +33,7 @@ import { listHooks } from "../hooks.js";
 import { writeAgentsMd } from "../init.js";
 import { buildRepoMap } from "../repomap.js";
 import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
+import { saveVaultNote } from "../vault.js";
 import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
@@ -1489,6 +1490,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       const tab = controller.byId(tabId) ?? controller.active();
       tab.engine.clearGoal();
       b.bus.emit({ type: "goal.state", tabId: tab.id, goal: null });
+    };
+    b.onVaultSave = async (filename, tags, content) => {
+      const r = await saveVaultNote(filename, tags, content);
+      if (r.ok) b.bus.emit({ type: "vault.changed" });
+      return r;
     };
   };
   if (bridge) wireBridge(bridge);

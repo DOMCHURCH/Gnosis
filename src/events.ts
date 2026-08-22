@@ -43,7 +43,8 @@ export type DomEvent =
   | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
   | { type: "message.sent"; from: string; to: string; hops: number }
   | { type: "goal.state"; tabId: number; goal: { text: string; active: boolean; roundsLeft: number; maxRounds: number; reviewModel?: string } | null }
-  | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean };
+  | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
+  | { type: "vault.changed" };
 
 export type Listener = (e: DomEvent) => void;
 
@@ -91,6 +92,9 @@ export interface AppBridge {
   /** Goal bar: set/update or clear a tab's standing goal (web UI). */
   onGoalSet?(tabId: number, goal: { text: string; maxRounds?: number; reviewModel?: string; active?: boolean }): void;
   onGoalClear?(tabId: number): void;
+  /** Obsidian panel "save to vault": write a new note from a chat message. Resolves
+   * with the vault-relative path written, or an error. Emits vault.changed on success. */
+  onVaultSave?(filename: string, tags: string[], content: string): Promise<{ ok: boolean; path?: string; error?: string }>;
 
   // Permission coordination. The engine registers a pending request keyed by id;
   // either the TUI overlay or a web client resolves it (first wins).

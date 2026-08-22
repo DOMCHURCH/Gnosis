@@ -11,6 +11,7 @@ import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
 import { fetchModels } from "./models.js";
 import { listSessions, loadSession } from "./config.js";
+import { saveVaultNote } from "./vault.js";
 import { callParts, resultBody, toolDetail } from "./ui/toolrender.js";
 
 /** Build bus-mirroring callbacks for a tab's turn (no terminal rendering). The
@@ -149,6 +150,11 @@ export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise
   bridge.onCreateAgent = (name, purpose) => void controller.create(name, purpose);
   bridge.onCloseAgent = (tabId) => void controller.close(tabId);
   bridge.onFiles = (tabId, query) => rankedFiles((controller.byId(tabId) ?? controller.active()).engine.cwd, query);
+  bridge.onVaultSave = async (filename, tags, content) => {
+    const r = await saveVaultNote(filename, tags, content);
+    if (r.ok) bridge.bus.emit({ type: "vault.changed" });
+    return r;
+  };
 
   return new Promise<void>(() => {}); // keep the process alive
 }

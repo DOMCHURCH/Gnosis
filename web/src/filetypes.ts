@@ -19,3 +19,9 @@ export interface FilePreview {
   content: string;
   truncated: boolean;
 }
+
+/** The .md-only vault tree from /api/vault/tree (mirrors src/vault.ts VaultTree). */
+export interface VaultTree extends TreeResult {
+  configured: boolean;
+  root: string | null;
+}

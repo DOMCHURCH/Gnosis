@@ -72,7 +72,8 @@ export type DomEvent =
   | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
   | { type: "message.sent"; from: string; to: string; hops: number }
   | { type: "goal.state"; tabId: number; goal: GoalState | null }
-  | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean };
+  | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
+  | { type: "vault.changed" };
 
 /** The goal bar's per-tab standing goal (mirrors src/engine.ts GoalState). */
 export interface GoalState {
@@ -101,7 +102,8 @@ export type ClientMessage =
   | { type: "agent.close"; tabId: number }
   | { type: "job.kill"; jobId: string }
   | { type: "goal.set"; tabId: number; text: string; maxRounds?: number; reviewModel?: string; active?: boolean }
-  | { type: "goal.clear"; tabId: number };
+  | { type: "goal.clear"; tabId: number }
+  | { type: "vault.save"; reqId: number; filename: string; tags: string[]; content: string };
 
 /** One background job as returned by GET /api/jobs (mirrors src/jobs.ts Job). */
 export interface JobInfo {

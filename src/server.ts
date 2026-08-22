@@ -19,6 +19,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { WEB_ASSETS_DIR } from "./install.js";
 import { buildTree, readFileInRoot } from "./filetree.js";
+import { buildVaultTree, vaultRoot } from "./vault.js";
 import { jobs, bridgeJobsToBus } from "./jobs.js";
 import { spawnPty, killAllPtys } from "./pty.js";
 import type { AppBridge, DomEvent } from "./events.js";
@@ -181,6 +182,21 @@ async function handleApi(url: URL, bridge: AppBridge, res: http.ServerResponse):
     sendJson(res, 200, { id, output });
     return true;
   }
+  // Obsidian vault: the .md-only note tree (with a `configured` flag so the panel
+  // tab can hide itself), and one note's raw markdown for the reader/renderer.
+  if (url.pathname === "/api/vault/tree") {
+    sendJson(res, 200, await buildVaultTree());
+    return true;
+  }
+  if (url.pathname === "/api/vault/note") {
+    const rel = url.searchParams.get("path") ?? "";
+    const root = await vaultRoot();
+    if (root == null) { sendJson(res, 404, { error: "no vault" }); return true; }
+    const preview = await readFileInRoot(root, rel);
+    if (!preview) { sendJson(res, 404, { error: "not found" }); return true; }
+    sendJson(res, 200, preview);
+    return true;
+  }
   return false;
 }
 
@@ -258,6 +274,20 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
       // The resulting job.end flows back through the bus like any other event.
       jobs.kill(String(msg.jobId ?? ""));
       break;
+    case "vault.save": {
+      // Save the given content as a new vault note; ack the requesting client with
+      // the written path (or an error). onVaultSave emits vault.changed on success,
+      // which refreshes every client's Obsidian panel.
+      const reqId = msg.reqId;
+      const tags = Array.isArray(msg.tags) ? msg.tags.map((t: unknown) => String(t)) : [];
+      const done = (r: { ok: boolean; path?: string; error?: string }) => send({ type: "vault.saved", reqId, ...r });
+      if (!bridge.onVaultSave) { done({ ok: false, error: "vault save unavailable" }); break; }
+      void bridge
+        .onVaultSave(String(msg.filename ?? ""), tags, String(msg.content ?? ""))
+        .then(done)
+        .catch((e) => done({ ok: false, error: (e as Error)?.message ?? "save failed" }));
+      break;
+    }
   }
 }
 

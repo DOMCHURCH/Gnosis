@@ -2,18 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { OverlayModal } from "./OverlayModal";
-import { FileBrowser } from "./FileBrowser";
+import { LeftPanel } from "./LeftPanel";
+import { VaultSaveModal } from "./VaultSaveModal";
 import { GoalBar } from "./GoalBar";
 import { BackgroundPanel } from "./BackgroundPanel";
 import { TerminalDock } from "./Terminal";
+import { apiGet } from "./api";
+import type { VaultTree } from "./filetypes";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 
 export function App() {
-  const { state, send, select, requestFiles } = useDomSocket();
+  const { state, send, select, requestFiles, saveVault } = useDomSocket();
   const [selFig, setSelFig] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [steer, setSteer] = useState("");
+  // The Obsidian vault tree (md-only). Fetched once and re-fetched whenever a note
+  // may have changed (vaultEpoch: tool.end or a "save to vault"). Drives both the
+  // OBSIDIAN panel tab and the chat rail's "save to vault" button.
+  const [vault, setVault] = useState<VaultTree | null>(null);
+  const [saveTarget, setSaveTarget] = useState<string | null>(null);
+  useEffect(() => { void apiGet<VaultTree>("/api/vault/tree").then(setVault); }, [state.vaultEpoch]);
   const [, bump] = useState(0);
   const debugRef = useRef<{ byFloor: Record<number, any[]>; userCb: ((m: any) => void) | null; approvalCb: ((m: any) => void) | null }>({ byFloor: {}, userCb: null, approvalCb: null });
 
@@ -114,9 +123,14 @@ export function App() {
             onClear={() => { if (activeId != null) send({ type: "goal.clear", tabId: activeId }); }}
           />
         }
-        leftPanel={<FileBrowser tabId={activeId} fileEpoch={state.fileEpoch} onAttach={attachFile} />}
+        canSaveVault={!!vault?.configured}
+        onSaveMsg={(content) => setSaveTarget(content)}
+        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} />}
         rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
       />
+      {saveTarget != null && (
+        <VaultSaveModal content={saveTarget} onSave={saveVault} onClose={() => setSaveTarget(null)} />
+      )}
       {state.overlay && (
         <OverlayModal
           key={state.overlay.id}
