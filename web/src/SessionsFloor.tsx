@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SessionsModel } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
@@ -32,6 +32,8 @@ export interface SessionsProps {
   onSend: () => void;
   onApproveMsg: (permId?: string) => void;
   onDenyMsg: (permId?: string) => void;
+  /** Optional collapsible panel rendered at the far left (the File Browser). */
+  leftPanel?: ReactNode;
 }
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -59,6 +61,7 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
+          {props.leftPanel}
           <div style={{ flex: "1 1 780px", minWidth: 0, display: "flex", gap: 16, alignItems: "stretch" }}>
             {/* left rail — session selector */}
             <div style={{ flex: "0 0 64px", width: 64, display: "flex", flexDirection: "column", gap: 8 }}>

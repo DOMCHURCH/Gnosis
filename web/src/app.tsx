@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { OverlayModal } from "./OverlayModal";
+import { FileBrowser } from "./FileBrowser";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 
@@ -73,6 +74,9 @@ export function App() {
 
   const onSend = () => { const t = draft.trim(); if (!t || activeId == null) return; if (t.startsWith("/")) send({ type: "command", tabId: activeId, command: t }); else { send({ type: "input", tabId: activeId, text: t }); if (debugRef.current.userCb) debugRef.current.userCb({ text: t, floor: activeId }); } setDraft(""); };
   const onSteer = () => { const t = steer.trim(); if (t && selF) sendTo(selF.tabId, t); setSteer(""); };
+  // Attach a browsed file to the next message: drop an @-reference into the draft
+  // (the same @path mechanism the composer + backend already resolve).
+  const attachFile = (p: string) => setDraft((d) => (d.trim() ? d.replace(/\s*$/, "") + " " : "") + "@" + p + " ");
 
   return (
     <>
@@ -98,6 +102,7 @@ export function App() {
         onSend={onSend}
         onApproveMsg={(permId) => answerId(permId, "yes")}
         onDenyMsg={(permId) => answerId(permId, "no")}
+        leftPanel={<FileBrowser tabId={activeId} fileEpoch={state.fileEpoch} onAttach={attachFile} />}
       />
       {state.overlay && (
         <OverlayModal

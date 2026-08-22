@@ -34,6 +34,9 @@ export interface State {
   permission: PermissionRequest | null;
   /** Live selection overlay mirrored from the TUI (/model, /resume, @, Ctrl+R). */
   overlay: OverlayState | null;
+  /** Bumped on every tool.end so the File Browser re-reads the tree after a write/
+   * edit/bash may have changed files on disk (reuses the existing event stream). */
+  fileEpoch: number;
 }
 
 /** One raw chat line before grouping. `rule` marks a code-fence boundary; `text`
@@ -57,7 +60,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0 };
 
 /** Append a raw chat line, capping the buffer so the feed can't grow unbounded. */
 function pushLine(state: State, ln: RawLine): State {
@@ -181,7 +184,7 @@ export function reducer(state: State, action: Action): State {
       const epoch = state.turnEpoch[action.tabId] ?? 0;
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
       const ln: RawLine = { key: `t${action.tabId}-${withTx.chatLines.length}-${Date.now()}`, tabId: action.tabId, from, kind: "tool", epoch, time: clock(), tool: action.tool, primary: action.primary, secondary: action.secondary, ok: action.ok, summary: action.summary, detail: action.detail };
-      return pushLine(withTx, ln);
+      return { ...pushLine(withTx, ln), fileEpoch: state.fileEpoch + 1 };
     }
     case "subagent.start":
       return withItem(

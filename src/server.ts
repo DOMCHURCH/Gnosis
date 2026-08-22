@@ -18,6 +18,7 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { WEB_ASSETS_DIR } from "./install.js";
+import { buildTree, readFileInRoot } from "./filetree.js";
 import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
 
@@ -128,6 +129,45 @@ ws.onmessage=e=>{log.textContent+=e.data+'\\n';};
 ws.onclose=()=>log.textContent+='[disconnected]\\n';
 </script></body></html>`;
 
+function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "content-type": MIME[".json"]! });
+  res.end(JSON.stringify(body));
+}
+
+/** Resolve the cwd of a given tab from the live agent snapshot, or null. */
+function cwdForTab(bridge: AppBridge, tabId: number): string | null {
+  const a = bridge.getAgents().find((x) => x.id === tabId);
+  return a ? a.cwd : null;
+}
+
+/**
+ * Token-gated File Browser API (the human's read-only window into a session's cwd):
+ *   GET /api/tree?tabId=N        → { cwd, tree, truncated }
+ *   GET /api/file?tabId=N&path=R → { path, content, truncated }
+ * The cwd comes from the live agent, and file reads are guarded to stay inside it
+ * (readFileInRoot). Returns true if it handled the request.
+ */
+async function handleApi(url: URL, bridge: AppBridge, res: http.ServerResponse): Promise<boolean> {
+  if (url.pathname === "/api/tree") {
+    const tabId = Number(url.searchParams.get("tabId"));
+    const cwd = cwdForTab(bridge, tabId);
+    if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
+    sendJson(res, 200, await buildTree(cwd));
+    return true;
+  }
+  if (url.pathname === "/api/file") {
+    const tabId = Number(url.searchParams.get("tabId"));
+    const rel = url.searchParams.get("path") ?? "";
+    const cwd = cwdForTab(bridge, tabId);
+    if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
+    const preview = await readFileInRoot(cwd, rel);
+    if (!preview) { sendJson(res, 404, { error: "not found" }); return true; }
+    sendJson(res, 200, preview);
+    return true;
+  }
+  return false;
+}
+
 async function serveStatic(pathname: string, staticDir: string, res: http.ServerResponse): Promise<void> {
   const rel = pathname === "/" ? "/index.html" : pathname;
   const full = path.join(staticDir, path.normalize(rel).replace(/^(\.\.[/\\])+/, ""));
@@ -228,6 +268,12 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     if (!tokenOk(tok, token)) {
       res.writeHead(401);
       res.end("unauthorized");
+      return;
+    }
+    if (url.pathname.startsWith("/api/")) {
+      void handleApi(url, bridge, res).then((handled) => {
+        if (!handled) { res.writeHead(404); res.end("not found"); }
+      }).catch(() => { res.writeHead(500); res.end("error"); });
       return;
     }
     void serveStatic(url.pathname, staticDir, res);
