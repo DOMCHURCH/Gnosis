@@ -6,7 +6,7 @@ import { runHeadless } from "./headless.js";
 import { runPipe } from "./pipe.js";
 import { runJson } from "./jsonrun.js";
 import { runScheduleCommand } from "./scheduler.js";
-import { startServer } from "./server.js";
+import { startServer, type ServerHandle } from "./server.js";
 import { EventBus, createBridge, type AppBridge } from "./events.js";
 import { App } from "./ui/App.js";
 import { detectCaps, termWidth } from "./ui/terminal.js";
@@ -105,9 +105,9 @@ async function main() {
   // stdout output (so it can't be lost), then either the TUI mounts (attached
   // terminal) or the server runs headless (browser-driven). Both share the bus.
   let bridge: AppBridge | undefined;
+  let server: ServerHandle | undefined;
   if (flags.serve) {
     bridge = createBridge(new EventBus());
-    let server;
     try {
       server = await startServer(bridge, { port: flags.port });
     } catch (e) {
@@ -151,6 +151,7 @@ async function main() {
       skillWarnings={skillWarnings}
       defaultModel={defaultModel}
       bridge={bridge}
+      serveHandle={server}
     />,
     { exitOnCtrlC: false },
   );

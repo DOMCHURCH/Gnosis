@@ -62,9 +62,10 @@ export class TabsController {
   private readonly root: Engine;
   private executor: Executor;
   private onChange: () => void;
-  /** Event bus for the web view (`dom serve`); undefined in a plain TUI run. */
-  private readonly bus?: EventBus;
-  private readonly bridge?: AppBridge;
+  /** Event bus for the web view (`dom serve`); undefined in a plain TUI run until
+   * `/serve` attaches one (see attachBus). */
+  private bus?: EventBus;
+  private bridge?: AppBridge;
 
   constructor(root: Engine, rootName: string, executor: Executor, onChange: () => void, bus?: EventBus, bridge?: AppBridge) {
     this.root = root;
@@ -76,6 +77,20 @@ export class TabsController {
     this.tabs.push(tab);
     this.activeId = tab.id;
     this.emitCreated(tab);
+  }
+
+  /** Attach an event bus + bridge to a controller that started without one (a plain
+   * TUI run that later ran `/serve`). Wires every existing engine so its turns,
+   * tools, sub-agents, and permissions emit, and re-announces the current tabs so a
+   * client that connects sees them (getAgents also covers the connect snapshot). */
+  attachBus(bus: EventBus, bridge: AppBridge): void {
+    this.bus = bus;
+    this.bridge = bridge;
+    for (const tab of this.tabs) {
+      tab.engine.bus = bus;
+      tab.engine.bridge = bridge;
+      this.emitCreated(tab);
+    }
   }
 
   private emitCreated(tab: Tab): void {

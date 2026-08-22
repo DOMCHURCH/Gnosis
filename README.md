@@ -50,7 +50,7 @@ dom --json "prompt"       # headless: one turn, structured JSONL events to stdou
 
 ### In-session commands
 
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/memory` · `/schedule` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
+`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/memory` · `/schedule` · `/serve [stop] [--port <n>]` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
 
 `/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
 
@@ -75,6 +75,8 @@ dom boots straight onto your configured default (`config.model`) — no startup 
 ## Web view (`dom serve`)
 
 `dom serve [--port 7777]` runs the normal Ink TUI **and** a localhost web server that mirrors the same running engines to a browser — it's a view/remote-control over the existing agents, not a second agent. The agent loop is never duplicated: every Engine emits to an in-process **event bus** (via the tabs controller), and both the TUI and the websocket read from it. Emission is fire-and-forget, so it can't slow the loop; with the server off, nothing is emitted and the TUI is unchanged.
+
+You can also start the server **from inside a running session** with **`/serve`** — it attaches the event bus to the already-running engines (same process, not a second one) and prints the tokenized URL into the transcript. While it's up, a persistent `◆ serve  http://127.0.0.1:7777/?token=…` line sits above the status bar; `/serve` again reprints the URL, `/serve --port <n>` uses a non-default port, and `/serve stop` shuts the server down and clears the line.
 
 Security is enforced before anything else runs:
 - binds **127.0.0.1 only** (never `0.0.0.0`);

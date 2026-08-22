@@ -38,7 +38,8 @@ import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
 import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
 import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
-import type { AppBridge } from "../events.js";
+import { EventBus, createBridge, type AppBridge } from "../events.js";
+import { startServer, type ServerHandle } from "../server.js";
 import { helpText } from "../commands.js";
 import { rankedFiles } from "../filesearch.js";
 
@@ -73,8 +74,12 @@ interface Props {
   defaultModel: string;
   /** Present only under `dom serve`: the web view's event bus + remote handlers.
    * When set, the controller emits to the bus and this component registers the
-   * client→server handlers so a browser drives the SAME engines. */
+   * client→server handlers so a browser drives the SAME engines. A plain TUI run
+   * has none until `/serve` creates one on demand. */
   bridge?: AppBridge;
+  /** The server started by `dom serve` (so `/serve` can show/reprint/stop it). A
+   * plain `dom` run has none until `/serve` starts one. */
+  serveHandle?: ServerHandle;
 }
 
 const HELP = helpText();
@@ -139,10 +144,23 @@ function useTermWidth(fallback: number, regionRowsRef: { current: number }): num
   return cols;
 }
 
-export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings, defaultModel, bridge }: Props) {
+export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skillWarnings, defaultModel, bridge: initialBridge, serveHandle }: Props) {
   const { exit } = useApp();
   const g = caps.glyphs;
   const col = (hex: string) => (caps.color ? hex : undefined);
+
+  // The web-view bridge. Set from the start under `dom serve`; otherwise created on
+  // demand by `/serve` (which attaches the bus to the already-running engines).
+  const [bridge, setBridge] = useState<AppBridge | undefined>(initialBridge);
+  const bridgeRef = useRef(bridge);
+  bridgeRef.current = bridge;
+  // The running web server (persistent line above the status bar). Seeded from the
+  // handle `dom serve` started, else null until `/serve` starts one.
+  const [serve, setServe] = useState<{ url: string; handle: ServerHandle } | null>(
+    serveHandle ? { url: serveHandle.url, handle: serveHandle } : null,
+  );
+  const serveRef = useRef(serve);
+  serveRef.current = serve;
 
   // Rows the dynamic region occupied at the last render — read by the resize
   // handler to erase the stale frame before re-rendering (see useTermWidth).
@@ -1345,6 +1363,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "hooks":
         void showHooks();
         break;
+      case "serve":
+        void handleServe(arg);
+        break;
       case "jobs":
         listJobs();
         break;
@@ -1424,33 +1445,80 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (v.endsWith("@") && !busyRef.current) void openFilePicker(v.slice(0, -1));
   };
 
-  // --- web view bridge (dom serve) -----------------------------------------
+  // --- web view bridge (dom serve / /serve) --------------------------------
 
-  // Populate the bridge's client→server handlers each render so they close over
-  // the latest state. The browser drives the SAME engines through these — it never
-  // talks to OpenRouter and never runs its own loop.
-  if (bridge) {
-    bridge.getAgents = () =>
+  // Wire a bridge's client→server handlers so a browser drives the SAME engines
+  // (never OpenRouter, never a second loop). Called every render for the current
+  // bridge, and immediately by /serve when it creates one, so a client that
+  // connects at once already sees wired handlers.
+  const wireBridge = (b: AppBridge) => {
+    b.getAgents = () =>
       controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy }));
-    bridge.onInput = (tabId, text) => {
+    b.onInput = (tabId, text) => {
       const tab = controller.byId(tabId) ?? controller.active();
       emitToTab(tab, { kind: "user", text });
       controller.submitUser(tab, text);
     };
-    bridge.onCommand = (tabId, command) => {
+    b.onCommand = (tabId, command) => {
       const tab = controller.byId(tabId);
       if (tab && tab.id !== controller.active().id) switchToTab(tab.id);
       handleCommand(command.startsWith("/") ? command.trim() : "/" + command.trim());
     };
-    bridge.onCreateAgent = (name, purpose) => newTab(name, purpose ?? "");
-    bridge.onCloseAgent = (tabId) => {
+    b.onCreateAgent = (name, purpose) => newTab(name, purpose ?? "");
+    b.onCloseAgent = (tabId) => {
       const t = controller.byId(tabId);
       if (!t) return;
       if (t.id !== controller.active().id) switchToTab(t.id);
       closeActiveTab();
     };
-    bridge.onFiles = (tabId, query) => rankedFiles(controller.byId(tabId)?.engine.cwd ?? controller.active().engine.cwd, query);
-  }
+    b.onFiles = (tabId, query) => rankedFiles(controller.byId(tabId)?.engine.cwd ?? controller.active().engine.cwd, query);
+  };
+  if (bridge) wireBridge(bridge);
+
+  // `/serve [stop] [--port <n>]`: start/stop the localhost web view over THIS
+  // running session (same event bus + engines, not a separate process). Already
+  // running → reprint the URL; `stop` → shut down and clear the persistent line.
+  const handleServe = async (arg: string) => {
+    const toks = arg.split(/\s+/).filter(Boolean);
+    if (toks[0] === "stop") {
+      const cur = serveRef.current;
+      if (!cur) return sysLog("serve: not running");
+      await cur.handle.close();
+      setServe(null);
+      sysLog("serve stopped");
+      return;
+    }
+    const pi = toks.indexOf("--port");
+    const port = pi >= 0 && toks[pi + 1] ? Number(toks[pi + 1]) : undefined;
+    if (port !== undefined && !Number.isInteger(port)) return sysLog("usage: /serve [stop] [--port <n>]");
+    if (serveRef.current) {
+      sysLog(`${g.diamond} serve  ${serveRef.current.url}  (already running)`);
+      return;
+    }
+    // First /serve in a plain session: create the bus + bridge and attach them to
+    // the already-running engines, then wire the client→server handlers.
+    let b = bridgeRef.current;
+    if (!b) {
+      const bus = new EventBus();
+      b = createBridge(bus);
+      controller.attachBus(bus, b);
+      wireBridge(b);
+      bridgeRef.current = b;
+      setBridge(b);
+    }
+    let handle: ServerHandle;
+    try {
+      handle = await startServer(b, { port });
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === "EADDRINUSE") sysLog(`serve: port ${port ?? 7777} is already in use — try /serve --port <n>`);
+      else sysLog(`serve: could not start — ${(e as Error).message}`);
+      return;
+    }
+    setServe({ url: handle.url, handle });
+    sysLog(`${g.diamond} serve  ${handle.url}`);
+    sysLog("(127.0.0.1 only · token required · open it in a browser · /serve stop to shut down)");
+  };
 
   // Bridge background-job lifecycle to the bus, and let a web answer dismiss the
   // TUI's permission overlay (the engine already resolved the shared request).
@@ -1791,7 +1859,16 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         </Box>
       ) : null}
 
-      <Box marginTop={tabbarShown ? 0 : 1}>
+      {/* Persistent web-view line while `/serve` (or `dom serve`) is running. */}
+      {serve ? (
+        <Box marginTop={tabbarShown ? 0 : 1} width={inner}>
+          <Text color={col(C.cyan)} wrap="truncate">
+            {g.diamond} serve  <Text color={col(C.value)}>{serve.url}</Text>
+          </Text>
+        </Box>
+      ) : null}
+
+      <Box marginTop={serve ? 0 : tabbarShown ? 0 : 1}>
         <StatusBar
           caps={caps}
           width={inner}
