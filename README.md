@@ -1,7 +1,7 @@
-# dom
-
-A terminal coding agent. OpenRouter is the only provider, with runtime model switching. Windows-first, POSIX-compatible.
-
+<!--
+  banner gradient: cyan (#22d3ee) → indigo (#6366f1) → magenta (#d946ef),
+  left-to-right across the wordmark
+-->
 ```
 ██████╗   ██████╗  ███╗   ███╗
 ██╔══██╗ ██╔═══██╗ ████╗ ████║
@@ -11,208 +11,82 @@ A terminal coding agent. OpenRouter is the only provider, with runtime model swi
 ╚═════╝   ╚═════╝  ╚═╝     ╚═╝
 ```
 
+**dom** is a terminal coding agent that runs entirely on OpenRouter (bring your own key), lets you switch models mid-session, and ships with a web UI that visualizes your agents as figures moving around an office floor.
+
+![dom office floor](docs/screenshot.png)
+
+## Features
+
+- **OpenRouter BYOK** — one provider, your own key; no vendor lock-in, no bundled credits
+- **Runtime model switching** — change the model mid-session with `/model`, no restart
+- **10 built-in tools** — read, write, edit, multi-edit, bash, HTTP, web search, tree-sitter repo map, todo, and more
+- **Sub-agents** — spawn isolated agents for parallel or scoped work
+- **Repo map** — tree-sitter structural map of your codebase for grounded edits
+- **Prompt caching** — measured ~12× cost reduction on cached turns
+- **Multi-session tabs** — run several agents side by side, each with its own context
+- **Inter-agent messaging** — tabs can message each other to coordinate
+- **Skills system** — reusable, invokable capabilities the agent loads on demand
+- **Auto-commit** — each successful write/edit is committed to git (toggle with `--no-auto-commit`)
+- **Plan mode** — the agent proposes a plan and waits for approval before touching code
+- **Hooks** — run your own commands on agent lifecycle events
+- **Web UI** — office-floor visualization of live agents, a file browser, an in-browser terminal, and a per-tab goal bar
+
 ## Install
 
 ```sh
-npm install
-npm run build
-npm link      # puts `dom` on your PATH
+npm install -g dom-agent      # or, from source: npm link
 ```
 
-Set your key (either works):
+Add your OpenRouter key to `~/.dom/.env`:
 
 ```sh
-export OPENROUTER_API_KEY=sk-or-...      # env wins
-# or add { "apiKey": "sk-or-..." } to ~/.dom/config.json
+OPENROUTER_API_KEY=sk-or-...
 ```
 
-**Runs from anywhere, rebuilds itself when stale.** `dom` finds its own code and web
-bundle from the binary's location (`import.meta.url`), while the directory tools read
-and write is `process.cwd()` — so the install lives in one place and the working
-directory follows you. On startup dom compares the newest mtime under `src/` and
-`web/src/` against `dist/`; if source is newer it prints a dim `rebuilding…`, runs the
-build, and re-execs on the fresh output (so edits take effect without a manual
-`npm run build`). Set `DOM_NO_BUILD=1` to skip the check (CI, cron, a stable install).
+Then run it:
 
-## Use
+```sh
+dom
+```
+
+## Usage
 
 ```sh
 dom                       # start the TUI
-dom -c                    # resume the latest session for this directory
-dom -r <id>               # resume a specific session
-dom --model <id>          # start on a specific model
-dom --yolo                # allow all tools (dangerous commands still prompt)
-dom --no-auto-commit      # don't commit each successful write/edit to git
-dom --headless "message"  # one-shot, no TUI
+dom serve                 # start the web UI (office floor, file browser, terminal)
 dom -p "prompt"           # pipe mode: one turn, final answer to stdout, exit
-dom --json "prompt"       # headless: one turn, structured JSONL events to stdout
 ```
 
-### In-session commands
-
-`/model [id]` · `/mode <ask|plan|yolo>` · `/approve` · `/revise <text>` · `/new` · `/tabs` · `/tab <n|name>` · `/alltabs` · `/close` · `/worktree <name>` · `/workspace <add|list|remove>` · `/memory` · `/schedule` · `/serve [stop] [--port <n>]` · `/jobs` · `/job <id>` · `/kill <id>` · `/hooks` · `/init [--force]` · `/map` · `/clear` · `/compact` · `/tools` · `/cost` · `/context` · `/trace` · `/verbose` · `/undo` · `/resume` · `/help` · `/exit`
-
-`/resume` with no argument opens a picker of prior sessions **for the current directory** (newest first, with message count, model, and age). `/context` shows what's filling the context window broken down by category — system prompt, summary, user messages, assistant text, tool calls, tool results, images — each with a token count and its share of used tokens and of the window.
-
-Tool calls render compactly — one line per call as a signature (`● Read(src/engine.ts)`, `● Bash(npm run build)`, `● Http(GET api.example.com/x)`) with a one-line summarized result beneath (`Read 59 lines`, `Added 4 lines, removed 2 lines`, `200 OK · 4.2KB json`). Failures always show the full error. `/verbose` restores full, unsummarized output for the session.
-
-dom boots straight onto your configured default (`config.model`) — no startup picker. `/model` and `/mode` are **session-scoped**: they change the current session only, never `config.json`. The status bar shows a dim `*` next to the model whenever the session model differs from the saved default. To change the default, use `/model --save [<id>]` (or press `ctrl+s` in the `/model` picker) and `/mode <ask|plan|yolo> --save`. `-m/--model` at launch is likewise session-only.
-
-**Tabs** — each tab is its own engine (own history, model, cwd, permission mode). `/new [name] [purpose]` opens one, `/tabs` lists them, `/tab <n|name>` switches, `/close` closes the active tab. Switching is a full-screen replace: the screen clears and only the target tab's transcript is drawn, so each tab reads as its own session. `/alltabs` opens a read-only tiled overview of every tab (2 across for 2–4 tabs, 3 for 5+; a stacked list below 100 columns) — cells update live as background tabs produce output, and the active tab's cell border is highlighted; `/alltabs` again (or any `/tab` switch) exits back to single view. `Ctrl+1..9` is a best-effort switch alias for `/tab` (some terminals don't emit those chords, so `/tab` is the reliable path). Only the active tab renders; background tabs keep running and badge the tab bar when they produce output (`•`) or need approval (amber `●`) — an approval never steals focus, it waits until you switch over. A tab's model can hand work to another tab with the `send_message` / `list_tabs` tools (loop-guarded: max 3 hops, no immediate reply to the sender, 20 messages/session).
-
-`@` opens a fuzzy file picker that inserts a path — matches are subsequence-scored (contiguous runs and path-segment boundaries favored) and ranked by the repo map, so the most central files surface first and typing a few characters of a name jumps to it. `!<command>` runs a shell command directly (still gated). `Ctrl+C` aborts the in-flight request and returns to the prompt. `Ctrl+R` reverse-searches your prompt history — prior prompts from this session (newest first) then from earlier sessions for the same directory, de-duplicated — as a filterable picker; select one to drop it back into the input.
-
-### Permission modes
-
-- **ask** (default) — read/glob/grep run free; write/edit/bash prompt with a preview (a colored diff for edits, the exact command for bash). Approve once with *always* to whitelist it for the session.
-- **plan** — write, edit, and bash are removed from the tool list entirely (only `read`/`glob`/`grep`/`http` remain), so the model researches and produces a written plan instead of acting. `/approve` switches to ask mode and executes the plan (feeding it back as context); `/revise <text>` amends the plan without executing. `shift+tab` still cycles modes.
-- **yolo** — everything runs without prompting, except commands matching `rm -rf`, `git push --force`, `dd`, `mkfs`, `curl | sh`, `> /dev/…`, and mutating HTTP methods (`POST`/`PUT`/`PATCH`/`DELETE`), which always prompt.
-
-**Read before edit.** dom won't edit or overwrite a file it hasn't read this session — it returns "read it first". If a file changed on disk since it was read, the edit is refused until it's re-read, so the model never edits stale content. Creating a brand-new file is exempt.
-
-**Auto-commit.** Every successful write or edit is committed on its own to the current git repo with a `dom: <verb> <file>` message — only that one file (never `git add -A`), and a silent no-op outside a repo (it never runs `git init`). `/undo` reverts dom's most recent commit and reports what it undid. Turn it off with `"autoCommit": false` in config or `--no-auto-commit`.
-
-## Web view (`dom serve`)
-
-`dom serve [--port 7777]` runs the normal Ink TUI **and** a localhost web server that mirrors the same running engines to a browser — it's a view/remote-control over the existing agents, not a second agent. The agent loop is never duplicated: every Engine emits to an in-process **event bus** (via the tabs controller), and both the TUI and the websocket read from it. Emission is fire-and-forget, so it can't slow the loop; with the server off, nothing is emitted and the TUI is unchanged.
-
-You can also start the server **from inside a running session** with **`/serve`** — it attaches the event bus to the already-running engines (same process, not a second one) and prints the tokenized URL into the transcript. While it's up, a persistent `◆ serve  http://127.0.0.1:7777/?token=…` line sits above the status bar; `/serve` again reprints the URL, `/serve --port <n>` uses a non-default port, and `/serve stop` shuts the server down and clears the line.
-
-Security is enforced before anything else runs:
-- binds **127.0.0.1 only** (never `0.0.0.0`);
-- rejects any request whose `Host` header isn't localhost (DNS-rebinding defense);
-- generates a **random per-startup token**, prints it in the URL, and requires it on every HTTP request and websocket connect.
-
-The server serves the frontend and a websocket at `/ws`. Events are typed JSON: `agent.created/closed/mode/busy`, `turn.start/end`, `line`, `tool.start/end`, `subagent.start/end`, `permission.request/resolved`, `overlay.open/resolved`, `job.start/end`, `message.sent`. Clients send back `input`, `command`, `permission`, `overlay.select`/`overlay.cancel`, and `agent.create`/`agent.close`, which route into the same controller the TUI uses (permission requests **and** selection overlays can be answered from either side — first wins). The websocket layer is hand-rolled (RFC 6455), so dom adds no runtime dependency there.
-
-The browser UI is a React app (built with Vite into a single self-contained `dist/web/index.html`, so only the one tokened URL is ever fetched — no separate asset requests to authenticate). It has a **sidebar** of agents (name, model, mode, busy), a **transcript** rendered from the event stream with the same compact `● tool(arg)` / `⎿ summary` formatting as the TUI, an **input box** (slash commands included), a **permission modal** showing the diff/command preview with yes/no/always, and a **status bar** (cwd, model, mode, cost, tokens). Anything you can do in the terminal, you can do in the browser — and the TUI reflects it live, since both read the one event bus. `npm run build` builds the server (`tsc`) and the frontend (`vite`); `npm run build:web` rebuilds just the UI.
-
-The browser UI is a **session-floors** view — the whole UI, no sidebar or tab toggle. **One floor = one dom tab (session).** A left rail of numbered buttons selects the session (its activity dot reflects `agent.busy`; `+` creates a new tab); the header shows the tab name and its current activity. Selecting a floor shows that session's agents, roster ("WHO IS WORKING"), and chat. Within a floor, the tab's own agent is a pixel-art figure placed by mode — plan → Planning, ask/yolo → Coding, coordinating `task()` sub-agents → Coordinator — while each running background job is a figure in Application and each sub-agent a figure in Sub-agents. Figure state follows the bus: `tool.start` → thinking (animated) with the tool as its action line, `permission.request` → amber *awaiting* (APPROVE/DENY, in the chat rail and the detail panel, fire the real response), *speaking* just after a turn, else idle. Zones have fixed desk counts (coordinator 1, planning 2, application 2, coding 8, sub-agents 6); overflow figures go to the roster as `N OFF-FLOOR` and the zone label shows `8/11` — figures never overlap. The chat rail on the right is where you type — plain messages are input to the active session, `/…` are slash commands (so model switching, `/new`, etc. work), and permissions/tab-create/close all work here. Typing `/` shows the **same command list the TUI uses** (from the shared `src/commands.ts` registry, sent to the browser on connect), filtered as you type — arrows to select, Enter/Tab to complete; `@` autocompletes file paths under the session's cwd. **Interactive selection overlays round-trip through the event bus** the same way permissions do: a command that opens a picker in the terminal (`/model`, `/resume`, and the TUI's `@`-file / Ctrl+R history pickers) emits an `overlay.open` carrying the item list, title, and current selection, and the browser renders it as a **modal list** — filter as you type, arrows to move, Enter to select, Esc to cancel — sending back `overlay.select`/`overlay.cancel`. The TUI keeps rendering the same picker; whichever side answers first resolves it and the other closes (no orphaned pending). So running `/model` from the browser opens the picker *in the browser* and the switch lands on the live engine. The floor SVG **scales to fit** its container (no horizontal scrollbar) with a −/FIT/+ zoom control; an empty zone shows a dim one-line hint of what would put an agent there. The right-side chat **groups consecutive lines from the same speaker within one turn into a single message block** (a multi-line reply or code block is one bubble, not one per line); fenced code renders monospace in a bordered block (the TUI's `───` fence look), never reflowed as prose. Per-message cost is gone, but the header carries the active session's **live tokens + cost** (`<tokens> tok · $<cost>`) next to the session/agent counts. The floor header and WHO IS WORKING rows show each agent's **activity** — the running tool and its target (`read src/engine.ts`), `awaiting approval`, `responding`, or `idle` — never the last sentence it said. **Tool calls render in the same compact form as the TUI** — `● Write(greet.py)` with a `⎿ Wrote 9 lines to greet.py` summary (via the shared `toolrender` helpers, so the formatting can't drift) — and **click a tool line to expand** the full result: the file content for write, the diff for edit, the full output for bash (collapsed by default, like `/verbose` off). **Permission cards resolve in place**: on `permission.resolved` the pending amber card is replaced with its outcome (`approved: write greet.py` / `denied: …`) in resolved styling with the buttons gone — whichever side (TUI or another browser) answers first, every client updates. `line` events feed the rail; the detail panel's STEER queues input to the selected agent and DISMISS closes its tab. `window.domOffice` (add/update/think/remove/list/say/setFloor/addFloor/onUserMessage/onApproval) stays exposed as a debug overlay. The placement/state logic lives in a plain module (`web/src/sessions.js`) shared by the renderer and the test suite; the design is a ported Claude Design mockup — plain SVG, no third-party sprite/tileset assets.
-
-**Reconnect & responsive.** The server tags every forwarded event with a monotonic `seq` and keeps a ring buffer (last 2000). If the browser drops, it reconnects with backoff and passes `?since=<lastSeq>`; the server replays exactly what was missed — no gap, no duplicate, no snapshot resend — and only resyncs agent state with a fresh snapshot if the gap exceeds the buffer. The theme matches the terminal palette (`#0D0D12` background, `#22D3EE`→`#E879F9` accents); the floor + right column reflow (`flex-wrap`) on narrow windows, with the floor itself horizontally scrollable.
-
-## Scheduled runs
-
-dom can run a prompt headlessly on a schedule. `dom schedule add "<spec>" "<prompt>"` registers one (spec is `every 30m` / `hourly` / `daily 14:30`); `dom schedule list` shows each with its next-run time and last outcome; `dom schedule remove <id>` deletes one; `dom schedule run <id>` fires one immediately. `dom schedule tick` runs everything **due right now** and records the result — wire that to cron or Windows Task Scheduler (e.g. every minute), or run `dom schedule daemon` to keep a process ticking every 60s. Each firing boots in the schedule's directory, runs the prompt in pipe mode, and **saves it as a resumable session** so you can `dom -c` in and read the result. The registry lives in `~/.dom/schedules.json`. In-session, `/schedule` lists them and `/schedule add <spec> | <prompt>` adds one.
-
-The scheduling logic (spec parsing, due-calculation, the registry, and `tick`'s due-selection) is covered by the verify suite; **real firing over wall-clock time and the OS-cron wiring are only exercised by `dom schedule tick|daemon` and are not auto-verified.**
-
-## Memory bank
-
-dom keeps a durable, per-project **memory bank** the model writes to with the `memory` tool (`add` a note, `list` it, `clear` it) and that is **re-injected into the system prompt at the start of every session** — so a convention, gotcha, or decision it learns once is remembered next time. Each project has its own bank, keyed by the project's absolute path and stored **outside the repo** under `~/.dom/memory/` (it never pollutes your tree). `/memory` shows the bank (with its file path); `/memory add <note>` adds one by hand and `/memory clear` erases it. Notes are deduped and stored as bullets. (`/mem` is an alias.)
-
-## Multi-root workspaces
-
-A session can span more than one project root. `/workspace add <path>` registers an extra root (or set `"workspaceRoots": ["../other"]` in config); `/workspace list` shows them and `/workspace remove <path>` drops one (the primary root — your cwd — always stays). With 2+ roots, **`grep` and `glob` called without an explicit `path` search every root** and prefix each hit with the root's name (`api/src/db.ts:12:…`, `web/src/db.ts:8:…`), so you can search across repos in one call; pass an explicit `path` to scope back to one. The roots are advertised in the system prompt so the model knows they exist. (`/ws` is an alias.)
-
-## Git worktree isolation
-
-`/worktree <name>` runs work in a **separate git worktree** on its own branch (`dom/<name>`), checked out under `~/.dom/worktrees/` and opened as a new tab. Edits and auto-commits there never touch your current working tree or branch — you keep working in the main tab while the worktree tab explores in parallel. When the work is good, `/worktree merge <name>` merges the branch back (`--no-ff`, so the isolation stays visible in history); if it isn't, `/worktree remove <name>` discards the worktree and its branch without a trace on your branch. `/worktree list` shows the open ones. The name is slugged (`Feature X` → `feature-x`); creating a name whose branch already exists is refused. Merge conflicts abort cleanly and report, leaving your tree untouched. (`/wt` is an alias.)
-
-## Headless & JSON output
-
-Two non-interactive one-shot modes read piped stdin (appended to the prompt, so `git diff | dom -p "review this"` works) and never open the TUI:
-
-- **`dom -p "prompt"`** (pipe mode) writes only the model's final answer to **stdout**; progress and errors go to stderr, so it composes in shell pipelines. `--save` persists the turn as a session (off by default). Exit code is non-zero on error or an empty answer.
-- **`dom --json "prompt"`** streams a structured event log to stdout as **newline-delimited JSON** — one complete object per line, so a web UI or script can spawn dom and read events incrementally. This is the intended programmatic contract. Event types, in order: `session` (once, first — `sessionId`, `model`, `cwd`), then per activity `assistant` (text), `tool_use` (`id`, `name`, `input`), `tool_result` (`id`, `name`, `ok`, `output`), `system`, `permission` (a prompt auto-denied in headless — the `preview` is recorded so you can re-run with `--yolo`), `cost` (per turn), and finally `result` (once, last — `ok`, `text`, `usd`, `sessionId`, `capped`). The resumed-session notice and skill warnings go to **stderr** so stdout stays pure JSONL. `--json` takes precedence if combined with `-p`.
-
-Secrets are redacted in `tool_use` inputs, `permission` previews, and assistant/result text before they reach stdout (tool outputs are already redacted upstream); the real values were used during execution — redaction is display-only. Both modes refuse anything that needs confirmation (bash/http prompts); read-only work and file edits proceed as in `--headless`.
-
-## Budget ceiling
-
-Each session has a dollar ceiling (`maxSessionUsd`, default $2). On reaching it dom halts the turn and prompts: decline to stop, approve to grant another allotment, or *always* to lift the ceiling for the rest of the session. While over budget, new `task` sub-agent and `oracle` spawns are refused. `/budget` shows spent vs. ceiling; `/budget <usd>` sets it. Headless/pipe runs halt at the ceiling rather than prompting.
-
-## Command-hiding defense
-
-Before a bash command is shown for approval, dom reveals anything that could hide part of it from you: tabs, zero-width/invisible/bidi-override Unicode, and other control characters are rendered as `<U+XXXX>` (tabs as `⇥`), and multi-line/chained commands are shown in full — never truncated to a benign-looking first line. A command containing hidden characters is flagged and **always prompts, even in yolo**. Only the display is normalized; the real command executes unchanged.
-
-## Secret redaction
-
-Tool output and the model's own tool-call args are scanned for credential patterns — OpenAI/OpenRouter/Anthropic-style `sk-…` keys, AWS `AKIA…`, GitHub `ghp_`/`github_pat_`, Slack `xox…`, Google `AIza…`, JWTs, `Bearer` tokens, and `PRIVATE KEY` blocks — and each is replaced with `<redacted:TYPE>` before it reaches the model, the transcript, or the session file. Redaction touches only the stored/displayed copy: the real command still executes with the real value, so a `cat .env` gets masked in history while the file on disk is untouched. Patterns are specific to avoid mangling ordinary output.
-
-## Verifier subagent
-
-`/verify` spawns a read-only subagent that judges whether the last turn's change actually accomplished the request. It receives **only** the original request and the `git diff` of the files edited that turn (committed + working-tree, since the pre-turn HEAD) — never the generator's system prompt or reasoning — and has **no tools**, so it can't be swayed by anything outside the diff. It replies `PASS`/`FAIL` on the first line plus specifics. `"autoVerify": true` runs it automatically after any turn that touched 2+ files. Its cost folds into the session.
-
-## Auto lint/test loop
-
-With `"autoFix": true` in config, after any turn that edited files dom runs the configured `lintCommand` then `testCommand` in the working directory. A non-zero exit is fed back to the model as a fix request (with the failure output) and it retries — up to 3 attempts, then it stops and reports "still failing". The commands are user-configured (trusted) so they run without a prompt; off by default, and a no-op if neither command is set.
-
-## Background jobs
-
-Pass `run_in_background: true` to `bash` — for dev servers, watchers, or long builds — and the call returns immediately with a job id while the command keeps running, so the model can carry on. `/jobs` lists running jobs, `/job <id>` shows its output so far, and `/kill <id>` terminates the whole process tree. A finishing job appends a dim line to the transcript. Background jobs die with the session.
-
-## Hooks
-
-Executable lifecycle scripts in `~/.dom/hooks/` (global) and `./.dom/hooks/` (project — shadows global per event), each named after its event: `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`. Each hook receives the event as JSON on stdin (the extension picks the interpreter: `.mjs`/`.js` → node, `.py` → python, `.ps1` → powershell, `.sh`/none → shell). `PreToolUse` is the only **blocking** hook: a clean non-zero exit blocks the tool call and the script's stderr is returned to the model as the tool error. Every other event is fire-and-forget. All hooks have a 5s timeout — a timeout or crash logs a dim warning and never blocks. `/hooks` lists what's registered.
-
-## /init
-
-`/init` scans the repo and writes an `AGENTS.md`: the detected language and framework, the build/test/lint commands (from `package.json` or the equivalent), a one-line-per-top-level-directory layout, and observed conventions (module style, test framework, formatter). It's prose, under 60 lines, and refuses to overwrite an existing `AGENTS.md` without `--force`. `AGENTS.md` is appended to the system prompt each session.
-
-## Model fallback
-
-Set `"fallbackModel"` in `~/.dom/config.json` to survive a dead primary. When the active model returns a **404**, or an **upstream/shared-pool 429** (`limit_source: upstream_provider_shared_pool` — common on `:free` models, and not clearable by retrying our own request), dom switches to the fallback for the rest of the session, re-runs the turn on it, and prints a dim notice naming both models. An ordinary 429 from *your own* rate limit still retries in place with exponential backoff.
-
-## Prompt caching
-
-For models whose provider supports explicit cache breakpoints (Anthropic, Gemini — detected from the catalog's cache-write price), dom sends `cache_control` breakpoints that OpenRouter forwards to the provider: after the tool definitions, after the system prompt (skill descriptions included), and on the last message (moved forward each turn as history grows). Within a multi-step turn, iterations after the first read the cached prefix. Models without cache-breakpoint support (OpenAI's automatic caching, DeepSeek, Groq) receive **no** `cache_control` at all. `/cost` shows cached vs uncached input tokens so the saving is visible.
-
-## Repo map
-
-At startup dom builds a tree-sitter-parsed, PageRank-ranked summary of the codebase's most-referenced **exported** symbols and injects it into the system prompt, so the model starts oriented instead of blind-searching. Grammars load as WebAssembly (`web-tree-sitter` + prebuilt `tree-sitter-wasms` — no native build); a language with no grammar is skipped rather than failing. Parses are cached in `~/.dom/cache/repomap.db` keyed by path + mtime, so a second run only reparses the files that changed. The serialization budget is `mapTokens` (default 1024). `/map` prints the current map and its token count.
-
-## Tools
-
-`read` · `write` · `edit` · `bash` · `glob` · `grep` · `http` · `task` — zod schemas are the source of truth; JSON Schema (for the API) and TS types are both derived from them. In multi-tab sessions the model additionally gets `send_message` / `list_tabs`.
-
-### `http`
-
-Make an outbound HTTP(S) request: `{ url, method?, headers?, body?, timeout? }` (default `GET`, 30s timeout). Returns the status, response headers, and body (JSON pretty-printed), truncated at 2000 lines / 50KB like the other tools; follows up to 5 redirects.
-
-- **Permission** — `GET`/`HEAD` may auto-approve in yolo; `POST`/`PUT`/`PATCH`/`DELETE` always prompt with the full URL, in every mode.
-- **SSRF guard** (hard block, never prompted) — `localhost`, `127.0.0.1`, `0.0.0.0`, `::1`, the private ranges (`10.x`, `192.168.x`, `172.16–31.x`), the cloud-metadata address `169.254.169.254`, and any non-`http(s)` scheme (`file://`, `ftp://`, …). Redirect targets are re-checked on every hop.
-- **Secrets** — reference a key by name as `${VAR_NAME}` in the url, a header value, or the body. The value is read from `~/.dom/.env` (`NAME=value` lines, `#` comments, optional quotes) at request time and substituted in. Keys never enter message history, session files, or the transcript: the echoed request shows the `${VAR}` verbatim, and `Authorization` / `api-key`-style headers render as `<redacted>`. A missing key errors with the variable name and the file to add it to.
-
-### `task` (sub-agents)
-
-`task(description, prompt)` delegates an open-ended search or investigation to a fresh read-only sub-agent — "find where X is handled", "which files touch Y". The sub-agent has its own history and context budget (it inherits your cwd, model, and repo map) but only `read`/`glob`/`grep`/`http` — no writing, no shell, and no recursion — and is capped at 15 iterations / 50k tokens (on exceed it returns what it has with a truncation note). It runs to completion and returns only its final summary; its intermediate turns never enter your history. The transcript shows one line: `● Task(description)` then `⎿ N tools · N tokens` and the summary. Its cost is folded into the session and shown separately in `/cost`. Prefer it over grepping large output into your own context.
-
-### `oracle`
-
-`oracle(question)` consults a stronger model (config `oracleModel`, falling back to the session model when unset) on a hard, self-contained sub-problem. It runs a **single** completion with **no tools** and an **isolated context** — only the question, none of your files or history — so the model must put all needed context in the question, and it returns just the answer. Its tokens fold into the session cost and its dollar spend is tracked separately in `/cost` (`incl. $… oracle`). Excluded from plan mode and sub-agents. Use it sparingly for genuinely hard problems.
-
-The **public-apis skill** (`~/.dom/skills/public-apis/`) caches the [public-apis](https://github.com/public-apis/public-apis) index to `~/.dom/cache/public-apis.md` (refreshed at most every 30 days), greps it by category, reports the Auth column honestly (many "free" entries still need a key), HEAD-checks links before recommending them, then calls `http`.
-
-## Storage
-
-- `~/.dom/config.json` — model, fallbackModel, mode, apiKey, autoCommit, mapTokens
-- `~/.dom/.env` — `NAME=value` secrets, substituted into `http` requests as `${NAME}` (never logged)
-- `~/.dom/models.json` — model catalog cache (24h TTL)
-- `~/.dom/sessions/<id>.json` — history, cwd, cumulative cost (written after every turn)
-- `~/.dom/cache/` — code-maintained caches: the public-apis index and the repo-map parse DB
-- `~/.dom/skills/<name>/SKILL.md` — skills advertised in the system prompt (also `./.dom/skills/`)
-- `~/.dom/hooks/<event>` — lifecycle hook scripts (also `./.dom/hooks/`, which shadows global)
-
-All of `~/.dom` is off-limits to the tools **except** `cache/` and `skills/`, which any tool (including `bash`) may read and write — that's where skill data lives. `config.json`, `.env`, and `sessions/` are always blocked, even from a read.
-- `AGENTS.md` in the working directory, if present, is appended to the system prompt.
-
-## Build order
-
-`provider → tools → loop → headless CLI → permission gate → Ink UI → banner → sessions`. The loop is runnable without the TUI (`dom --headless`) so it can be verified independently.
-
-## Notifications
-
-When a turn finishes or a tool needs approval, dom sends a desktop notification (config `notify`, default on; set `"notify": false` to disable). It uses `osascript` on macOS and `notify-send` on Linux **only for local sessions** — over SSH those would pop on the remote host, so dom instead emits an OSC 9 terminal escape plus a bell that the *local* terminal renders. The terminal escape is also the Windows / no-native-tool fallback, and a failed native notifier falls back to it too. A ctrl+c abort is your own action, so it doesn't notify.
-
-## Tracing
-
-Every model call, tool call, and user turn is appended as one structured JSONL line to `~/.dom/traces/<session>.jsonl` — model id and per-call tokens/cost for model calls, tool name + (truncated) args + error flag + output size for tool calls. `/trace` prints a summary of the current session: event/turn/call counts, in/out (and cached) tokens, cost, a per-tool breakdown, per-model breakdown, and the file path. Tracing is best-effort (never breaks a turn) and skipped for ephemeral sessions (sub-agents, eval, `-p` without `--save`).
-
-## Eval
-
-`npm run build && npm run eval` runs a fixed regression suite of 10 tasks — each set up in its own scratch repo with a deterministic, outcome-based check (final file state or the model's answer, never a specific tool sequence) — against the live model, and scores pass/fail plus tokens and cost per task. The first run records a baseline (`eval/baseline.json`); later runs print the delta vs baseline (score, tokens, cost, and any tasks that **regressed** or got fixed) so you can see whether a change actually helped. `-- --record` re-records the baseline; `DOM_EVAL_MODEL=<id>` overrides the model. Real runs need an API key and make (cheap-model) calls. The harness machinery — scoring, baseline record/compare, regression detection — is itself covered offline by `verify/s7-eval.mjs`, which drives it with a deterministic mock and asserts a sabotaged system prompt drops the score.
-
-## Verify
-
-`npm run build && npm run verify` runs the offline regression suite in `verify/`: model resolution + `:batch` filtering, 429 backoff, 413 (too-large) handling, the rejection-loop guard, the `http` gate + secret substitution/redaction, the `~/.dom` bash carve-out (cache/skills allowed, config/.env/sessions blocked), the multi-tab controller (loop guards + badging), the `/alltabs` split-view layout, a compact `Banner` render (no model line), and a headless Ink mount driving `/new`, `/tabs`, `/tab`, and `/alltabs` — plus auto-commit + `/undo`, read-before-edit, background jobs, plan-mode teeth, hooks, `/init`, sub-agents (`task`), and the tree-sitter repo map. Each suite runs in its own process, mocks the network, and isolates `$USERPROFILE` — nothing touches your real `~/.dom`.
+Common in-session slash commands:
+
+- `/model` — switch the active model (session-scoped)
+- `/serve` — start the web server from inside a running session
+- `/init` — generate an `AGENTS.md` for the current repo
+- `/map` — show the tree-sitter repo map
+- `/plan` — enter plan mode (propose before editing)
+- `/yolo` — allow all tools (dangerous commands still prompt)
+- `/cost` — show token usage and spend for the session
+- `/undo` — revert the last agent commit
+- `/jobs` — list background jobs
+
+Type `@` to attach files and `/` to autocomplete commands.
+
+## Keys
+
+dom never stores your API key anywhere except `~/.dom/.env` on your own machine. No key is bundled with the package. There is no telemetry. The OpenRouter key is yours and stays local — it is read at request time and sent only to OpenRouter.
+
+## Development
+
+```sh
+git clone https://github.com/DOMCHURCH/dom.git
+cd dom
+npm install
+npm run build
+npm link
+npm run verify      # 68 test suites
+npm run eval        # 10-task eval harness
+```
+
+---
+
+MIT © 2026 Dominique Church
