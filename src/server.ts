@@ -242,6 +242,17 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
     case "agent.close":
       bridge.onCloseAgent?.(Number(msg.tabId));
       break;
+    case "goal.set":
+      bridge.onGoalSet?.(Number(msg.tabId), {
+        text: String(msg.text ?? ""),
+        maxRounds: msg.maxRounds != null ? Number(msg.maxRounds) : undefined,
+        reviewModel: msg.reviewModel ? String(msg.reviewModel) : undefined,
+        active: msg.active != null ? Boolean(msg.active) : undefined,
+      });
+      break;
+    case "goal.clear":
+      bridge.onGoalClear?.(Number(msg.tabId));
+      break;
     case "job.kill":
       // SIGTERM the whole tree, escalating to SIGKILL (killTree's own behavior).
       // The resulting job.end flows back through the bus like any other event.

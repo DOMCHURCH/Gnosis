@@ -41,7 +41,9 @@ export type DomEvent =
   | { type: "overlay.resolved"; id: string }
   | { type: "job.start"; tabId: number | null; jobId: string; command: string }
   | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
-  | { type: "message.sent"; from: string; to: string; hops: number };
+  | { type: "message.sent"; from: string; to: string; hops: number }
+  | { type: "goal.state"; tabId: number; goal: { text: string; active: boolean; roundsLeft: number; maxRounds: number; reviewModel?: string } | null }
+  | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean };
 
 export type Listener = (e: DomEvent) => void;
 
@@ -86,6 +88,9 @@ export interface AppBridge {
   onCloseAgent?(tabId: number): void;
   /** @-autocomplete: ranked file paths under the tab's cwd matching `query`. */
   onFiles?(tabId: number, query: string): Promise<string[]>;
+  /** Goal bar: set/update or clear a tab's standing goal (web UI). */
+  onGoalSet?(tabId: number, goal: { text: string; maxRounds?: number; reviewModel?: string; active?: boolean }): void;
+  onGoalClear?(tabId: number): void;
 
   // Permission coordination. The engine registers a pending request keyed by id;
   // either the TUI overlay or a web client resolves it (first wins).

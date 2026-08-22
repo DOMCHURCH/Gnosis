@@ -1478,6 +1478,18 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       closeActiveTab();
     };
     b.onFiles = (tabId, query) => rankedFiles(controller.byId(tabId)?.engine.cwd ?? controller.active().engine.cwd, query);
+    // Goal bar: set/clear a tab's standing goal, then echo the new state back so
+    // every client's bar stays in sync.
+    b.onGoalSet = (tabId, goal) => {
+      const tab = controller.byId(tabId) ?? controller.active();
+      const g = tab.engine.setGoal(goal);
+      b.bus.emit({ type: "goal.state", tabId: tab.id, goal: g });
+    };
+    b.onGoalClear = (tabId) => {
+      const tab = controller.byId(tabId) ?? controller.active();
+      tab.engine.clearGoal();
+      b.bus.emit({ type: "goal.state", tabId: tab.id, goal: null });
+    };
   };
   if (bridge) wireBridge(bridge);
 

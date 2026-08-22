@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { Agent, ClientMessage, DomEvent, MessageLink, OverlayState, PermissionRequest, SubAgent, TranscriptItem } from "./types";
+import type { Agent, ClientMessage, DomEvent, GoalReview, GoalState, MessageLink, OverlayState, PermissionRequest, SubAgent, TranscriptItem } from "./types";
 import { resolveApproval } from "./chatgroups.js";
 
 export interface State {
@@ -40,6 +40,10 @@ export interface State {
   /** Bumped on every job.start/job.end so the Background panel re-reads /api/jobs
    * (pid/port/status come from that snapshot, not the lean lifecycle events). */
   jobEpoch: number;
+  /** The goal bar's standing goal per tab (goal.state), null when cleared. */
+  goals: Record<number, GoalState | null>;
+  /** The latest goal review per tab (goal.review) — verdict shown above the rail. */
+  reviews: Record<number, GoalReview>;
 }
 
 /** One raw chat line before grouping. `rule` marks a code-fence boundary; `text`
@@ -63,7 +67,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0 };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, goals: {}, reviews: {} };
 
 /** Append a raw chat line, capping the buffer so the feed can't grow unbounded. */
 function pushLine(state: State, ln: RawLine): State {
@@ -239,6 +243,19 @@ export function reducer(state: State, action: Action): State {
       return { ...state, overlay: { id: action.id, tabId: action.tabId, kind: action.kind, title: action.title, items: action.items, selected: action.selected } };
     case "overlay.resolved":
       return state.overlay?.id === action.id ? { ...state, overlay: null } : state;
+    case "goal.state":
+      return { ...state, goals: { ...state.goals, [action.tabId]: action.goal } };
+    case "goal.review": {
+      const review: GoalReview = { verdict: action.verdict, text: action.text, roundsLeft: action.roundsLeft, active: action.active };
+      // Keep the goal bar's round counter in sync with the review outcome.
+      const goal = state.goals[action.tabId];
+      const goals = goal ? { ...state.goals, [action.tabId]: { ...goal, roundsLeft: action.roundsLeft, active: action.active } } : state.goals;
+      const next = withItem({ ...state, goals, reviews: { ...state.reviews, [action.tabId]: review } }, action.tabId, {
+        kind: "system",
+        text: action.verdict === "pass" ? `✓ goal review: PASS` : `✗ goal review: ${action.verdict.toUpperCase()} — ${action.text.split("\n")[0]}`,
+      });
+      return next;
+    }
     default:
       return state; // turn.start
   }

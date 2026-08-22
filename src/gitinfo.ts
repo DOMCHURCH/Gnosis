@@ -49,6 +49,17 @@ export async function gitDiff(cwd: string, baseSha: string | null, files: string
   }
 }
 
+/** The whole working tree's diff against HEAD (all tracked, staged + unstaged
+ * changes). Used by the goal bar to review cumulative work, not just one turn. */
+export async function gitDiffHead(cwd: string): Promise<string> {
+  try {
+    const r = await execa("git", ["--no-pager", "diff", "HEAD"], { cwd, reject: false, timeout: 10000 });
+    return r.exitCode === 0 ? (r.stdout ?? "").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function getGhAuth(): Promise<string> {
   try {
     const res = await execa("gh", ["auth", "status"], { reject: false, all: true, timeout: 3000 });

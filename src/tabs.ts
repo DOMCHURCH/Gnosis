@@ -22,6 +22,9 @@ export interface QueuedMessage {
   from: string;
   text: string;
   hops: number;
+  /** A raw follow-up (e.g. a goal-review steer): run verbatim, no "[message from]"
+   * prefix. */
+  raw?: boolean;
 }
 
 export interface PendingPermission {
@@ -226,7 +229,29 @@ export class TabsController {
   // --- turns -----------------------------------------------------------------
 
   private formatIncoming(msg: QueuedMessage): string {
-    return `[message from ${msg.from}]\n${msg.text}`;
+    return msg.raw ? msg.text : `[message from ${msg.from}]\n${msg.text}`;
+  }
+
+  /**
+   * Goal bar: after a turn ends, run the read-only reviewer over `git diff HEAD`
+   * vs the tab's standing goal (never the conversation). Report the verdict on the
+   * bus (the web shows PASS/FAIL above the chat rail) and, on a FAIL with rounds
+   * left, front-load a steer so the tab immediately works the goal again. Called
+   * from runTurnWith's finally, before the queue drains, so the steer runs next.
+   */
+  private async reviewGoal(tab: Tab): Promise<void> {
+    const engine = tab.engine;
+    if (!this.bus || typeof engine.runGoalReview !== "function") return;
+    if (!engine.goal?.active) return;
+    let outcome;
+    try {
+      outcome = await engine.runGoalReview();
+    } catch {
+      return; // a review must never break the turn lifecycle
+    }
+    if (!outcome) return;
+    this.bus.emit({ type: "goal.review", tabId: tab.id, verdict: outcome.verdict, text: outcome.text, roundsLeft: outcome.roundsLeft, active: outcome.active });
+    if (outcome.steer) tab.queue.unshift({ from: "goal", text: outcome.steer, hops: 0, raw: true });
   }
 
   private async runTurnWith(
@@ -260,6 +285,9 @@ export class TabsController {
         this.bus.emit({ type: "agent.busy", tabId: tab.id, busy: false });
       }
       this.onChange();
+      // Goal bar: judge the diff vs the goal and, on FAIL, enqueue a steer (which
+      // the drain below picks up, running another round).
+      await this.reviewGoal(tab);
       const next = tab.queue.shift();
       if (next) void this.runTurnWith(tab, next.hops, next.from, () => this.executor(tab, this.formatIncoming(next)));
     }

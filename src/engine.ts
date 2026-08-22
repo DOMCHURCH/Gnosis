@@ -8,7 +8,7 @@ import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
 import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
-import { gitHead, gitDiff } from "./gitinfo.js";
+import { gitHead, gitDiff, gitDiffHead } from "./gitinfo.js";
 import { redactSecrets } from "./redact.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 
@@ -82,6 +82,31 @@ const PLAN_DIRECTIVE =
   "write, edit, and bash are unavailable. Research as needed, then produce a clear, concrete written plan of the " +
   "changes you would make (files to touch and what to change in each), and STOP. Do not claim you edited anything. " +
   "The user will run /approve to execute the plan, or /revise to amend it.";
+
+/** The goal bar: a standing goal a tab is being held to. After each file-touching
+ * turn a read-only reviewer judges `git diff HEAD` against the goal; a FAIL steers
+ * the agent back to work and burns a round. Set from the web UI (per tab). */
+export interface GoalState {
+  text: string;
+  active: boolean;
+  /** Correction rounds still available (counts down on each FAIL steer). */
+  roundsLeft: number;
+  maxRounds: number;
+  /** Model id for the reviewer subagent; falls back to config.oracleModel, then
+   * the session model. */
+  reviewModel?: string;
+}
+
+/** The result of one goal review, reported to the UI (and, when `steer` is set,
+ * fed back to the agent as the next turn). */
+export interface GoalReview {
+  verdict: "pass" | "fail" | "unknown";
+  text: string;
+  roundsLeft: number;
+  active: boolean;
+  /** Present on a FAIL with rounds remaining: the follow-up turn to inject. */
+  steer?: string;
+}
 
 /** Tokens + dollars consumed by a single turn (deltas over the turn, sub-agent
  * cost included). */
@@ -208,6 +233,8 @@ export class Engine {
   private turnEditedFiles = new Set<string>();
   private turnBaseSha: string | null | undefined = undefined;
   private turnRequest = "";
+  /** The goal bar state for this tab (null = no goal). Set from the web UI. */
+  goal: GoalState | null = null;
   /** Fix retries used by the auto lint/test loop this turn (cap MAX_FIX_ITERATIONS). */
   private fixIterations = 0;
   /** Images loaded by view_image during the current turn; flushed into a synthetic
@@ -973,6 +1000,85 @@ export class Engine {
     const first = text.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
     const verdict = first.startsWith("PASS") ? "pass" : first.startsWith("FAIL") ? "fail" : "unknown";
     return { verdict, text: text.trim() };
+  }
+
+  /** Set (or update) the goal bar. Rounds reset to maxRounds unless the caller
+   * pins them; toggling `active` off pauses reviews without losing the goal. */
+  setGoal(g: { text: string; maxRounds?: number; reviewModel?: string; active?: boolean; roundsLeft?: number }): GoalState {
+    const maxRounds = Math.max(1, g.maxRounds ?? this.goal?.maxRounds ?? 3);
+    this.goal = {
+      text: g.text,
+      active: g.active ?? true,
+      maxRounds,
+      roundsLeft: g.roundsLeft ?? maxRounds,
+      reviewModel: g.reviewModel ?? this.goal?.reviewModel,
+    };
+    return this.goal;
+  }
+
+  clearGoal(): void {
+    this.goal = null;
+  }
+
+  /**
+   * The goal-bar review: the SAME read-only verifier subagent (VERIFIER_DIRECTIVE,
+   * no tools, isolated context) judges `git diff HEAD` against the standing goal —
+   * never the conversation. On PASS it returns the verdict; on FAIL it burns a
+   * round and returns a `steer` (the reviewer's feedback) to feed back as the next
+   * turn. Returns null when there's no active goal, no rounds left, the turn
+   * touched no files, or there's nothing in the diff.
+   */
+  async runGoalReview(): Promise<GoalReview | null> {
+    const goal = this.goal;
+    if (!goal || !goal.active || goal.roundsLeft <= 0) return null;
+    if (this.overBudget() || !this.turnEditedFiles.size) return null;
+    const diff = await gitDiffHead(this.cwd);
+    if (!diff) return null;
+
+    // Review model: the picked one if valid, else config.oracleModel, else the
+    // session model (mirrors the oracle tool's stronger-model selection).
+    let model = this.modelId;
+    if (goal.reviewModel && this.models.some((m) => m.id === goal.reviewModel)) {
+      model = goal.reviewModel;
+    } else {
+      const cfg = await loadConfig();
+      if (cfg.oracleModel && this.models.some((m) => m.id === cfg.oracleModel)) model = cfg.oracleModel;
+    }
+
+    const session = createSession(this.cwd, model, "yolo");
+    const sub = new Engine({ apiKey: this.apiKey, cwd: this.cwd, systemPrompt: VERIFIER_DIRECTIVE, models: this.models, session, skills: [], autoCommit: false });
+    sub.toolAllowList = []; // NO tools — judge from the goal + diff alone
+    sub.maxIterations = 2;
+    sub.tokenBudget = 30_000;
+    sub.interactive = false;
+    sub.noPersist = true;
+
+    const prompt = `ORIGINAL REQUEST (the GOAL):\n${goal.text}\n\nDIFF (git diff HEAD):\n${diff.slice(0, 24000)}`;
+    const noop: Callbacks = { onLine() {}, onPending() {}, onAssistant() {}, onToolStart() {}, onToolResult() {}, onSystem() {}, requestPermission: async () => "no" };
+    await sub.run(prompt, noop);
+
+    // Fold the reviewer's cost into this session.
+    this.cost.promptTokens += sub.cost.promptTokens;
+    this.cost.completionTokens += sub.cost.completionTokens;
+    this.cost.usd += sub.cost.usd;
+
+    const text =
+      [...sub.messages].reverse().find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text ??
+      "(reviewer produced no verdict)";
+    const first = text.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
+    const verdict = first.startsWith("PASS") ? "pass" : first.startsWith("FAIL") ? "fail" : "unknown";
+
+    if (verdict === "pass") {
+      return { verdict, text: text.trim(), roundsLeft: goal.roundsLeft, active: goal.active };
+    }
+    // FAIL/unknown: burn a round and steer the agent back to the goal.
+    goal.roundsLeft -= 1;
+    const round = goal.maxRounds - goal.roundsLeft;
+    const steer =
+      `⟳ GOAL REVIEW — FAIL (round ${round}/${goal.maxRounds}). The changes so far do NOT satisfy the goal:\n` +
+      `${goal.text}\n\nReviewer feedback:\n${text.trim()}\n\n` +
+      `Keep working until the goal is fully met. Do not stop to ask; make the change.`;
+    return { verdict, text: text.trim(), roundsLeft: goal.roundsLeft, active: goal.active, steer };
   }
 
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {

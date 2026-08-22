@@ -33,6 +33,8 @@ export interface SessionsProps {
   onSend: () => void;
   onApproveMsg: (permId?: string) => void;
   onDenyMsg: (permId?: string) => void;
+  /** The goal bar, rendered directly above the chat rail. */
+  goalBar?: ReactNode;
   /** Optional collapsible panel rendered at the far left (the File Browser). */
   leftPanel?: ReactNode;
   /** Optional collapsible panel rendered at the far right (the Background jobs panel). */
@@ -351,6 +353,8 @@ export function SessionsFloor(props: SessionsProps) {
                 ))}
               </div>
             </div>
+
+            {props.goalBar}
 
             <div style={{ background: "#15151C", border: "2px solid #2A2A38", flex: "1 1 auto", minHeight: 340, display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>

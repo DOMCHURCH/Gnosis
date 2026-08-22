@@ -3,6 +3,7 @@ import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { OverlayModal } from "./OverlayModal";
 import { FileBrowser } from "./FileBrowser";
+import { GoalBar } from "./GoalBar";
 import { BackgroundPanel } from "./BackgroundPanel";
 import { TerminalDock } from "./Terminal";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
@@ -104,6 +105,15 @@ export function App() {
         onSend={onSend}
         onApproveMsg={(permId) => answerId(permId, "yes")}
         onDenyMsg={(permId) => answerId(permId, "no")}
+        goalBar={
+          <GoalBar
+            goal={activeId != null ? state.goals[activeId] ?? null : null}
+            review={activeId != null ? state.reviews[activeId] ?? null : null}
+            disabled={activeId == null}
+            onSet={(g) => { if (activeId != null) send({ type: "goal.set", tabId: activeId, ...g }); }}
+            onClear={() => { if (activeId != null) send({ type: "goal.clear", tabId: activeId }); }}
+          />
+        }
         leftPanel={<FileBrowser tabId={activeId} fileEpoch={state.fileEpoch} onAttach={attachFile} />}
         rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
       />
