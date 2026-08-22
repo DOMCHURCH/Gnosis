@@ -88,6 +88,11 @@ export function domDir(): string {
 export function configPath(): string {
   return path.join(domDir(), "config.json");
 }
+/** ~/.dom/.env — one file for every key: HTTP tool secrets, BRAVE_API_KEY, and
+ * the OpenRouter key (see resolveApiKey). */
+export function envPath(): string {
+  return path.join(domDir(), ".env");
+}
 export function sessionsDir(): string {
   return path.join(domDir(), "sessions");
 }
@@ -124,9 +129,36 @@ export async function saveConfig(patch: Partial<Config>): Promise<void> {
   await fs.writeFile(configPath(), JSON.stringify(next, null, 2), "utf8");
 }
 
-/** Resolve the API key: environment wins, then config. */
-export function resolveApiKey(config: Config): string | undefined {
-  return process.env.OPENROUTER_API_KEY || config.apiKey;
+/** Parse ~/.dom/.env (KEY=value lines, # comments, optional quotes). Shared by
+ * the http/web_search tools and OpenRouter key resolution — one file for all keys. */
+export async function loadEnv(): Promise<Record<string, string>> {
+  const env: Record<string, string> = {};
+  let txt: string;
+  try {
+    txt = await fs.readFile(envPath(), "utf8");
+  } catch {
+    return env; // absent — nothing to contribute
+  }
+  for (const line of txt.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq === -1) continue;
+    const k = t.slice(0, eq).trim();
+    let v = t.slice(eq + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    if (k) env[k] = v;
+  }
+  return env;
+}
+
+/** Resolve the OpenRouter API key. Precedence: process.env, then ~/.dom/.env,
+ * then the config.json apiKey field. undefined if none set. */
+export async function resolveApiKey(config: Config): Promise<string | undefined> {
+  if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
+  const env = await loadEnv();
+  if (env.OPENROUTER_API_KEY) return env.OPENROUTER_API_KEY;
+  return config.apiKey;
 }
 
 // ---------------------------------------------------------------------------

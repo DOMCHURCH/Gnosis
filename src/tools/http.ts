@@ -4,9 +4,7 @@
 // history or the transcript (Authorization/api-key are shown as <redacted>, and
 // the echoed request uses the model's original ${VAR} text, never the value).
 
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { domDir } from "../config.js";
+import { loadEnv, envPath } from "../config.js";
 import { truncateOutput } from "./truncate.js";
 import type { HttpArgs } from "./schemas.js";
 import type { ToolResult } from "./index.js";
@@ -32,9 +30,9 @@ export function normalizeMethod(method: unknown): string {
   return m || "GET";
 }
 
-export function envPath(): string {
-  return path.join(domDir(), ".env");
-}
+// loadEnv/envPath live in config.ts (one key file shared with OpenRouter auth);
+// re-exported here so tool code (and web_search) can keep importing from ./http.
+export { loadEnv, envPath };
 
 // --- SSRF / scheme guard ----------------------------------------------------
 
@@ -93,28 +91,6 @@ export function httpBlockReason(args: { url?: unknown }): string | null {
 // --- secret substitution ----------------------------------------------------
 
 const VAR_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-
-/** Parse ~/.dom/.env (KEY=value lines, # comments, optional quotes). */
-export async function loadEnv(): Promise<Record<string, string>> {
-  const env: Record<string, string> = {};
-  let txt: string;
-  try {
-    txt = await fs.readFile(envPath(), "utf8");
-  } catch {
-    return env; // absent — every ${VAR} will be reported missing
-  }
-  for (const line of txt.split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t || t.startsWith("#")) continue;
-    const eq = t.indexOf("=");
-    if (eq === -1) continue;
-    const k = t.slice(0, eq).trim();
-    let v = t.slice(eq + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    if (k) env[k] = v;
-  }
-  return env;
-}
 
 function substitute(str: string, env: Record<string, string>, missing: Set<string>): string {
   return str.replace(VAR_RE, (_, name: string) => {

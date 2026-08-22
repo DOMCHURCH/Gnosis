@@ -126,11 +126,12 @@ export class BootError extends Error {}
 
 export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   const config = await loadConfig();
-  const apiKey = resolveApiKey(config);
+  const apiKey = await resolveApiKey(config);
   if (!apiKey) {
     throw new BootError(
       "No OpenRouter API key found.\n" +
-        "Set OPENROUTER_API_KEY in your environment, or add { \"apiKey\": \"sk-or-...\" } to ~/.dom/config.json.",
+        "Set OPENROUTER_API_KEY in your environment, add a line `OPENROUTER_API_KEY=sk-or-...` to ~/.dom/.env, " +
+        "or add { \"apiKey\": \"sk-or-...\" } to ~/.dom/config.json.",
     );
   }
 
