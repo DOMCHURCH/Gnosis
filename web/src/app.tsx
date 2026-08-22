@@ -4,6 +4,7 @@ import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./Sessio
 import { OverlayModal } from "./OverlayModal";
 import { FileBrowser } from "./FileBrowser";
 import { BackgroundPanel } from "./BackgroundPanel";
+import { TerminalDock } from "./Terminal";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 
@@ -114,6 +115,7 @@ export function App() {
           onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })}
         />
       )}
+      <TerminalDock tabId={activeId} />
     </>
   );
 }

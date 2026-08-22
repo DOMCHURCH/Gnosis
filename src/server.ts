@@ -20,6 +20,7 @@ import path from "node:path";
 import { WEB_ASSETS_DIR } from "./install.js";
 import { buildTree, readFileInRoot } from "./filetree.js";
 import { jobs, bridgeJobsToBus } from "./jobs.js";
+import { spawnPty, killAllPtys } from "./pty.js";
 import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
 
@@ -249,6 +250,43 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
   }
 }
 
+/**
+ * Bridge an already-upgraded websocket to a real pseudo-terminal in `cwd`. Terminal
+ * bytes stream out as text frames; the client sends JSON control messages:
+ *   { "d": "<keystrokes>" }          — write to the pty (Ctrl+C is just 0x03 here)
+ *   { "r": { "cols": N, "rows": M } } — resize the pty
+ * Purely a human channel: nothing here is emitted on the event bus or seen by the
+ * model. The pty (and this socket) die with the server or when either side closes.
+ */
+function attachPty(socket: Duplex, cwd: string, cols: number, rows: number): void {
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; try { socket.destroy(); } catch { /* gone */ } };
+  void spawnPty(cwd, cols, rows)
+    .then((pty) => {
+      if (closed) return void pty.kill();
+      pty.onData((d) => { try { socket.write(encodeText(d)); } catch { /* gone */ } });
+      pty.onExit(() => { try { socket.write(encodeText("\r\n[process exited]\r\n")); } catch { /* gone */ } close(); });
+      const decode = makeDecoder(
+        (text) => {
+          let msg: any;
+          try { msg = JSON.parse(text); } catch { return; }
+          if (typeof msg?.d === "string") pty.write(msg.d);
+          else if (msg?.r && typeof msg.r.cols === "number") pty.resize(msg.r.cols, msg.r.rows);
+        },
+        () => { pty.kill(); close(); },
+        (p) => { try { socket.write(frame(0xa, p)); } catch { /* ignore */ } },
+      );
+      socket.on("data", (c: Buffer) => { try { decode(c); } catch { pty.kill(); close(); } });
+      socket.on("close", () => { pty.kill(); close(); });
+      socket.on("error", () => { pty.kill(); close(); });
+    })
+    .catch(() => {
+      // node-pty unavailable (native binary missing) → tell the user, then close.
+      try { socket.write(encodeText("\r\n[terminal unavailable: node-pty failed to load]\r\n")); } catch { /* ignore */ }
+      close();
+    });
+}
+
 export interface ServerHandle {
   url: string;
   token: string;
@@ -305,7 +343,10 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   server.on("upgrade", (req, socket) => {
     if (!hostOk(req.headers.host)) return void socket.destroy();
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    if (url.pathname !== "/ws" || !tokenOk(url.searchParams.get("token"), token)) {
+    // Two token-gated channels: /ws (the event mirror) and /pty (the human terminal,
+    // whose output never reaches the bus/model). Everything else is rejected.
+    const isPty = url.pathname === "/pty";
+    if ((url.pathname !== "/ws" && !isPty) || !tokenOk(url.searchParams.get("token"), token)) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       return void socket.destroy();
     }
@@ -318,6 +359,13 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
         "Connection: Upgrade\r\n" +
         `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
     );
+
+    // /pty: bridge this socket to a real pseudo-terminal in the tab's cwd. Kept
+    // entirely separate from the event mirror below — nothing here reaches the bus.
+    if (isPty) {
+      attachPty(socket, cwdForTab(bridge, Number(url.searchParams.get("tabId"))) ?? process.cwd(), Number(url.searchParams.get("cols")) || 80, Number(url.searchParams.get("rows")) || 24);
+      return;
+    }
 
     const send = (w: unknown) => {
       try {
@@ -396,6 +444,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       new Promise<void>((resolve) => {
         busUnsub();
         jobsUnsub();
+        killAllPtys();
         for (const c of clients) {
           try {
             c.socket.destroy();
