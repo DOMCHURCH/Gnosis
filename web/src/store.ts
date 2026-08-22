@@ -18,8 +18,15 @@ export interface State {
   actions: Record<number, string>;
   /** Transient 'just spoke' flag per agent (set on turn.end, cleared after a beat). */
   speaking: Record<number, boolean>;
-  /** Rolling floor-wide chat feed for the office view (from line events). */
-  officeFeed: FeedItem[];
+  /** Raw per-tab chat lines (text, code-fence markers, approvals) with the turn
+   * epoch they belong to. The renderer groups consecutive same-speaker/same-turn
+   * lines into one message block (see chatgroups.js). */
+  chatLines: RawLine[];
+  /** Monotonic turn counter per tab; bumped on turn.end so a new turn's lines can't
+   * merge into the previous turn's message block. */
+  turnEpoch: Record<number, number>;
+  /** Whether the current line stream for a tab is inside a ``` code fence. */
+  inCode: Record<number, boolean>;
   /** Slash-command registry, sent by the server on connect (same as the TUI). */
   commands: CommandItem[];
   selected: number | null;
@@ -28,7 +35,9 @@ export interface State {
   overlay: OverlayState | null;
 }
 
-export interface FeedItem { key: string; tabId: number; from: string; text: string; kind: string; time: string; permId?: string; }
+/** One raw chat line before grouping. `rule` marks a code-fence boundary; `text`
+ * is a prose/code/approval line. `kind`: user | assistant | system | approval. */
+export interface RawLine { key: string; tabId: number; from: string; kind: string; epoch: number; time: string; text?: string; rule?: "open" | "close"; lang?: string; permId?: string; }
 export interface CommandItem { name: string; args?: string; desc: string; }
 
 function previewLabel(p: unknown): string {
@@ -40,7 +49,13 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], commands: [], selected: null, permission: null, overlay: null };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null };
+
+/** Append a raw chat line, capping the buffer so the feed can't grow unbounded. */
+function pushLine(state: State, ln: RawLine): State {
+  const chatLines = [...state.chatLines, ln];
+  return { ...state, chatLines: chatLines.length > 500 ? chatLines.slice(-500) : chatLines };
+}
 
 type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number } | { type: "@commands"; list: CommandItem[] };
 
@@ -110,6 +125,9 @@ export function reducer(state: State, action: Action): State {
         ...withCost,
         speaking: { ...withCost.speaking, [action.tabId]: true },
         actions: said ? { ...withCost.actions, [action.tabId]: said } : withCost.actions,
+        // A finished turn ends the current message block and closes any open fence.
+        turnEpoch: { ...withCost.turnEpoch, [action.tabId]: (withCost.turnEpoch[action.tabId] ?? 0) + 1 },
+        inCode: { ...withCost.inCode, [action.tabId]: false },
       };
     }
     case "@clearSpeaking":
@@ -121,11 +139,21 @@ export function reducer(state: State, action: Action): State {
       // header carries session totals; it must not clutter the chat or the roster.
       if (action.item.kind === "system" && "text" in action.item && /turn:.*\bin\b.*\bout\b.*\$/.test(action.item.text)) return state;
       const next = withItem(state, action.tabId, action.item);
-      // Feed text lines (not rules) into the office chat rail.
-      if (action.item.kind !== "rule" && "text" in action.item && action.item.text) {
-        const from = action.item.kind === "user" ? "YOU" : state.agents[action.tabId]?.name ?? `#${action.tabId}`;
-        const feed = [...next.officeFeed, { key: `f${action.tabId}-${next.officeFeed.length}-${Date.now()}`, tabId: action.tabId, from, text: action.item.text, kind: action.item.kind, time: clock() }];
-        return { ...next, officeFeed: feed.slice(-40) };
+      const epoch = state.turnEpoch[action.tabId] ?? 0;
+      const from = action.item.kind === "user" ? "YOU" : state.agents[action.tabId]?.name ?? `#${action.tabId}`;
+      const seq = next.chatLines.length;
+      // A ``` fence toggles code mode for this tab; the grouper renders the enclosed
+      // lines as a monospace block (mirrors the TUI's ─── rule boundary).
+      if (action.item.kind === "rule") {
+        const opening = !state.inCode[action.tabId];
+        const lang = "lang" in action.item ? action.item.lang ?? "" : "";
+        const ln: RawLine = { key: `r${action.tabId}-${seq}-${Date.now()}`, tabId: action.tabId, from, kind: "assistant", epoch, time: clock(), rule: opening ? "open" : "close", lang: opening ? lang : "" };
+        return pushLine({ ...next, inCode: { ...next.inCode, [action.tabId]: opening } }, ln);
+      }
+      if ("text" in action.item && action.item.text) {
+        const kind = action.item.kind === "user" ? "user" : action.item.kind === "system" ? "system" : "assistant";
+        const ln: RawLine = { key: `f${action.tabId}-${seq}-${Date.now()}`, tabId: action.tabId, from, kind, epoch, time: clock(), text: action.item.text };
+        return pushLine(next, ln);
       }
       return next;
     }
@@ -178,8 +206,9 @@ export function reducer(state: State, action: Action): State {
     case "permission.request": {
       const withFlag = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: true }));
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
-      const feed = [...withFlag.officeFeed, { key: `p${action.id}`, tabId: action.tabId, from, text: `Needs approval: ${previewLabel(action.preview)}`, kind: "approval", time: clock(), permId: action.id }];
-      return { ...withFlag, officeFeed: feed.slice(-60), permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
+      const epoch = state.turnEpoch[action.tabId] ?? 0;
+      const ln: RawLine = { key: `p${action.id}`, tabId: action.tabId, from, kind: "approval", epoch, time: clock(), text: `Needs approval: ${previewLabel(action.preview)}`, permId: action.id };
+      return { ...pushLine(withFlag, ln), permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
     }
     case "permission.resolved": {
       const cleared = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: false }));

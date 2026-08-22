@@ -3,6 +3,7 @@ import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { OverlayModal } from "./OverlayModal";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
+import { groupChat } from "./chatgroups.js";
 
 export function App() {
   const { state, send, select, requestFiles } = useDomSocket();
@@ -47,16 +48,18 @@ export function App() {
     ? { id: selF.id, name: selF.name, zone: zoneLabel(selF.zone), color: model.layout.colorById[selF.id] ?? "#C9C9D6", stateColor: STATE_COLOR[selF.state] ?? "#6B6B7B", state: selF.state, action: selF.action, output: selF.output, thinking: selF.thinking, awaiting: selF.state === "awaiting" }
     : null;
 
-  // Chat = this floor's feed (line events + approval requests).
-  const chat: ChatMsg[] = state.officeFeed
-    .filter((f) => f.tabId === activeId)
+  // Chat = this floor's feed, grouped into per-speaker/per-turn message blocks
+  // (line events + code fences + approval requests).
+  const tabColor = (activeId != null ? model.layout.colorById[`tab:${activeId}`] : undefined) ?? "#6B6B7B";
+  const rawLines = activeId != null ? state.chatLines.filter((l) => l.tabId === activeId) : [];
+  const chat: ChatMsg[] = groupChat(rawLines)
     .slice(-40)
-    .map((f) => ({
-      key: f.key, from: f.from, time: f.time, text: f.text,
-      color: f.from === "YOU" ? "#C9C9D6" : model.layout.colorById[`tab:${f.tabId}`] ?? "#6B6B7B",
-      border: f.kind === "approval" ? "#FBBF24" : "#2A2A38",
-      isApproval: f.kind === "approval" && !!state.permission && state.permission.id === f.permId,
-      permId: f.permId,
+    .map((g) => ({
+      key: g.key, from: g.from, time: g.time, segments: g.segments,
+      color: g.from === "YOU" ? "#C9C9D6" : tabColor,
+      border: g.isApproval ? "#FBBF24" : "#2A2A38",
+      isApproval: g.isApproval && !!state.permission && state.permission.id === g.permId,
+      permId: g.permId,
     }));
 
   const answer = (a: string) => { if (state.permission) send({ type: "permission", id: state.permission.id, answer: a }); if (debugRef.current.approvalCb) debugRef.current.approvalCb({ approved: a !== "no" }); };

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { SessionsModel } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
+import type { ChatSegment } from "./chatgroups";
 
-export interface ChatMsg { key: string; from: string; color: string; time: string; text: string; border: string; isApproval: boolean; permId?: string; }
+export interface ChatMsg { key: string; from: string; color: string; time: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
@@ -334,7 +335,11 @@ export function SessionsFloor(props: SessionsProps) {
                       <span style={{ color: m.color }}>{m.from}</span>
                       <span style={{ color: "#6B6B7B" }}>{m.time}</span>
                     </div>
-                    <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, textWrap: "pretty" }}>{m.text}</div>
+                    <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {m.segments.map((s, i) => s.type === "code"
+                        ? <CodeBlock key={i} lang={s.lang} text={s.text} />
+                        : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap" }}>{s.text}</div>)}
+                    </div>
                     {m.isApproval && (
                       <div style={{ display: "flex", gap: 6 }}>
                         <button type="button" onClick={() => props.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
@@ -360,6 +365,17 @@ export function SessionsFloor(props: SessionsProps) {
           <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// A fenced code block: monospace, in its own bordered box, code kept verbatim
+// (never reflowed as prose). The dim ─── header echoes the TUI's fence rule.
+function CodeBlock(props: { lang?: string; text: string }) {
+  return (
+    <div style={{ background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: "3px solid #22D3EE", padding: "6px 8px", overflowX: "auto" }}>
+      <div style={{ fontSize: 9, letterSpacing: 1, color: "#4A4A58", marginBottom: 4, whiteSpace: "nowrap" }}>─── {props.lang || "code"}</div>
+      <pre style={{ margin: 0, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre" }}>{props.text}</pre>
     </div>
   );
 }
