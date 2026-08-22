@@ -3,6 +3,7 @@ import type { SessionsModel } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
 import type { ChatSegment, ToolPayload } from "./chatgroups";
+import { DiffView, FileView } from "./DiffView";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; }
 export interface SelDetail {
@@ -406,7 +407,9 @@ function ToolLine(props: { tool: ToolPayload }) {
         </div>
       </div>
       {open && t.detail ? (
-        <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: `3px solid ${dot}`, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre-wrap", maxHeight: 320, overflowY: "auto" }}>{t.detail}</pre>
+        /edit/i.test(t.tool) ? <DiffView detail={t.detail} path={t.primary} />
+          : /write/i.test(t.tool) ? <FileView detail={t.detail} path={t.primary} />
+          : <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: `3px solid ${dot}`, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre-wrap", maxHeight: 320, overflowY: "auto" }}>{t.detail}</pre>
       ) : null}
     </div>
   );
