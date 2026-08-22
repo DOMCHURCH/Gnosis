@@ -40,10 +40,28 @@ export interface SessionsProps {
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const ZBTN = { fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer", minWidth: 30 } as const;
 
+// Live viewport width so we can branch layout (inline styles → no CSS media query).
+// Returns 0 until mounted so SSR/first paint doesn't guess wrong.
+function useViewport(): number {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return w;
+}
+
 export function SessionsFloor(props: SessionsProps) {
   const { model, sel } = props;
   const L = model.layout;
   const [zoom, setZoom] = useState(1); // 1 = fit; > 1 scrolls
+  const vw = useViewport();
+  const mobile = vw > 0 && vw < 640; // phones: floor hidden, chat full-width, bottom tab bar
+  const narrow = vw > 0 && vw < 900; // tablets: floor collapses to a zone strip
+  const [floorOpen, setFloorOpen] = useState(false); // narrow: expand the full floor
+  const [filesOpen, setFilesOpen] = useState(false);  // narrow/mobile: file browser bottom sheet
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
@@ -62,9 +80,10 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
-          {props.leftPanel}
-          <div style={{ flex: "1 1 780px", minWidth: 0, display: "flex", gap: 16, alignItems: "stretch" }}>
-            {/* left rail — session selector */}
+          {/* File Browser: inline when there's room; a bottom sheet on narrow/mobile. */}
+          {!narrow && props.leftPanel}
+          <div style={{ flex: "1 1 780px", minWidth: 0, display: mobile ? "none" : "flex", gap: 16, alignItems: "stretch" }}>
+            {/* left rail — session selector (becomes a bottom tab bar on mobile) */}
             <div style={{ flex: "0 0 64px", width: 64, display: "flex", flexDirection: "column", gap: 8 }}>
               {model.floorTabs.map((f) => (
                 <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} style={{ fontFamily: "inherit", width: 64, height: 62, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderLeft: `5px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: 0 }}>
@@ -84,9 +103,12 @@ export function SessionsFloor(props: SessionsProps) {
                 <span style={{ fontSize: 10, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
               </div>
 
-              <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+              {narrow && !floorOpen && (
+                <ZoneStrip zones={L.zoneLabels} onExpand={() => setFloorOpen(true)} />
+              )}
+              <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>OFFICE FLOOR · CLICK AN AGENT</span>
+                  <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>OFFICE FLOOR · CLICK AN AGENT{narrow ? <button type="button" onClick={() => setFloorOpen(false)} style={{ ...ZBTN, marginLeft: 10, padding: "2px 8px" }}>▴ HIDE</button> : null}</span>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button type="button" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))} style={ZBTN}>−</button>
                     <button type="button" onClick={() => setZoom(1)} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2A2A38" }}>FIT</button>
@@ -373,7 +395,53 @@ export function SessionsFloor(props: SessionsProps) {
           <span>window.domOffice · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
           <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
         </div>
+
+        {mobile && <div style={{ height: 56 }} />}{/* spacer so the fixed bar doesn't cover content */}
       </div>
+
+      {/* Narrow/mobile: a FILES button that opens the file browser as a bottom sheet. */}
+      {narrow && props.leftPanel && (
+        <button type="button" onClick={() => setFilesOpen(true)} title="files" style={{ position: "fixed", right: 14, bottom: mobile ? 68 : 14, zIndex: 30, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>≡ FILES</button>
+      )}
+      {narrow && filesOpen && props.leftPanel && (
+        <div onClick={() => setFilesOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: 45, display: "flex", alignItems: "flex-end" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2A2A38" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}>
+              <button type="button" onClick={() => setFilesOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
+            </div>
+            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", padding: "0 8px 8px" }}>{props.leftPanel}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile: session selector as a fixed bottom tab bar with per-session activity dots. */}
+      {mobile && (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 30, display: "flex", gap: 6, padding: "8px 10px", background: "#0D0D12", borderTop: "2px solid #2A2A38", overflowX: "auto" }}>
+          {model.floorTabs.map((f) => (
+            <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} style={{ fontFamily: MONO, flex: "0 0 auto", minWidth: 44, height: 40, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderBottom: `4px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "0 8px" }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>{f.num}</span>
+              <span style={{ width: 7, height: 7, background: f.dot, ...(f.dotAnim || {}) }} />
+            </button>
+          ))}
+          <button type="button" onClick={props.onAddFloor} style={{ fontFamily: MONO, flex: "0 0 auto", width: 40, height: 40, background: "#101017", color: "#6B6B7B", border: "2px dashed #2A2A38", cursor: "pointer", fontSize: 15 }}>+</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Narrow-screen replacement for the office floor: a compact strip of zone name +
+// agent-count chips. Tapping any chip expands the full floor (one tap in, HIDE out).
+function ZoneStrip(props: { zones: { key: string; name: string; count: string; accent: string; countColor: string }[]; onExpand: () => void }) {
+  return (
+    <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ flex: "1 1 100%", fontSize: 10, letterSpacing: 2, color: "#6B6B7B", marginBottom: 2 }}>OFFICE FLOOR · TAP A ZONE TO EXPAND</div>
+      {props.zones.map((z) => (
+        <button key={z.key} type="button" onClick={props.onExpand} style={{ fontFamily: MONO, textAlign: "left", background: "#101017", border: "2px solid #2A2A38", borderLeft: `4px solid ${z.accent}`, padding: "7px 10px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3, minWidth: 96 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: z.accent }}>{z.name}</span>
+          <span style={{ fontSize: 10, color: z.countColor }}>{z.count}</span>
+        </button>
+      ))}
     </div>
   );
 }
