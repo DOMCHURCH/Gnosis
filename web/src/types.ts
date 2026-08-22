@@ -66,6 +66,8 @@ export type DomEvent =
   | { type: "subagent.end"; tabId: number; description: string; result: string }
   | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[] }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
+  | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
+  | { type: "overlay.resolved"; id: string }
   | { type: "job.start"; tabId: number | null; jobId: string; command: string }
   | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
   | { type: "message.sent"; from: string; to: string; hops: number };
@@ -74,5 +76,17 @@ export type ClientMessage =
   | { type: "input"; tabId: number; text: string }
   | { type: "command"; tabId: number; command: string }
   | { type: "permission"; id: string; answer: string }
+  | { type: "overlay.select"; id: string; value: string }
+  | { type: "overlay.cancel"; id: string }
   | { type: "agent.create"; name?: string; purpose?: string }
   | { type: "agent.close"; tabId: number };
+
+/** A live selection overlay mirrored from the TUI (model/session/file/history). */
+export interface OverlayState {
+  id: string;
+  tabId: number;
+  kind: string;
+  title: string;
+  items: { value: string; label: string }[];
+  selected: string | null;
+}

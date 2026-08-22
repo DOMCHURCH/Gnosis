@@ -9,6 +9,8 @@ import { rankedFiles } from "./filesearch.js";
 import { Engine, type Callbacks } from "./engine.js";
 import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
+import { fetchModels } from "./models.js";
+import { listSessions, loadSession } from "./config.js";
 import { callParts, resultBody } from "./ui/toolrender.js";
 
 /** Build bus-mirroring callbacks for a tab's turn (no terminal rendering). The
@@ -43,6 +45,26 @@ function mirrorCallbacks(tab: Tab, bridge: AppBridge): Callbacks {
   };
 }
 
+// Overlay id counter for headless-armed selection pickers (model/session).
+let overlaySeq = 0;
+
+/** Arm a selection overlay for the browser. Headless serve has no TUI Picker, so
+ * the browser is the only client — but it uses the SAME bridge registry + events
+ * the TUI does, so the wire contract (and the web modal) is identical. `pick` runs
+ * on select; a null answer is a cancel. Answering is one-shot. */
+function openOverlay(bridge: AppBridge, tabId: number, kind: string, title: string, items: { value: string; label: string }[], selected: string | null, pick: (v: string) => void): void {
+  const id = `overlay:${tabId}:${++overlaySeq}`;
+  let done = false;
+  bridge.registerOverlay(id, (v) => {
+    if (done) return;
+    done = true;
+    bridge.clearOverlay(id);
+    bridge.bus.emit({ type: "overlay.resolved", id });
+    if (v !== null) pick(v);
+  });
+  bridge.bus.emit({ type: "overlay.open", tabId, id, kind, title, items, selected });
+}
+
 /** A minimal slash-command handler for headless serve (the TUI has the full set). */
 function handleCommand(controller: TabsController, tabId: number, command: string, bridge: AppBridge): void {
   const tab = controller.byId(tabId) ?? controller.active();
@@ -59,7 +81,33 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
       say(`new agent ${controller.create(parts[1]).name}`);
       break;
     case "model":
-      if (parts[1]) { tab.engine.setModel(parts[1]); say(`model → ${parts[1]}`); } else say(`model: ${tab.engine.modelId}`);
+      // With an arg, switch directly; bare `/model` opens the picker in the browser
+      // (the same overlay the TUI shows) rather than doing nothing.
+      if (parts[1]) { tab.engine.setModel(parts[1]); say(`model → ${parts[1]}`); break; }
+      void fetchModels().then((models) => {
+        const items = models.map((m) => ({ value: m.id, label: m.id }));
+        openOverlay(bridge, tab.id, "model", "select model", items, tab.engine.modelId, (v) => {
+          tab.engine.setModel(v);
+          void tab.engine.persist();
+          say(`model → ${v}`);
+        });
+      });
+      break;
+    case "resume":
+      // Open the session picker for THIS directory (newest-first list); selecting
+      // one adopts it into the live engine.
+      void listSessions().then((all) => {
+        const here = all.filter((s) => s.cwd === tab.engine.cwd && s.id !== tab.engine.sessionId());
+        if (!here.length) { say(all.length ? "no prior sessions for this directory" : "no saved sessions"); return; }
+        const items = here.map((s) => ({ value: s.id, label: `${s.id} · ${s.messages.length} msgs · ${s.model}` }));
+        openOverlay(bridge, tab.id, "session", "resume session", items, null, (id) => {
+          void loadSession(id).then((s) => {
+            if (!s) { say(`could not load session ${id}`); return; }
+            tab.engine.adoptSession(s);
+            say(`resumed ${id} (${s.messages.length} messages)`);
+          });
+        });
+      });
       break;
     case "cost": {
       const c = tab.engine.cost;

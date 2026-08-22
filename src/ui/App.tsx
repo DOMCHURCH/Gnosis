@@ -238,6 +238,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const permResolveRef = useRef<((a: PermissionAnswer) => void) | null>(null);
   const permPreviewRef = useRef<Preview | null>(null);
   const permOwnerRef = useRef<number | null>(null);
+  // The live selection overlay (model/session/file/history). Like permissions,
+  // either the TUI Picker or a web client resolves it — first wins. `settle` does
+  // the one-time bookkeeping (returns false if already resolved); `pick` runs the
+  // select action. A web answer of null is a cancel.
+  const overlaySeqRef = useRef(0);
+  const activePickRef = useRef<{ id: string; settle: () => boolean; pick: (v: string) => void } | null>(null);
   // Latest fetched catalog, for pricing lookups when confirming a switch.
   const modelsRef = useRef<ModelEntry[]>(rootEngine.models);
   // Indirection so the controller (built once) always calls the latest closures.
@@ -852,6 +858,54 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
   };
 
+  // Arm a selection overlay for cross-client resolution. The TUI Picker still
+  // renders from `overlay` state (the caller sets that); this additionally emits
+  // `overlay.open` so a browser can render the same list, and registers a resolver
+  // so a web `overlay.select`/`overlay.cancel` runs the SAME `pick`. Whichever
+  // client answers first wins (settle() is one-shot); the other side closes when
+  // the resulting `overlay.resolved` is observed.
+  const armOverlay = (kind: string, title: string, items: PickItem[], selected: string | null, pick: (v: string) => void): void => {
+    const id = `overlay:${activeTab.id}:${++overlaySeqRef.current}`;
+    let done = false;
+    const settle = (): boolean => {
+      if (done) return false;
+      done = true;
+      activePickRef.current = null;
+      setOverlay({ type: "none" });
+      if (bridge) {
+        bridge.clearOverlay(id);
+        bridge.bus.emit({ type: "overlay.resolved", id });
+      }
+      return true;
+    };
+    activePickRef.current = { id, settle, pick };
+    if (bridge) {
+      bridge.registerOverlay(id, (v) => {
+        if (settle() && v !== null) pick(v); // a web client answered
+      });
+      bridge.bus.emit({
+        type: "overlay.open",
+        tabId: activeTab.id,
+        id,
+        kind,
+        title,
+        items: items.map((it) => ({ value: it.value, label: it.label })),
+        selected,
+      });
+    }
+  };
+
+  // The TUI Picker resolved: run the shared select action (null = cancel).
+  const resolveOverlay = (v: string | null): void => {
+    const a = activePickRef.current;
+    if (a && a.settle() && v !== null) a.pick(v);
+  };
+  // Ctrl+S in the model Picker: resolve, then save-as-default (TUI-only affordance).
+  const saveOverlay = (v: string): void => {
+    const a = activePickRef.current;
+    if (a && a.settle()) void applyModel(v, true);
+  };
+
   // /model <arg>: an exact full id switches immediately; anything fuzzier opens
   // the picker filtered to the matches with the best one preselected, so the full
   // resolved id is shown and confirmed before switching (never a silent guess).
@@ -863,7 +917,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (res.kind === "exact") return applyModel(res.id, save);
     if (res.kind === "none") return sysLog(`no model matches "${arg}"`);
     const matched = models.filter((m) => res.ids.includes(m.id));
-    setOverlay({ type: "model", items: buildModelItems(matched), initial: res.ids[0], save });
+    const items = buildModelItems(matched);
+    setOverlay({ type: "model", items, initial: res.ids[0], save });
+    armOverlay("model", save ? "select model (will save as default)" : "select model", items, res.ids[0] ?? null, (v) => void applyModel(v, save));
   };
 
   // /mode <ask|plan|yolo> [--save]. Session-scoped by default; `--save` also writes
@@ -928,7 +984,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const openModelPicker = async () => {
     const models = await fetchModels();
     modelsRef.current = models;
-    setOverlay({ type: "model", items: buildModelItems(models) });
+    const items = buildModelItems(models);
+    setOverlay({ type: "model", items });
+    armOverlay("model", "select model", items, engine.modelId, (v) => void applyModel(v, false));
   };
 
   const openSessionPicker = async () => {
@@ -945,6 +1003,21 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       return { value: s.id, label: s.id, hint: `${s.messages.length} msgs · ${s.model} · ${when}`, search: `${s.id} ${s.model}` };
     });
     setOverlay({ type: "session", items });
+    armOverlay("session", "resume session", items, null, (id) => resumeSession(id));
+  };
+
+  // Adopt a prior session into the active engine (shared by the TUI picker and a
+  // web `overlay.select`), logging the outcome to the transcript.
+  const resumeSession = (id: string): void => {
+    void loadSession(id).then((s) => {
+      if (!s) {
+        sysLog(`could not load session ${id}`);
+        return;
+      }
+      engine.adoptSession(s);
+      setScreen((prev) => [...prev, { id: nextId(), kind: "system", text: `resumed ${id} (${s.messages.length} messages)` }]);
+      refreshRepo();
+    });
   };
 
   // Ctrl+R reverse-search: prior user prompts from THIS session (newest first),
@@ -962,6 +1035,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     const items: PickItem[] = prompts.map((p) => ({ value: p, label: p.replace(/\s+/g, " ").slice(0, 200), search: p }));
     setOverlay({ type: "history", items });
+    armOverlay("history", "reverse-search prompt history", items, null, (v) => setInput(v));
   };
 
   // Repo-map file ranking for @-completion, memoized per cwd (the map is DB-cached
@@ -998,7 +1072,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           });
     // Base order: repo-map-central files first (rank asc), then the rest alpha.
     files.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.value.localeCompare(b.value));
-    setOverlay({ type: "file", items: files.slice(0, 1000), prefix });
+    const items = files.slice(0, 1000);
+    setOverlay({ type: "file", items, prefix });
+    armOverlay("file", "insert file path (fuzzy, repo-map ranked)", items, null, (v) => setInput(prefix + v + " "));
   };
 
   const handleCommand = (value: string) => {
@@ -1425,9 +1501,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         armCtrlCExit();
         return;
       }
-      // A picker overlay is open: just close it (no exit arming).
+      // A picker overlay is open: cancel it (clears the shared request so a web
+      // client's mirror closes too) — no exit arming.
       if (overlayRef.current.type !== "none") {
-        setOverlay({ type: "none" });
+        resolveOverlay(null);
         return;
       }
       // Text in the input: clear it and arm the exit window.
@@ -1520,21 +1597,14 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           title={save ? "select model (will save as default)" : "select model"}
           items={overlay.items}
           initialValue={overlay.initial ?? engine.modelId}
-          onSelect={(v) => {
-            setOverlay({ type: "none" });
-            void applyModel(v, save);
-          }}
-          onSave={(v) => {
-            setOverlay({ type: "none" });
-            void applyModel(v, true);
-          }}
+          onSelect={(v) => resolveOverlay(v)}
+          onSave={(v) => saveOverlay(v)}
           saveHint="save as default"
-          onCancel={() => setOverlay({ type: "none" })}
+          onCancel={() => resolveOverlay(null)}
         />
       );
     }
     if (overlay.type === "file") {
-      const prefix = overlay.prefix;
       return (
         <Picker
           caps={caps}
@@ -1542,11 +1612,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           title="insert file path (fuzzy, repo-map ranked)"
           items={overlay.items}
           fuzzy
-          onSelect={(v) => {
-            setOverlay({ type: "none" });
-            setInput(prefix + v + " ");
-          }}
-          onCancel={() => setOverlay({ type: "none" })}
+          onSelect={(v) => resolveOverlay(v)}
+          onCancel={() => resolveOverlay(null)}
         />
       );
     }
@@ -1557,11 +1624,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           width={inner}
           title="reverse-search prompt history"
           items={overlay.items}
-          onSelect={(v) => {
-            setOverlay({ type: "none" });
-            setInput(v);
-          }}
-          onCancel={() => setOverlay({ type: "none" })}
+          onSelect={(v) => resolveOverlay(v)}
+          onCancel={() => resolveOverlay(null)}
         />
       );
     }
@@ -1572,22 +1636,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         width={inner}
         title="resume session"
         items={overlay.items}
-        onSelect={(id) => {
-          setOverlay({ type: "none" });
-          void loadSession(id).then((s) => {
-            if (!s) {
-              sysLog(`could not load session ${id}`);
-              return;
-            }
-            engine.adoptSession(s);
-            setScreen((prev) => [
-              ...prev,
-              { id: nextId(), kind: "system", text: `resumed ${id} (${s.messages.length} messages)` },
-            ]);
-            refreshRepo();
-          });
-        }}
-        onCancel={() => setOverlay({ type: "none" })}
+        onSelect={(id) => resolveOverlay(id)}
+        onCancel={() => resolveOverlay(null)}
       />
     );
   };

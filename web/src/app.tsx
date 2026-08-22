@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
+import { OverlayModal } from "./OverlayModal";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 
 export function App() {
@@ -65,28 +66,38 @@ export function App() {
   const onSteer = () => { const t = steer.trim(); if (t && selF) sendTo(selF.tabId, t); setSteer(""); };
 
   return (
-    <SessionsFloor
-      model={model}
-      chat={chat}
-      sel={sel}
-      draft={draft}
-      steer={steer}
-      commands={state.commands}
-      activeTabId={activeId}
-      requestFiles={requestFiles}
-      onSelectFloor={(id) => { select(id); setSelFig(null); }}
-      onAddFloor={() => send({ type: "agent.create" })}
-      onSelectFig={setSelFig}
-      onClose={() => setSelFig(null)}
-      onApprove={() => answer("yes")}
-      onDeny={() => answer("no")}
-      onDismiss={() => { if (selF?.kind === "tab") send({ type: "agent.close", tabId: selF.tabId }); setSelFig(null); }}
-      onSteer={onSteer}
-      onSteerDraft={setSteer}
-      onDraft={setDraft}
-      onSend={onSend}
-      onApproveMsg={(permId) => answerId(permId, "yes")}
-      onDenyMsg={(permId) => answerId(permId, "no")}
-    />
+    <>
+      <SessionsFloor
+        model={model}
+        chat={chat}
+        sel={sel}
+        draft={draft}
+        steer={steer}
+        commands={state.commands}
+        activeTabId={activeId}
+        requestFiles={requestFiles}
+        onSelectFloor={(id) => { select(id); setSelFig(null); }}
+        onAddFloor={() => send({ type: "agent.create" })}
+        onSelectFig={setSelFig}
+        onClose={() => setSelFig(null)}
+        onApprove={() => answer("yes")}
+        onDeny={() => answer("no")}
+        onDismiss={() => { if (selF?.kind === "tab") send({ type: "agent.close", tabId: selF.tabId }); setSelFig(null); }}
+        onSteer={onSteer}
+        onSteerDraft={setSteer}
+        onDraft={setDraft}
+        onSend={onSend}
+        onApproveMsg={(permId) => answerId(permId, "yes")}
+        onDenyMsg={(permId) => answerId(permId, "no")}
+      />
+      {state.overlay && (
+        <OverlayModal
+          key={state.overlay.id}
+          overlay={state.overlay}
+          onSelect={(value) => send({ type: "overlay.select", id: state.overlay!.id, value })}
+          onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })}
+        />
+      )}
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { Agent, ClientMessage, DomEvent, MessageLink, PermissionRequest, SubAgent, TranscriptItem } from "./types";
+import type { Agent, ClientMessage, DomEvent, MessageLink, OverlayState, PermissionRequest, SubAgent, TranscriptItem } from "./types";
 
 export interface State {
   connected: boolean;
@@ -24,6 +24,8 @@ export interface State {
   commands: CommandItem[];
   selected: number | null;
   permission: PermissionRequest | null;
+  /** Live selection overlay mirrored from the TUI (/model, /resume, @, Ctrl+R). */
+  overlay: OverlayState | null;
 }
 
 export interface FeedItem { key: string; tabId: number; from: string; text: string; kind: string; time: string; permId?: string; }
@@ -38,7 +40,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], commands: [], selected: null, permission: null };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, officeFeed: [], commands: [], selected: null, permission: null, overlay: null };
 
 type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number } | { type: "@commands"; list: CommandItem[] };
 
@@ -183,6 +185,10 @@ export function reducer(state: State, action: Action): State {
       const cleared = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: false }));
       return cleared.permission?.id === action.id ? { ...cleared, permission: null } : cleared;
     }
+    case "overlay.open":
+      return { ...state, overlay: { id: action.id, tabId: action.tabId, kind: action.kind, title: action.title, items: action.items, selected: action.selected } };
+    case "overlay.resolved":
+      return state.overlay?.id === action.id ? { ...state, overlay: null } : state;
     default:
       return state; // turn.start
   }

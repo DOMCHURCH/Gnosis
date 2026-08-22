@@ -174,6 +174,12 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
     case "permission":
       bridge.answerPermission(String(msg.id ?? ""), String(msg.answer ?? "no") as PermissionAnswer);
       break;
+    case "overlay.select":
+      bridge.answerOverlay(String(msg.id ?? ""), String(msg.value ?? ""));
+      break;
+    case "overlay.cancel":
+      bridge.answerOverlay(String(msg.id ?? ""), null);
+      break;
     case "agent.create":
       bridge.onCreateAgent?.(msg.name, msg.purpose);
       break;

@@ -37,6 +37,8 @@ export type DomEvent =
   | { type: "subagent.end"; tabId: number; description: string; result: string }
   | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
+  | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
+  | { type: "overlay.resolved"; id: string }
   | { type: "job.start"; tabId: number | null; jobId: string; command: string }
   | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
   | { type: "message.sent"; from: string; to: string; hops: number };
@@ -90,11 +92,20 @@ export interface AppBridge {
   registerPermission(id: string, resolve: (a: PermissionAnswer) => void): void;
   clearPermission(id: string): void;
   answerPermission(id: string, answer: PermissionAnswer): void;
+
+  // Overlay coordination (selection UI: /model, /resume, @-file, Ctrl+R history).
+  // Same first-to-answer model as permissions, but the pickers live in the UI, so
+  // the UI registers the resolver here; a web client answers via answerOverlay. A
+  // string is the chosen value; null is a cancel.
+  registerOverlay(id: string, resolve: (value: string | null) => void): void;
+  clearOverlay(id: string): void;
+  answerOverlay(id: string, value: string | null): void;
 }
 
 /** Build a bridge with the permission registry wired; the UI fills the rest. */
 export function createBridge(bus: EventBus): AppBridge {
   const pending = new Map<string, (a: PermissionAnswer) => void>();
+  const overlays = new Map<string, (value: string | null) => void>();
   return {
     bus,
     getAgents: () => [],
@@ -108,6 +119,16 @@ export function createBridge(bus: EventBus): AppBridge {
     answerPermission: (id, answer) => {
       const resolve = pending.get(id);
       if (resolve) resolve(answer);
+    },
+    registerOverlay: (id, resolve) => {
+      overlays.set(id, resolve);
+    },
+    clearOverlay: (id) => {
+      overlays.delete(id);
+    },
+    answerOverlay: (id, value) => {
+      const resolve = overlays.get(id);
+      if (resolve) resolve(value);
     },
   };
 }
