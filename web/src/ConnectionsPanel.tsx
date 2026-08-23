@@ -1,6 +1,4 @@
 import type { ConnectionsData, McpConnection } from "./types";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -20,6 +18,24 @@ function Section(props: { title: string; children: React.ReactNode }) {
   );
 }
 
+// A small terminal-style chip (replaces the shadcn Badge).
+function Chip(props: { color: string; children: React.ReactNode }) {
+  return (
+    <span style={{ fontSize: 8, letterSpacing: 1, color: props.color, background: "#15151C", border: "1px solid #2A2A38", padding: "1px 5px", whiteSpace: "nowrap" }}>{props.children}</span>
+  );
+}
+
+// A flat terminal-style on/off toggle (replaces the shadcn Switch): a 26×14 track
+// with a 10×10 knob, cyan when on and grey when off.
+function Toggle(props: { on: boolean; onChange: (v: boolean) => void; title?: string }) {
+  return (
+    <button type="button" title={props.title} onClick={() => props.onChange(!props.on)}
+      style={{ flex: "0 0 auto", width: 26, height: 14, padding: 0, position: "relative", cursor: "pointer", background: props.on ? "#22D3EE" : "#101017", border: `1px solid ${props.on ? "#22D3EE" : "#2A2A38"}` }}>
+      <span style={{ position: "absolute", top: 1, left: props.on ? 13 : 1, width: 10, height: 10, background: props.on ? "#0D0D12" : "#6B6B7B", transition: "left 0.12s ease" }} />
+    </button>
+  );
+}
+
 /** The CONNECTIONS tab body: MCP servers (with a per-server enable/disable
  * toggle), API-key presence, loaded skills, and port-bound background jobs. */
 export function ConnectionsBody(props: { data: ConnectionsData | null; onToggle: (name: string, enabled: boolean) => void }) {
@@ -36,13 +52,13 @@ export function ConnectionsBody(props: { data: ConnectionsData | null; onToggle:
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 7, height: 7, background: STATUS_COLOR[s.status] }} />
               <span style={{ fontSize: 11, letterSpacing: 1, color: "#C9C9D6", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
-              <Switch checked={!s.disabled} onCheckedChange={(v) => props.onToggle(s.name, v)} title={s.disabled ? "enable" : "disable"} />
+              <Toggle on={!s.disabled} onChange={(v) => props.onToggle(s.name, v)} title={s.disabled ? "enable" : "disable"} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <Badge variant="secondary" className="px-1.5 py-0 text-[8px] tracking-wider" style={{ color: STATUS_COLOR[s.status] }}>{s.status.toUpperCase()}</Badge>
-              <Badge variant="secondary" className="px-1.5 py-0 text-[8px] tracking-wider" style={{ color: "#818CF8" }}>{s.transport}</Badge>
-              <Badge variant="secondary" className="px-1.5 py-0 text-[8px] tracking-wider" style={{ color: "#6B6B7B" }}>{s.toolCount} tool{s.toolCount === 1 ? "" : "s"}</Badge>
-              {s.mutating && <Badge variant="secondary" className="px-1.5 py-0 text-[8px] tracking-wider" style={{ color: "#FBBF24" }}>MUTATING</Badge>}
+              <Chip color={STATUS_COLOR[s.status]}>{s.status.toUpperCase()}</Chip>
+              <Chip color="#818CF8">{s.transport}</Chip>
+              <Chip color="#6B6B7B">{s.toolCount} tool{s.toolCount === 1 ? "" : "s"}</Chip>
+              {s.mutating && <Chip color="#FBBF24">MUTATING</Chip>}
             </div>
             {s.description && <div style={{ fontSize: 9, color: "#6B6B7B", lineHeight: 1.4 }}>{s.description}</div>}
             {s.error && <div style={{ fontSize: 9, color: "#F87171", lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{s.error}</div>}

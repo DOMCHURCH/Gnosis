@@ -8,9 +8,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"],
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }

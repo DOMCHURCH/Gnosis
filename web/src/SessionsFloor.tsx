@@ -4,13 +4,6 @@ import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
 import type { ChatSegment, ToolPayload } from "./chatgroups";
 import { DiffView, FileView } from "./DiffView";
-import { Minus, Plus, Maximize2, Minimize2, Paperclip, ArrowDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: boolean; }
 export interface SelDetail {
@@ -100,6 +93,7 @@ function messageToText(m: ChatMsg): string {
     .join("\n\n")
     .trim();
 }
+const ZBTN = { fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer", minWidth: 30 } as const;
 
 // Live viewport width so we can branch layout (inline styles → no CSS media query).
 // Returns 0 until mounted so SSR/first paint doesn't guess wrong.
@@ -206,22 +200,22 @@ export function SessionsFloor(props: SessionsProps) {
 
             {/* center column */}
             <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-              <Card style={{ borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 3, whiteSpace: "nowrap" }}>{model.sessionTitle}</span>
                 <span style={{ fontSize: 13, color: "#6B6B7B", letterSpacing: 1, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTask}</span>
-                <Badge variant="secondary" style={{ color: model.sessionStateColor, letterSpacing: 2 }} className="text-[10px]">{model.sessionState}</Badge>
-              </Card>
+                <span style={{ fontSize: 10, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
+              </div>
 
               {narrow && !floorOpen && (
                 <ZoneStrip zones={L.zoneLabels} onExpand={() => setFloorOpen(true)} />
               )}
-              <Card style={{ padding: 14, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B", display: "inline-flex", alignItems: "center" }}>OFFICE FLOOR · CLICK AN AGENT{narrow ? <Button variant="outline" size="sm" onClick={() => setFloorOpen(false)} className="ml-2 h-6 px-2 text-[10px]">▴ HIDE</Button> : null}</span>
+                  <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>OFFICE FLOOR · CLICK AN AGENT{narrow ? <button type="button" onClick={() => setFloorOpen(false)} style={{ ...ZBTN, marginLeft: 10, padding: "2px 8px" }}>▴ HIDE</button> : null}</span>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Button variant="outline" size="icon" className="h-7 w-7" title="zoom out" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))}><Minus /></Button>
-                    <Button variant={zoom === 1 ? "default" : "outline"} size="sm" className="h-7 px-3 text-[10px] tracking-widest" onClick={() => setZoom(1)}>FIT</Button>
-                    <Button variant="outline" size="icon" className="h-7 w-7" title="zoom in" onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))}><Plus /></Button>
+                    <button type="button" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))} style={ZBTN}>−</button>
+                    <button type="button" onClick={() => setZoom(1)} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2A2A38" }}>FIT</button>
+                    <button type="button" onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))} style={ZBTN}>+</button>
                   </div>
                 </div>
 
@@ -372,11 +366,11 @@ export function SessionsFloor(props: SessionsProps) {
                         <rect x="1320" y="740" width="80" height="4" fill="#1A171F" />
 
                         {L.freeDesks.map((d) => (
-                          <g key={d.key} className="dom-desk-add" onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
+                          <g key={d.key} onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
                             <use href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
-                            {/* the "+" appears only on hover of this desk (see .dom-plus in styles.css) */}
-                            <rect className="dom-plus" x={d.x + 44} y={d.y - 66} width="24" height="6" fill="#6B6B7B" />
-                            <rect className="dom-plus" x={d.x + 53} y={d.y - 75} width="6" height="24" fill="#6B6B7B" />
+                            {/* a dim "+" marks the desk as placeable */}
+                            <rect x={d.x + 44} y={d.y - 66} width="24" height="6" fill="#6B6B7B" opacity="0.7" />
+                            <rect x={d.x + 53} y={d.y - 75} width="6" height="24" fill="#6B6B7B" opacity="0.7" />
                           </g>
                         ))}
 
@@ -435,19 +429,19 @@ export function SessionsFloor(props: SessionsProps) {
                           ))}
                         </div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <Button size="sm" onClick={props.onApprove} className="h-7 flex-1 px-2 text-[10px] tracking-wider" variant={sel.awaiting ? "default" : "secondary"} style={sel.awaiting ? { background: "#FBBF24", color: "#0D0D12" } : undefined}>APPROVE</Button>
-                          <Button size="sm" variant="outline" onClick={props.onDeny} className="h-7 flex-1 px-2 text-[10px] tracking-wider">DENY</Button>
-                          <Button size="sm" variant="outline" onClick={props.onDismiss} className="h-7 flex-1 px-2 text-[10px] tracking-wider" style={{ color: "#E879F9" }}>DISMISS</Button>
+                          <button type="button" onClick={props.onApprove} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: sel.awaiting ? "#FBBF24" : "#15151C", color: sel.awaiting ? "#0D0D12" : "#6B6B7B", border: 0, padding: "7px 8px", cursor: "pointer", flex: 1 }}>APPROVE</button>
+                          <button type="button" onClick={props.onDeny} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DENY</button>
+                          <button type="button" onClick={props.onDismiss} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#E879F9", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DISMISS</button>
                         </div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <Input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" className="h-8 flex-1 text-[10px] font-mono" />
-                          <Button size="sm" onClick={props.onSteer} className="h-8 px-3 text-[10px] tracking-wider">STEER</Button>
+                          <input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: "6px 7px", outline: "none", fontFamily: MONO }} />
+                          <button type="button" onClick={props.onSteer} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "6px 9px", cursor: "pointer" }}>STEER</button>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-              </Card>
+              </div>
             </div>
           </div>
 
@@ -455,30 +449,28 @@ export function SessionsFloor(props: SessionsProps) {
               the office floor expands to fill the freed width. */}
           {!floating && (
           <div style={{ flex: "1 1 320px", minWidth: "min(100%, 300px)", display: "flex", flexDirection: "column", gap: 12 }}>
-            <Card style={{ display: "flex", flexDirection: "column", maxHeight: 320 }}>
+            <div style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", maxHeight: 320 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
                 <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>WHO IS WORKING</span>
                 <span style={{ fontSize: 9, letterSpacing: 1, color: model.offFloorColor }}>{model.offFloorLine}</span>
               </div>
-              <ScrollArea className="min-h-0" style={{ flex: "1 1 auto" }}>
-                <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {L.roster.map((r) => (
-                    <div key={r.key} onClick={() => props.onSelectFig(r.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", cursor: "pointer", borderLeft: `3px solid ${r.accent}`, background: r.bg, opacity: r.opacity }}>
-                      <span style={{ fontSize: 11, letterSpacing: 1, color: r.color, whiteSpace: "nowrap" }}>{r.name}</span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.action}{r.manual ? " · manual" : ""}</span>
-                      <Badge variant="secondary" className="px-1.5 py-0 text-[9px] tracking-wider" style={{ color: r.stateColor }}>{r.tag}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </Card>
+              <div style={{ overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                {L.roster.map((r) => (
+                  <div key={r.key} onClick={() => props.onSelectFig(r.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", cursor: "pointer", borderLeft: `3px solid ${r.accent}`, background: r.bg, opacity: r.opacity }}>
+                    <span style={{ fontSize: 11, letterSpacing: 1, color: r.color, whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.action}{r.manual ? " · manual" : ""}</span>
+                    <span style={{ fontSize: 9, letterSpacing: 1, color: r.stateColor, whiteSpace: "nowrap" }}>{r.tag}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {props.goalBar}
 
-            <Card ref={dockRef} style={{ display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
+            <div ref={dockRef} style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
               {!narrow && <div onMouseDown={startResize} title="drag to resize the chat" style={{ height: 8, flex: "0 0 auto", cursor: "ns-resize", background: "#101017", borderBottom: "1px solid #2A2A38" }} />}
               <ChatPanel {...props} detached={false} canDetach={!narrow} onToggleDetach={detach} />
-            </Card>
+            </div>
           </div>
           )}
           {/* Background jobs: inline when there's room; a bottom sheet on narrow/mobile. */}
@@ -494,12 +486,12 @@ export function SessionsFloor(props: SessionsProps) {
 
         {/* Detached chat: a floating, draggable, resizable panel. Snap back with ⊟. */}
         {floating && (
-          <Card style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: 60, boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
+          <div style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: 60, background: "#15151C", border: "2px solid #2A2A38", boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
             <ChatPanel {...props} detached canDetach onToggleDetach={snapBack} onHeaderMouseDown={startFloatDrag} />
             {EDGES.map((edge) => (
               <div key={edge} onMouseDown={startFloatResize(edge)} style={{ position: "absolute", cursor: RESIZE_CURSOR[edge], zIndex: 2, ...RESIZE_POS[edge] }} />
             ))}
-          </Card>
+          </div>
         )}
       </div>
 
@@ -690,18 +682,12 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFiles(e.dataTransfer.files); }}
-        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: "4px 8px" }}
+        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: "7px 9px" }}
       >
-        <span style={{ color: "#22D3EE", fontSize: 12, flex: "0 0 auto" }}>&gt;</span>
-        <Input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files, ⎘ to attach)"
-          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-1 text-[11px] font-mono shadow-none focus-visible:ring-0" />
+        <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
+        <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files, ⎘ to attach)" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
         <input ref={fileRef} type="file" multiple accept={accept} onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={() => fileRef.current?.click()}><Paperclip /></Button>
-          </TooltipTrigger>
-          <TooltipContent>attach files</TooltipContent>
-        </Tooltip>
+        <button type="button" title="attach files" onClick={() => fileRef.current?.click()} style={{ fontFamily: MONO, fontSize: 14, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 2px" }}>📎</button>
         <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
       </div>
     </div>
@@ -746,23 +732,17 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
       <div onMouseDown={p.onHeaderMouseDown} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38", flex: "0 0 auto", cursor: p.onHeaderMouseDown ? "move" : "default", userSelect: "none" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Badge variant="secondary" className="px-1.5 py-0 text-[9px] tracking-wider" style={{ color: "#22D3EE" }}>LIVE</Badge>
+          <span style={{ fontSize: 9, letterSpacing: 1, color: "#22D3EE" }}>LIVE</span>
           {p.canDetach && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onMouseDown={(e) => e.stopPropagation()} onClick={p.onToggleDetach}>
-                  {p.detached ? <Minimize2 /> : <Maximize2 />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{p.detached ? "dock (snap back)" : "detach into a floating panel"}</TooltipContent>
-            </Tooltip>
+            <button type="button" title={p.detached ? "dock (snap back)" : "detach into a floating panel"} onMouseDown={(e) => e.stopPropagation()} onClick={p.onToggleDetach}
+              style={{ fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: 0 }}>
+              {p.detached ? "⊟" : "⊞"}
+            </button>
           )}
         </div>
       </div>
       <div style={{ position: "relative", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {/* Plain scroll viewport (scrollRef IS the scrollable element) so wheel +
-            auto-scroll are reliable; the Radix ScrollArea wrapper broke both. */}
-        <div ref={scrollRef} onScroll={onScroll} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div ref={scrollRef} onScroll={onScroll} style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
           {p.chat.map((m) => {
             if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
             const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
@@ -780,8 +760,8 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                 </div>
                 {m.isApproval && (
                   <div style={{ display: "flex", gap: 6 }}>
-                    <Button size="sm" onClick={() => p.onApproveMsg(m.permId)} className="h-7 px-3 text-[10px] tracking-wider" style={{ background: "#FBBF24", color: "#0D0D12" }}>APPROVE</Button>
-                    <Button variant="outline" size="sm" onClick={() => p.onDenyMsg(m.permId)} className="h-7 px-3 text-[10px] tracking-wider">DENY</Button>
+                    <button type="button" onClick={() => p.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
+                    <button type="button" onClick={() => p.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
                   </div>
                 )}
                 {p.canSaveVault && m.kind === "assistant" && (
@@ -789,9 +769,10 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                     ? <div style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", fontStyle: "italic" }}>⬇ auto-saved to vault</div>
                     : p.onSaveMsg && (
                       <div style={{ display: "flex" }}>
-                        <Button variant="ghost" size="sm" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))} className="h-6 gap-1 px-2 text-[9px] tracking-wider" style={{ color: "#A78BFA" }}>
-                          <ArrowDown className="h-3 w-3" /> SAVE TO VAULT
-                        </Button>
+                        <button type="button" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))}
+                          style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#A78BFA", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
+                          ⬇ SAVE TO VAULT
+                        </button>
                       </div>
                     )
                 )}
@@ -800,9 +781,10 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
           })}
         </div>
         {unseen && !atBottom && (
-          <Button size="sm" onClick={jumpToBottom} className="absolute left-1/2 h-7 -translate-x-1/2 gap-1 rounded-full px-3 text-[10px]" style={{ bottom: 10, boxShadow: "0 6px 16px rgba(0,0,0,0.5)" }}>
-            <ArrowDown className="h-3 w-3" /> new message
-          </Button>
+          <button type="button" onClick={jumpToBottom}
+            style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, borderRadius: 12, padding: "5px 12px", cursor: "pointer", boxShadow: "0 6px 16px rgba(0,0,0,0.5)" }}>
+            ↓ new message
+          </button>
         )}
       </div>
       <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, flex: "0 0 auto" }}>
@@ -810,7 +792,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
         <ChatInput value={p.draft} onChange={p.onDraft} onSubmit={p.onSend} commands={p.commands} requestFiles={p.requestFiles} tabId={p.activeTabId} onAddFiles={p.onAddFiles} canImage={p.canImage} canDoc={p.canDoc} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
-          <Button size="sm" onClick={p.onSend} className="h-8 px-4 text-[10px] tracking-widest">SEND</Button>
+          <button type="button" onClick={p.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
         </div>
       </div>
     </>
