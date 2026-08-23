@@ -14,11 +14,16 @@
 **dom** is a terminal coding agent that runs entirely on OpenRouter (bring your own key), lets you switch models mid-session, and ships with a web UI that visualizes your agents as figures moving around an office floor.
 
 ![dom office floor](docs/screenshot.png)
+*Office floor — manual agents across all zones, two live sessions, file browser, goal bar*
 
 ## Features
 
 - **OpenRouter BYOK** — one provider, your own key; no vendor lock-in, no bundled credits
 - **Runtime model switching** — change the model mid-session with `/model`, no restart
+
+![dom model picker](docs/screenshot-model-picker.png)
+*Runtime model switching — full OpenRouter catalog in the browser*
+
 - **10 built-in tools** — read, write, edit, multi-edit, bash, HTTP, web search, tree-sitter repo map, todo, and more
 - **Sub-agents** — spawn isolated agents for parallel or scoped work
 - **Repo map** — tree-sitter structural map of your codebase for grounded edits
