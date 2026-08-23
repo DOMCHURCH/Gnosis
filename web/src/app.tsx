@@ -14,6 +14,7 @@ import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
 import type { FigState, ManualAgent, ZoneId } from "./sessions";
 import { ManualAgentPopover } from "./ManualAgentPopover";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Manual agents live only in this browser session: mirrored to localStorage so
 // they survive React churn, but cleared on a real page refresh.
@@ -172,7 +173,7 @@ export function App() {
   const removeAttachment = (i: number) => setAttachments((a) => a.filter((_, k) => k !== i));
 
   return (
-    <>
+    <TooltipProvider delayDuration={200}>
       <SessionsFloor
         model={model}
         chat={chat}
@@ -240,6 +241,6 @@ export function App() {
         />
       )}
       <TerminalDock tabId={activeId} />
-    </>
+    </TooltipProvider>
   );
 }
