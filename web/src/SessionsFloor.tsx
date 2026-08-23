@@ -33,6 +33,15 @@ export interface SessionsProps {
   onSend: () => void;
   onApproveMsg: (permId?: string) => void;
   onDenyMsg: (permId?: string) => void;
+  /** Files staged for the next message (name + mime only; bytes live in App). */
+  attachments: { name: string; mime: string }[];
+  /** Stage picked/dropped files (base64-encoded and gated by App). */
+  onAddFiles: (files: File[]) => void;
+  /** Remove a staged attachment by index. */
+  onRemoveAttachment: (i: number) => void;
+  /** Whether the active model accepts image / document input (gates the picker). */
+  canImage: boolean;
+  canDoc: boolean;
   /** When true, assistant messages show a "save to vault" button. */
   canSaveVault?: boolean;
   /** Save an assistant message's text to the vault (opens the filename/tags modal). */
@@ -409,7 +418,8 @@ export function SessionsFloor(props: SessionsProps) {
                 })}
               </div>
               <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                <ChatInput value={props.draft} onChange={props.onDraft} onSubmit={props.onSend} commands={props.commands} requestFiles={props.requestFiles} tabId={props.activeTabId} />
+                <AttachBar attachments={props.attachments} onRemove={props.onRemoveAttachment} />
+                <ChatInput value={props.draft} onChange={props.onDraft} onSubmit={props.onSend} commands={props.commands} requestFiles={props.requestFiles} tabId={props.activeTabId} onAddFiles={props.onAddFiles} canImage={props.canImage} canDoc={props.canDoc} />
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
                   <button type="button" onClick={props.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
@@ -533,11 +543,34 @@ export function zoneLabel(zoneId: string): string {
   return (ZONE_BY_ID as Record<string, { name: string }>)[zoneId]?.name ?? "";
 }
 
+// Chips for the files staged for the next message, each with an ✕ to remove it.
+function AttachBar(props: { attachments: { name: string; mime: string }[]; onRemove: (i: number) => void }) {
+  if (props.attachments.length === 0) return null;
+  const icon = (mime: string) => (mime.startsWith("image/") ? "🖼" : mime === "application/pdf" ? "📄" : "📎");
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {props.attachments.map((a, i) => (
+        <div key={`${a.name}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6, background: "#101017", border: "2px solid #2A2A38", padding: "3px 6px", fontFamily: MONO, fontSize: 10, color: "#C9C9D6", maxWidth: 220 }}>
+          <span>{icon(a.mime)}</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.name}>{a.name}</span>
+          <button type="button" title="remove" onClick={() => props.onRemove(i)} style={{ fontFamily: MONO, fontSize: 11, lineHeight: 1, background: "transparent", color: "#F87171", border: 0, cursor: "pointer", padding: 0 }}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Chat input with the SAME slash-command list the TUI shows (filtered as you type,
-// arrows to select, Enter/Tab to complete) plus @-file autocomplete.
-function ChatInput(props: { value: string; onChange: (v: string) => void; onSubmit: () => void; commands: CommandItem[]; requestFiles: (t: number, q: string) => Promise<string[]>; tabId: number | null }) {
+// arrows to select, Enter/Tab to complete) plus @-file autocomplete. A paperclip
+// button (and drag-and-drop onto the row) stages real file uploads.
+function ChatInput(props: { value: string; onChange: (v: string) => void; onSubmit: () => void; commands: CommandItem[]; requestFiles: (t: number, q: string) => Promise<string[]>; tabId: number | null; onAddFiles: (files: File[]) => void; canImage: boolean; canDoc: boolean }) {
   const { value } = props;
   const ref = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  // accept: text files always; images/PDFs only when the model can read them.
+  const accept = [".txt,.md,.json,.csv,text/*", props.canImage ? "image/*" : "", props.canDoc ? "application/pdf" : ""].filter(Boolean).join(",");
+  const pickFiles = (list: FileList | null) => { if (list && list.length) props.onAddFiles(Array.from(list)); };
   const [pick, setPick] = useState(0);
   const [files, setFiles] = useState<string[]>([]);
 
@@ -589,9 +622,16 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
           ))}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: "2px solid #2A2A38", padding: "7px 9px" }}>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFiles(e.dataTransfer.files); }}
+        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: "7px 9px" }}
+      >
         <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
-        <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files)" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
+        <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files, ⎘ to attach)" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
+        <input ref={fileRef} type="file" multiple accept={accept} onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
+        <button type="button" title="attach files" onClick={() => fileRef.current?.click()} style={{ fontFamily: MONO, fontSize: 14, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 2px" }}>📎</button>
         <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
       </div>
     </div>

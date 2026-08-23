@@ -8,6 +8,7 @@
 // write to a socket). Anything heavier a listener does on its own time.
 
 import type { PermissionAnswer } from "./permissions.js";
+import type { Attachment } from "./messages.js";
 import { COMMANDS } from "./commands.js";
 
 /** A snapshot of one agent (tab), sent to a client when it first connects. */
@@ -18,13 +19,17 @@ export interface AgentSnapshot {
   model: string;
   mode: string;
   busy: boolean;
+  /** True when the active model accepts image input (gates the web file picker). */
+  imageInput: boolean;
+  /** True when the active model accepts document (PDF) input. */
+  documentInput: boolean;
 }
 
 /** Every event the bus can carry. `unknown` payloads (preview/item/args) are
  * passed straight through and JSON-serialized by the server — the bus does not
  * couple to their concrete shapes. */
 export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string }
+  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean }
   | { type: "agent.closed"; tabId: number; name: string }
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }
@@ -83,7 +88,7 @@ export interface AppBridge {
   getCommands(): { name: string; args?: string; desc: string }[];
 
   // Client → server actions (set by the UI; absent until it mounts).
-  onInput?(tabId: number, text: string): void;
+  onInput?(tabId: number, text: string, attachments?: Attachment[]): void;
   onCommand?(tabId: number, command: string): void;
   onCreateAgent?(name?: string, purpose?: string): void;
   onCloseAgent?(tabId: number): void;

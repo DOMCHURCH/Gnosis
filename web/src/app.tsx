@@ -11,12 +11,36 @@ import { apiGet } from "./api";
 import type { VaultTree } from "./filetypes";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
+import type { Attachment } from "./types";
+
+// Guess a MIME type from the filename when the browser doesn't supply one.
+function guessMime(name: string): string {
+  const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
+  const map: Record<string, string> = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain", ".md": "text/markdown", ".json": "application/json", ".csv": "text/csv",
+  };
+  return map[ext] ?? "application/octet-stream";
+}
+
+// Read a File to base64 (no data: prefix) for sending as a content block.
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => { const s = String(r.result); resolve(s.slice(s.indexOf(",") + 1)); };
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
 
 export function App() {
   const { state, send, select, requestFiles, saveVault } = useDomSocket();
   const [selFig, setSelFig] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [steer, setSteer] = useState("");
+  // Files staged for the next message (base64 content blocks). Cleared on send.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   // The Obsidian vault tree (md-only). Fetched once and re-fetched whenever a note
   // may have changed (vaultEpoch: tool.end or a "save to vault"). Drives both the
   // OBSIDIAN panel tab and the chat rail's "save to vault" button.
@@ -84,11 +108,38 @@ export function App() {
   const answer = (a: string) => { if (state.permission) send({ type: "permission", id: state.permission.id, answer: a }); if (debugRef.current.approvalCb) debugRef.current.approvalCb({ approved: a !== "no" }); };
   const answerId = (permId: string | undefined, a: string) => { if (permId) send({ type: "permission", id: permId, answer: a }); };
 
-  const onSend = () => { const t = draft.trim(); if (!t || activeId == null) return; if (t.startsWith("/")) send({ type: "command", tabId: activeId, command: t }); else { send({ type: "input", tabId: activeId, text: t }); if (debugRef.current.userCb) debugRef.current.userCb({ text: t, floor: activeId }); } setDraft(""); };
+  const activeAgent = activeId != null ? state.agents[activeId] ?? null : null;
+  const canImage = !!activeAgent?.imageInput;
+  const canDoc = !!activeAgent?.documentInput;
+
+  const onSend = () => {
+    const t = draft.trim();
+    if (activeId == null) return;
+    if (!t && attachments.length === 0) return;
+    if (t.startsWith("/")) { send({ type: "command", tabId: activeId, command: t }); setDraft(""); return; }
+    send({ type: "input", tabId: activeId, text: t, attachments: attachments.length ? attachments : undefined });
+    if (debugRef.current.userCb) debugRef.current.userCb({ text: t, floor: activeId });
+    setDraft("");
+    setAttachments([]);
+  };
   const onSteer = () => { const t = steer.trim(); if (t && selF) sendTo(selF.tabId, t); setSteer(""); };
   // Attach a browsed file to the next message: drop an @-reference into the draft
   // (the same @path mechanism the composer + backend already resolve).
   const attachFile = (p: string) => setDraft((d) => (d.trim() ? d.replace(/\s*$/, "") + " " : "") + "@" + p + " ");
+
+  // Stage dropped/picked files as base64 content blocks. Images and PDFs are gated
+  // on the active model's modalities; text files are always allowed (inlined later).
+  const addFiles = async (files: File[]) => {
+    const staged: Attachment[] = [];
+    for (const f of files) {
+      const mime = f.type || guessMime(f.name);
+      if (mime.startsWith("image/") && !canImage) continue;
+      if (mime === "application/pdf" && !canDoc) continue;
+      try { staged.push({ name: f.name, mime, data: await fileToBase64(f) }); } catch { /* skip unreadable file */ }
+    }
+    if (staged.length) setAttachments((a) => [...a, ...staged]);
+  };
+  const removeAttachment = (i: number) => setAttachments((a) => a.filter((_, k) => k !== i));
 
   return (
     <>
@@ -112,6 +163,11 @@ export function App() {
         onSteerDraft={setSteer}
         onDraft={setDraft}
         onSend={onSend}
+        attachments={attachments}
+        onAddFiles={addFiles}
+        onRemoveAttachment={removeAttachment}
+        canImage={canImage}
+        canDoc={canDoc}
         onApproveMsg={(permId) => answerId(permId, "yes")}
         onDenyMsg={(permId) => answerId(permId, "no")}
         goalBar={

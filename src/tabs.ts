@@ -104,6 +104,8 @@ export class TabsController {
       cwd: tab.engine.cwd,
       model: tab.engine.modelId,
       mode: tab.engine.mode,
+      imageInput: tab.engine.supportsImageInput(),
+      documentInput: tab.engine.supportsDocumentInput(),
     });
   }
 

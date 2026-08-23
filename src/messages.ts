@@ -22,13 +22,62 @@ export interface ImagePart {
   data: string;
 }
 
+/** A document (e.g. a PDF) attached to a user message. Rides as an OpenRouter
+ * `file` content block; gated on the model accepting document input. */
+export interface FilePart {
+  /** Original filename / source label — shown to the user, used as a fallback note. */
+  source: string;
+  /** MIME type, e.g. "application/pdf". */
+  mime: string;
+  /** Base64-encoded file bytes (no data: prefix). */
+  data: string;
+}
+
+/** A raw attachment as it arrives from a web client: base64 bytes + declared MIME.
+ * partitionAttachments sorts these into images, documents, and inlined text. */
+export interface Attachment {
+  name: string;
+  mime: string;
+  /** Base64-encoded bytes (no data: prefix). */
+  data: string;
+}
+
 export type Msg =
-  | { role: "user"; text: string; images?: ImagePart[] }
+  | { role: "user"; text: string; images?: ImagePart[]; files?: FilePart[] }
   | { role: "assistant"; text?: string; calls?: ToolCall[] }
   | { role: "tool"; callId: string; name: string; result: string; isError: boolean };
 
-/** An OpenAI content part: plain text, or an image referenced by a data URL. */
-export type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+/** An OpenAI/OpenRouter content part: plain text, an image (data URL), or a
+ * document file (base64 data URL under `file.file_data`, the OpenRouter PDF form). */
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "file"; file: { filename: string; file_data: string } };
+
+/**
+ * Split web-client attachments into image parts, document (file) parts, and text
+ * to inline into the message. Images and PDFs ride as content blocks; everything
+ * else is decoded from base64 and inlined as text, labeled by filename.
+ */
+export function partitionAttachments(atts: Attachment[]): { images: ImagePart[]; files: FilePart[]; inlineText: string } {
+  const images: ImagePart[] = [];
+  const files: FilePart[] = [];
+  const texts: string[] = [];
+  for (const a of atts) {
+    if (a.mime.startsWith("image/")) images.push({ source: a.name, mime: a.mime, data: a.data });
+    else if (a.mime === "application/pdf") files.push({ source: a.name, mime: a.mime, data: a.data });
+    else {
+      let text = "";
+      try {
+        text = Buffer.from(a.data, "base64").toString("utf8");
+      } catch {
+        /* undecodable — inline as empty with just the label */
+      }
+      texts.push(`--- ${a.name} ---\n${text}`);
+    }
+  }
+  return { images, files, inlineText: texts.join("\n\n") };
+}
 
 /** A wire message in OpenAI chat-completions format. */
 export interface WireMessage {
@@ -46,15 +95,16 @@ export interface WireMessage {
 /**
  * Serialize internal history to OpenAI wire format. `system` is the system
  * prompt; `summary` is an optional compaction note injected as a second system
- * message. `opts.images` gates whether attached images are emitted as image_url
- * content blocks — false (the current model can't view images) degrades them to a
- * text note so the request stays valid across a runtime model switch.
+ * message. `opts.images` / `opts.documents` gate whether attached images and
+ * documents are emitted as content blocks — false (the current model can't accept
+ * that modality) degrades them to a text note so the request stays valid across a
+ * runtime model switch.
  */
 export function serialize(
   messages: Msg[],
   system: string,
   summary?: string | null,
-  opts?: { images?: boolean },
+  opts?: { images?: boolean; documents?: boolean },
 ): WireMessage[] {
   const wire: WireMessage[] = [{ role: "system", content: system }];
   if (summary) {
@@ -62,15 +112,24 @@ export function serialize(
   }
   for (const m of messages) {
     if (m.role === "user") {
-      if (m.images?.length && opts?.images) {
+      const imgs = m.images ?? [];
+      const files = m.files ?? [];
+      const showImgs = imgs.length > 0 && !!opts?.images;
+      const showFiles = files.length > 0 && !!opts?.documents;
+      // Attachments the active model can't accept degrade to a text note so the
+      // turn stays valid (and legible) after a runtime model switch.
+      const notes: string[] = [];
+      if (imgs.length > 0 && !opts?.images) notes.push(`[${imgs.length} image(s) not shown — the current model can't view images: ${imgs.map((i) => i.source).join(", ")}]`);
+      if (files.length > 0 && !opts?.documents) notes.push(`[${files.length} file(s) not shown — the current model can't read documents: ${files.map((f) => f.source).join(", ")}]`);
+      const withNotes = notes.length ? (m.text ? `${m.text}\n${notes.join("\n")}` : notes.join("\n")) : m.text;
+      if (showImgs || showFiles) {
         const parts: ContentPart[] = [];
-        if (m.text) parts.push({ type: "text", text: m.text });
-        for (const img of m.images) parts.push({ type: "image_url", image_url: { url: `data:${img.mime};base64,${img.data}` } });
+        if (withNotes) parts.push({ type: "text", text: withNotes });
+        if (showImgs) for (const img of imgs) parts.push({ type: "image_url", image_url: { url: `data:${img.mime};base64,${img.data}` } });
+        if (showFiles) for (const f of files) parts.push({ type: "file", file: { filename: f.source, file_data: `data:${f.mime};base64,${f.data}` } });
         wire.push({ role: "user", content: parts });
-      } else if (m.images?.length) {
-        // The active model can't view images — keep the turn but note them.
-        const note = `[${m.images.length} image(s) not shown — the current model can't view images: ${m.images.map((i) => i.source).join(", ")}]`;
-        wire.push({ role: "user", content: m.text ? `${m.text}\n${note}` : note });
+      } else if (notes.length) {
+        wire.push({ role: "user", content: withNotes });
       } else {
         wire.push({ role: "user", content: m.text });
       }
@@ -117,7 +176,8 @@ export function contextBreakdown(messages: Msg[], system: string, summary: strin
   for (const m of messages) {
     if (m.role === "user") {
       user += est(m.text);
-      images += (m.images?.length ?? 0) * 1000; // rough per-image estimate (matches estimateTokens)
+      // Rough per-attachment estimate (matches estimateTokens); documents counted alongside images.
+      images += ((m.images?.length ?? 0) + (m.files?.length ?? 0)) * 1000;
     } else if (m.role === "assistant") {
       assistantText += est(m.text ?? "");
       for (const c of m.calls ?? []) toolArgs += est(c.name + c.args);
@@ -142,8 +202,8 @@ export function estimateTokens(messages: Msg[], system = ""): number {
   for (const m of messages) {
     if (m.role === "user") {
       chars += m.text.length;
-      // Rough flat cost per attached image so the context meter isn't way off.
-      chars += (m.images?.length ?? 0) * 4000;
+      // Rough flat cost per attachment (image or document) so the meter isn't way off.
+      chars += ((m.images?.length ?? 0) + (m.files?.length ?? 0)) * 4000;
     } else if (m.role === "assistant") {
       chars += (m.text ?? "").length;
       for (const c of m.calls ?? []) chars += c.name.length + c.args.length;

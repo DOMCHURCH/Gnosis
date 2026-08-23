@@ -12,6 +12,18 @@ export interface Agent {
   cost: number;
   tokens: number;
   awaitingPermission: boolean;
+  /** True when the active model accepts image input (gates the file picker). */
+  imageInput: boolean;
+  /** True when the active model accepts document (PDF) input. */
+  documentInput: boolean;
+}
+
+/** A file attachment sent alongside a message (base64 bytes + declared MIME). */
+export interface Attachment {
+  name: string;
+  mime: string;
+  /** Base64-encoded bytes (no data: prefix). */
+  data: string;
 }
 
 /** A live sub-agent figure (subagent.start/end). */
@@ -53,7 +65,7 @@ export interface PermissionRequest {
 }
 
 export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string }
+  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean }
   | { type: "agent.closed"; tabId: number; name: string }
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }
@@ -93,7 +105,7 @@ export interface GoalReview {
 }
 
 export type ClientMessage =
-  | { type: "input"; tabId: number; text: string }
+  | { type: "input"; tabId: number; text: string; attachments?: Attachment[] }
   | { type: "command"; tabId: number; command: string }
   | { type: "permission"; id: string; answer: string }
   | { type: "overlay.select"; id: string; value: string }

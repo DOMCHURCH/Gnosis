@@ -3,7 +3,7 @@
 
 import path from "node:path";
 import { promises as fs, existsSync, statSync } from "node:fs";
-import { serialize, estimateTokens, type Msg, type ToolCall, type ImagePart } from "./messages.js";
+import { serialize, estimateTokens, type Msg, type ToolCall, type ImagePart, type FilePart } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
@@ -226,6 +226,9 @@ export class Engine {
   /** Images attached to the NEXT user turn (an @image in TUI input). Consumed and
    * cleared when run() pushes the user message. */
   private nextUserImages: ImagePart[] = [];
+  /** Documents (PDFs) attached to the NEXT user turn (web upload). Consumed and
+   * cleared when run() pushes the user message. */
+  private nextUserFiles: FilePart[] = [];
   /** A write/edit succeeded this turn — arms the auto lint/test loop at turn end. */
   private editedThisTurn = false;
   /** Files edited this turn (absolute) + the base commit before them, for the
@@ -306,9 +309,17 @@ export class Engine {
   supportsImageInput(): boolean {
     return this.currentModel()?.input_modalities?.includes("image") ?? false;
   }
+  /** True when the active model accepts document (PDF) input as a file content block. */
+  supportsDocumentInput(): boolean {
+    return this.currentModel()?.input_modalities?.includes("file") ?? false;
+  }
   /** Attach images to the next user turn (an @image reference typed in the TUI). */
   setNextUserImages(images: ImagePart[]): void {
     this.nextUserImages = images;
+  }
+  /** Attach documents to the next user turn (a web upload). */
+  setNextUserFiles(files: FilePart[]): void {
+    this.nextUserFiles = files;
   }
   contextLength(): number {
     return this.currentModel()?.context_length ?? 0;
@@ -512,16 +523,18 @@ export class Engine {
       cached: this.cost.cachedPromptTokens,
       usd: this.cost.usd,
     };
-    // Attach any images queued for this turn (an @image typed in the TUI).
+    // Attach any images/documents queued for this turn (@image in the TUI, or a web upload).
     const images = this.nextUserImages;
+    const files = this.nextUserFiles;
     this.nextUserImages = [];
+    this.nextUserFiles = [];
     this.pendingImages = [];
     this.editedThisTurn = false;
     this.fixIterations = 0;
     this.turnEditedFiles = new Set();
     this.turnBaseSha = undefined;
     this.turnRequest = userText;
-    this.messages.push({ role: "user", text: userText, images: images.length ? images : undefined });
+    this.messages.push({ role: "user", text: userText, images: images.length ? images : undefined, files: files.length ? files : undefined });
     await this.trace({ type: "turn", role: "user", text: userText.slice(0, 500) });
     this.abortController = new AbortController();
     this.repairs.clear();
@@ -558,7 +571,7 @@ export class Engine {
           this.doCompact(cb);
         }
 
-        const wire = serialize(this.messages, this.currentSystemPrompt(), this.summary, { images: this.supportsImageInput() });
+        const wire = serialize(this.messages, this.currentSystemPrompt(), this.summary, { images: this.supportsImageInput(), documents: this.supportsDocumentInput() });
         // Markdown is stripped from the visible text as it streams (never a
         // post-hoc pass), so the output can't flash raw markdown then correct
         // itself. Only text flows through here — tool-call args are on a separate

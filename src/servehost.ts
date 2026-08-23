@@ -9,6 +9,7 @@ import { rankedFiles } from "./filesearch.js";
 import { Engine, type Callbacks } from "./engine.js";
 import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
+import { partitionAttachments } from "./messages.js";
 import { fetchModels } from "./models.js";
 import { listSessions, loadSession } from "./config.js";
 import { saveVaultNote } from "./vault.js";
@@ -140,11 +141,20 @@ export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise
   );
 
   bridge.getAgents = () =>
-    controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy }));
-  bridge.onInput = (tabId, text) => {
+    controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput() }));
+  bridge.onInput = (tabId, text, attachments) => {
     const tab = controller.byId(tabId) ?? controller.active();
-    bridge.bus.emit({ type: "line", tabId: tab.id, item: { kind: "user", text } });
-    controller.submitUser(tab, text);
+    let finalText = text;
+    if (attachments?.length) {
+      const { images, files, inlineText } = partitionAttachments(attachments);
+      if (images.length) tab.engine.setNextUserImages(images);
+      if (files.length) tab.engine.setNextUserFiles(files);
+      if (inlineText) finalText = finalText ? `${finalText}\n\n${inlineText}` : inlineText;
+    }
+    // Show the typed text (or an attachment note) in the transcript, not the raw inlined bytes.
+    const shown = text || (attachments?.length ? `[${attachments.length} attachment(s)]` : "");
+    bridge.bus.emit({ type: "line", tabId: tab.id, item: { kind: "user", text: shown } });
+    controller.submitUser(tab, finalText);
   };
   bridge.onCommand = (tabId, command) => handleCommand(controller, tabId, command, bridge);
   bridge.onCreateAgent = (name, purpose) => void controller.create(name, purpose);

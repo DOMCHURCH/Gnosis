@@ -232,9 +232,18 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
     return;
   }
   switch (msg?.type) {
-    case "input":
-      bridge.onInput?.(Number(msg.tabId), String(msg.text ?? ""));
+    case "input": {
+      // Optional file attachments: [{ name, mime, data (base64) }]. Coerced to
+      // strings defensively; the engine gates each on the model's modalities.
+      const attachments = Array.isArray(msg.attachments)
+        ? msg.attachments
+            .filter((a: unknown) => a && typeof a === "object")
+            .map((a: any) => ({ name: String(a.name ?? "file"), mime: String(a.mime ?? "application/octet-stream"), data: String(a.data ?? "") }))
+            .filter((a: { data: string }) => a.data.length > 0)
+        : undefined;
+      bridge.onInput?.(Number(msg.tabId), String(msg.text ?? ""), attachments);
       break;
+    }
     case "command":
       bridge.onCommand?.(Number(msg.tabId), String(msg.command ?? ""));
       break;
@@ -418,7 +427,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     const client = { send, socket };
     const sendSnapshot = () => {
       for (const a of bridge.getAgents()) {
-        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode });
+        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput });
         if (a.busy) send({ type: "agent.busy", tabId: a.id, busy: true });
       }
     };

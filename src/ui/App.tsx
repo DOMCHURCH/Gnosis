@@ -17,7 +17,7 @@ import { layoutAllTabs, gridColumns } from "./alltabs.js";
 import type { Caps } from "./terminal.js";
 import { Engine, type Callbacks } from "../engine.js";
 import type { Msg } from "../messages.js";
-import { contextBreakdown } from "../messages.js";
+import { contextBreakdown, partitionAttachments } from "../messages.js";
 import { TabsController, type Tab } from "../tabs.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
 import { TOOL_NAMES } from "../tools/index.js";
@@ -1460,11 +1460,18 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // connects at once already sees wired handlers.
   const wireBridge = (b: AppBridge) => {
     b.getAgents = () =>
-      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy }));
-    b.onInput = (tabId, text) => {
+      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput() }));
+    b.onInput = (tabId, text, attachments) => {
       const tab = controller.byId(tabId) ?? controller.active();
-      emitToTab(tab, { kind: "user", text });
-      controller.submitUser(tab, text);
+      let finalText = text;
+      if (attachments?.length) {
+        const { images, files, inlineText } = partitionAttachments(attachments);
+        if (images.length) tab.engine.setNextUserImages(images);
+        if (files.length) tab.engine.setNextUserFiles(files);
+        if (inlineText) finalText = finalText ? `${finalText}\n\n${inlineText}` : inlineText;
+      }
+      emitToTab(tab, { kind: "user", text: text || (attachments?.length ? `[${attachments.length} attachment(s)]` : "") });
+      controller.submitUser(tab, finalText);
     };
     b.onCommand = (tabId, command) => {
       const tab = controller.byId(tabId);
