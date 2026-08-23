@@ -118,10 +118,55 @@ export const todoSchema = z.object({
     ),
 });
 
-export const taskSchema = z.object({
-  description: z.string().describe("Short label for the sub-task (3–6 words), shown in the transcript."),
-  prompt: z.string().describe("The full instruction for the sub-agent: what to find or investigate, and what to report back."),
-});
+/** A coordinated task fans out to at most this many parallel sub-agents. */
+export const MAX_SUBTASKS = 6;
+
+export const taskSchema = z
+  .object({
+    description: z.string().describe("Short label for the task (3–6 words), shown in the transcript."),
+    prompt: z
+      .string()
+      .optional()
+      .describe(
+        "Single sub-agent form: the full instruction for the sub-agent — what to find or investigate, and what to " +
+          "report back. Omit it when passing `subtasks`.",
+      ),
+    coordinate: z
+      .boolean()
+      .optional()
+      .describe(
+        "Coordinated form: run the `subtasks` as parallel sub-agents and synthesize their findings yourself. " +
+          "Implied when `subtasks` is present.",
+      ),
+    subtasks: z
+      .array(
+        z.object({
+          description: z.string().describe("Short label for this sub-agent (3–6 words), shown in the transcript."),
+          prompt: z.string().describe("The scoped instruction for this one sub-agent: what to investigate and report."),
+        }),
+      )
+      .optional()
+      .describe(
+        "Coordinated form (alternative to `prompt`): 2–6 independent areas to investigate AT THE SAME TIME. Each " +
+          "entry spawns its own read-only sub-agent; they run in parallel and you get every summary back in one " +
+          "result to synthesize into the answer.",
+      ),
+  })
+  .superRefine((v, ctx) => {
+    const subs = v.subtasks ?? [];
+    if (subs.length && v.prompt !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "provide EITHER prompt (one sub-agent) OR subtasks (a coordinated task), not both." });
+    }
+    if (!subs.length && !v.prompt) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "provide prompt for a single sub-agent, or subtasks: [{description, prompt}] for a coordinated task." });
+    }
+    if (v.coordinate && !subs.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "coordinate: true needs subtasks: [{description, prompt}] — one entry per parallel sub-agent." });
+    }
+    if (subs.length > MAX_SUBTASKS) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `at most ${MAX_SUBTASKS} subtasks per coordinated task (got ${subs.length}).` });
+    }
+  });
 
 export const viewImageSchema = z.object({
   path: z.string().describe("Path to an image file (png, jpg, jpeg, gif, or webp) to load so you can see it."),

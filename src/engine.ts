@@ -70,6 +70,13 @@ function compactArgs(args: unknown): string {
 }
 const SUBAGENT_MAX_ITER = 15;
 const SUBAGENT_TOKEN_BUDGET = 50_000;
+// A coordinated task's sub-agents are deliberately tighter than a lone sub-agent:
+// each one answers ONE scoped question, and several run at once, so each gets its
+// own small isolated budget rather than the full solo allowance.
+const COORD_SUBAGENT_MAX_ITER = 8;
+const COORD_SUBAGENT_TOKEN_BUDGET = 15_000;
+/** Per-sub-agent cost rows kept for /cost; oldest are dropped past this. */
+const MAX_COST_ROWS = 50;
 // The verifier subagent is deliberately blind to the generator's reasoning: it
 // sees ONLY the original request and the diff, and judges skeptically. No tools.
 const VERIFIER_DIRECTIVE =
@@ -86,6 +93,11 @@ const SUBAGENT_DIRECTIVE =
   "tool budget. Then reply with ONLY the answer: a few sentences naming the specific files, lines, or symbols that " +
   "matter. Do NOT narrate your steps, restate the tools you ran, or explain your process — just the finding. Your " +
   "reply is the entire result the caller sees.";
+
+const COORDINATED_DIRECTIVE =
+  "\n\nYou are ONE of several sub-agents working on different parts of the same job at the same time. Answer ONLY " +
+  "the scoped question you were given — another sub-agent is covering each of the other areas, so do not widen your " +
+  "search to theirs. A coordinator merges every reply, so report your finding plainly, without preamble.";
 
 const PLAN_DIRECTIVE =
   "\n\nYou are in PLAN MODE. You have only read-only tools (read, glob, grep, http) — " +

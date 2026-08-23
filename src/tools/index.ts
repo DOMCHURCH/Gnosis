@@ -64,6 +64,24 @@ export interface SubAgentResult {
 /** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
 export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
 
+/** One sub-agent's slice of a coordinated task: its result plus which subtask it
+ * answered and the cost label it was billed under (`sub-agent-N`, shown in /cost). */
+export interface CoordinatedSubResult extends SubAgentResult {
+  description: string;
+  label: string;
+}
+/** Every sub-agent's result for one coordinated task, in subtask order. */
+export interface CoordinatedResult {
+  results: CoordinatedSubResult[];
+}
+/** Fans a coordinated task out to one read-only sub-agent per subtask, in
+ * parallel, and resolves once every one of them has reported back. */
+export type CoordinatedRunner = (
+  description: string,
+  subtasks: { description: string; prompt: string }[],
+  signal?: AbortSignal,
+) => Promise<CoordinatedResult>;
+
 /** Result of an oracle consultation: the answer plus accounting. */
 export interface OracleResult {
   text: string;
@@ -87,6 +105,9 @@ export interface ToolContext {
   roots?: string[];
   tab?: TabRuntime;
   subagent?: SubAgentRunner;
+  /** Runs a coordinated task: one parallel sub-agent per subtask (the `task`
+   * tool's `subtasks` form). Absent where sub-agents are unavailable. */
+  coordinate?: CoordinatedRunner;
   /** Replace the session's task list (rendered live above the input). Absent
    * headless / in sub-agents, where the tool simply returns its summary. */
   setTodos?: (items: TodoItem[]) => void;
@@ -194,7 +215,11 @@ export const TOOLS: Record<string, ToolDef> = {
       "Delegate an open-ended search or investigation to a fresh read-only sub-agent (\"find where X is handled\", " +
       "\"which files touch Y\"). It has its own context and only read/glob/grep/http — it explores, then returns a " +
       "concise summary as the result. Its intermediate steps never enter your history, so prefer it over grepping " +
-      "large amounts of output into your own context. Cannot write, run commands, or spawn further sub-agents.",
+      "large amounts of output into your own context. Cannot write, run commands, or spawn further sub-agents.\n" +
+      "For work that splits into independent areas (different files, topics, or codebases), pass `subtasks: " +
+      "[{description, prompt}]` instead of `prompt`: every subtask runs as its own sub-agent AT THE SAME TIME and " +
+      "you get all their summaries back in one result to synthesize. One coordinated call beats several sequential " +
+      "task calls — it is faster and spends far less of your context.",
     schema: taskSchema,
     mutating: false,
     run: runTask,
