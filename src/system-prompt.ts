@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { domDir } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
+import { buildRepoMap } from "./repomap.js";
 
 /** The stated-working-directory line's stable prefix, shared with the engine. */
 export const WORKING_DIR_PREFIX = "Working directory: ";
@@ -18,7 +19,7 @@ export function withWorkingDir(prompt: string, cwd: string): string {
     .join("\n");
 }
 
-export async function buildSystemPrompt(cwd: string, _skills: LoadedSkill[] = [], _mapTokens = 1024): Promise<string> {
+export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [], mapTokens = 1024): Promise<string> {
   const lines = [
     "IDENTITY",
     "You are dom, a terminal coding agent. You work directly on the user's filesystem, run",
@@ -62,6 +63,27 @@ export async function buildSystemPrompt(cwd: string, _skills: LoadedSkill[] = []
     "",
     `${WORKING_DIR_PREFIX}${cwd}`,
   ];
+
+  // SKILLS: advertise each loaded skill (name, description, absolute path) so the
+  // model can read the full SKILL.md on demand. Omit the section when none loaded.
+  if (skills.length) {
+    lines.push(
+      "",
+      "SKILLS",
+      "If a task matches a loaded skill, read that skill's SKILL.md with the read tool before",
+      "starting. Available skills:",
+      ...skills.map((s) => `${s.name} — ${s.description} (${s.path})`),
+    );
+  }
+
+  // REPO MAP: tree-sitter definition map, injected verbatim (best-effort; skipped
+  // silently if it can't be built).
+  try {
+    const map = await buildRepoMap(cwd, mapTokens);
+    if (map.text) lines.push("", "REPO MAP", map.text);
+  } catch {
+    /* no repo map (no grammars / parse error) — not fatal */
+  }
 
   // AGENTS.md instructions append to the system prompt: global (~/.dom/AGENTS.md)
   // first, then project (<cwd>/AGENTS.md). Both optional; skip the global one if
