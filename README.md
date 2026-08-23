@@ -31,6 +31,7 @@
 - **Multi-session tabs** — run several agents side by side, each with its own context
 - **Inter-agent messaging** — tabs can message each other to coordinate
 - **Skills system** — reusable, invokable capabilities the agent loads on demand
+- **Obsidian memory** — point dom at your Obsidian vault (`obsidianVault` in config, or a `vault:` directive in `~/.dom/AGENTS.md`); browse it and save chat messages as notes from the web UI (wikilinks supported), or `/vault` to make it the working root
 - **Auto-commit** — each successful write/edit is committed to git (toggle with `--no-auto-commit`)
 - **Plan mode** — the agent proposes a plan and waits for approval before touching code
 - **Hooks** — run your own commands on agent lifecycle events
@@ -73,6 +74,7 @@ Common in-session slash commands:
 
 - `/model` — switch the active model (session-scoped)
 - `/serve` — start the web server from inside a running session
+- `/vault` — switch the working root to your configured Obsidian vault
 - `/init` — generate an `AGENTS.md` for the current repo
 - `/map` — show the tree-sitter repo map
 - `/plan` — enter plan mode (propose before editing)
