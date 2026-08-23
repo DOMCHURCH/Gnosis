@@ -443,7 +443,15 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       if (ring.length && since < ring[0]!.seq - 1) sendSnapshot();
       for (const w of ring) if (w.seq > since) send(w);
     } else {
+      // Fresh connect (e.g. a page reload, where the client has no lastSeq):
+      // send the agent roster, THEN replay the buffered event history so each
+      // tab's transcript is rebuilt. Without the replay the chat rail is empty
+      // for every tab, so switching floors appears to show the same (empty)
+      // content while only the header/roster (from the snapshot) updates. The
+      // store dedupes repeat agent.created and rebuilds transcripts from the
+      // replayed line/tool events.
       sendSnapshot();
+      for (const w of ring) send(w);
     }
     send({ type: "commands", list: bridge.getCommands() }); // slash-command registry
     send({ type: "@sync", seq: cutoff }); // high-water mark for the next reconnect

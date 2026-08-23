@@ -72,10 +72,15 @@ function previewLabel(p: unknown): string {
 
 const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, goals: {}, reviews: {} };
 
-/** Append a raw chat line, capping the buffer so the feed can't grow unbounded. */
+/** Append a raw chat line, capping PER TAB so the feed can't grow unbounded and
+ * a busy tab can't evict another tab's history (which would make switching floors
+ * show a truncated or empty transcript for the quieter tab). */
 function pushLine(state: State, ln: RawLine): State {
   const chatLines = [...state.chatLines, ln];
-  return { ...state, chatLines: chatLines.length > 500 ? chatLines.slice(-500) : chatLines };
+  const forTab = chatLines.filter((l) => l.tabId === ln.tabId);
+  if (forTab.length <= 500) return { ...state, chatLines };
+  const dropKeys = new Set(forTab.slice(0, forTab.length - 500).map((l) => l.key)); // keys are globally unique
+  return { ...state, chatLines: chatLines.filter((l) => !dropKeys.has(l.key)) };
 }
 
 type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number } | { type: "@commands"; list: CommandItem[] };
