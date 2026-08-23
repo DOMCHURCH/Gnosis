@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; }
+export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: boolean; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
@@ -372,11 +372,11 @@ export function SessionsFloor(props: SessionsProps) {
                         <rect x="1320" y="740" width="80" height="4" fill="#1A171F" />
 
                         {L.freeDesks.map((d) => (
-                          <g key={d.key} onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
+                          <g key={d.key} className="dom-desk-add" onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
                             <use href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
-                            {/* a dim "+" marks the desk as placeable */}
-                            <rect x={d.x + 44} y={d.y - 66} width="24" height="6" fill="#6B6B7B" opacity="0.7" />
-                            <rect x={d.x + 53} y={d.y - 75} width="6" height="24" fill="#6B6B7B" opacity="0.7" />
+                            {/* the "+" appears only on hover of this desk (see .dom-plus in styles.css) */}
+                            <rect className="dom-plus" x={d.x + 44} y={d.y - 66} width="24" height="6" fill="#6B6B7B" />
+                            <rect className="dom-plus" x={d.x + 53} y={d.y - 75} width="6" height="24" fill="#6B6B7B" />
                           </g>
                         ))}
 
@@ -690,11 +690,11 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFiles(e.dataTransfer.files); }}
-        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: "7px 9px" }}
+        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: "4px 8px" }}
       >
-        <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
+        <span style={{ color: "#22D3EE", fontSize: 12, flex: "0 0 auto" }}>&gt;</span>
         <Input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files, ⎘ to attach)"
-          className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[11px] font-mono shadow-none focus-visible:ring-0" />
+          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-1 text-[11px] font-mono shadow-none focus-visible:ring-0" />
         <input ref={fileRef} type="file" multiple accept={accept} onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -760,8 +760,9 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
         </div>
       </div>
       <div style={{ position: "relative", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <ScrollArea viewportRef={scrollRef} onViewportScroll={onScroll} className="min-h-0" style={{ flex: "1 1 auto" }}>
-          <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* Plain scroll viewport (scrollRef IS the scrollable element) so wheel +
+            auto-scroll are reliable; the Radix ScrollArea wrapper broke both. */}
+        <div ref={scrollRef} onScroll={onScroll} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
           {p.chat.map((m) => {
             if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
             const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
@@ -783,18 +784,21 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                     <Button variant="outline" size="sm" onClick={() => p.onDenyMsg(m.permId)} className="h-7 px-3 text-[10px] tracking-wider">DENY</Button>
                   </div>
                 )}
-                {p.canSaveVault && p.onSaveMsg && m.kind === "assistant" && (
-                  <div style={{ display: "flex" }}>
-                    <Button variant="ghost" size="sm" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))} className="h-6 gap-1 px-2 text-[9px] tracking-wider" style={{ color: "#A78BFA" }}>
-                      <ArrowDown className="h-3 w-3" /> SAVE TO VAULT
-                    </Button>
-                  </div>
+                {p.canSaveVault && m.kind === "assistant" && (
+                  m.autoSaved
+                    ? <div style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", fontStyle: "italic" }}>⬇ auto-saved to vault</div>
+                    : p.onSaveMsg && (
+                      <div style={{ display: "flex" }}>
+                        <Button variant="ghost" size="sm" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))} className="h-6 gap-1 px-2 text-[9px] tracking-wider" style={{ color: "#A78BFA" }}>
+                          <ArrowDown className="h-3 w-3" /> SAVE TO VAULT
+                        </Button>
+                      </div>
+                    )
                 )}
               </div>
             );
           })}
-          </div>
-        </ScrollArea>
+        </div>
         {unseen && !atBottom && (
           <Button size="sm" onClick={jumpToBottom} className="absolute left-1/2 h-7 -translate-x-1/2 gap-1 rounded-full px-3 text-[10px]" style={{ bottom: 10, boxShadow: "0 6px 16px rgba(0,0,0,0.5)" }}>
             <ArrowDown className="h-3 w-3" /> new message

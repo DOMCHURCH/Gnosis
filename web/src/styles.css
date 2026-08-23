@@ -40,6 +40,10 @@ body {
 /* Buttons brighten slightly on hover (shared with the SVG floor's inline buttons). */
 button:hover { filter: brightness(1.12); }
 
+/* Manual-agent "+" on an empty desk: hidden until you hover that desk slot. */
+.dom-plus { opacity: 0; transition: opacity 0.12s ease; }
+.dom-desk-add:hover .dom-plus { opacity: 0.75; }
+
 /* --- office-floor animations (used by the SVG figures + chat caret) --- */
 @keyframes domTab { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 @keyframes domArmA { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }

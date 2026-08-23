@@ -122,10 +122,38 @@ export function App() {
     ? { id: selF.id, name: selF.name, zone: zoneLabel(selF.zone), color: model.layout.colorById[selF.id] ?? "#C9C9D6", stateColor: STATE_COLOR[selF.state] ?? "#6B6B7B", state: selF.state, action: selF.action, output: selF.output, thinking: selF.thinking, awaiting: selF.state === "awaiting" }
     : null;
 
+  // Auto-save to Obsidian: after a turn ends, if the vault is configured and the
+  // response looks worth keeping (a code fence, a markdown table, or > 200 words),
+  // save it automatically under a slug from the first line + today's date, and mark
+  // that turn so the chat shows "auto-saved" instead of the SAVE TO VAULT button.
+  const savedTurnsRef = useRef<Set<string>>(new Set());
+  const [savedTurns, setSavedTurns] = useState<Record<string, boolean>>({});
+  const endedEpoch = activeId != null ? (state.turnEpoch[activeId] ?? 0) - 1 : -1;
+  useEffect(() => {
+    if (activeId == null || !vault?.configured || endedEpoch < 0) return;
+    const id = `${activeId}:${endedEpoch}`;
+    if (savedTurnsRef.current.has(id)) return;
+    savedTurnsRef.current.add(id);
+    const lines = state.chatLines.filter((l) => l.tabId === activeId && l.epoch === endedEpoch);
+    const text = lines.filter((l) => l.kind === "assistant" && l.text).map((l) => l.text!).join("\n").trim();
+    if (!text) return;
+    const hasCode = lines.some((l) => l.rule); // a ─── code fence in this turn
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const hasTable = text.split("\n").filter((l) => /^\s*\|.*\|\s*$/.test(l)).length >= 2;
+    if (!(hasCode || words > 200 || hasTable)) return;
+    const first = (text.split("\n").find((l) => l.trim()) ?? "response").replace(/[`#*_>[\]-]/g, " ").trim();
+    const slug = (first.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "response").toLowerCase();
+    const date = new Date().toISOString().slice(0, 10);
+    void saveVault(`${slug}-${date}`, ["auto-saved"], text).then((r) => { if (r.ok) setSavedTurns((p) => ({ ...p, [id]: true })); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, vault?.configured, endedEpoch]);
+
   // Chat = this floor's feed, grouped into per-speaker/per-turn message blocks
   // (line events + code fences + approval requests).
   const tabColor = (activeId != null ? model.layout.colorById[`tab:${activeId}`] : undefined) ?? "#6B6B7B";
   const rawLines = activeId != null ? state.chatLines.filter((l) => l.tabId === activeId) : [];
+  const epochByKey: Record<string, number> = {};
+  for (const l of rawLines) epochByKey[l.key] = l.epoch;
   const chat: ChatMsg[] = groupChat(rawLines)
     .slice(-40)
     .map((g) => {
@@ -139,6 +167,7 @@ export function App() {
         permId: g.permId,
         resolved: g.resolved,
         tool: g.tool,
+        autoSaved: g.kind === "assistant" && !!savedTurns[`${activeId}:${epochByKey[g.key]}`],
       };
     });
 
