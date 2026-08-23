@@ -23,7 +23,7 @@ export function limitPhrase(detail: string): string {
   while (end < msg.length && /\d/.test(msg[end]!)) end++;
   return msg.slice(0, end);
 }
-import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult } from "./tools/index.js";
+import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult, type CoordinatedResult } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -70,6 +70,9 @@ function compactArgs(args: unknown): string {
 }
 const SUBAGENT_MAX_ITER = 15;
 const SUBAGENT_TOKEN_BUDGET = 50_000;
+// Coordinated sub-agents run many-at-once, so each gets a tighter isolated budget.
+const COORD_SUBAGENT_MAX_ITER = 8;
+const COORD_SUBAGENT_TOKEN_BUDGET = 15_000;
 // The verifier subagent is deliberately blind to the generator's reasoning: it
 // sees ONLY the original request and the diff, and judges skeptically. No tools.
 const VERIFIER_DIRECTIVE =
@@ -233,6 +236,9 @@ export class Engine {
   /** Ephemeral sessions (sub-agents, `-p` pipe mode without --save) aren't
    * written to ~/.dom/sessions. */
   noPersist = false;
+  /** True for a spawned sub-agent engine. Sub-agents get no `coordinate` runner,
+   * which enforces "sub-agents cannot spawn further (coordinated) sub-agents". */
+  isSubAgent = false;
   /** Images attached to the NEXT user turn (an @image in TUI input). Consumed and
    * cleared when run() pushes the user message. */
   private nextUserImages: ImagePart[] = [];
@@ -861,6 +867,9 @@ export class Engine {
       roots: this.roots,
       tab: this.toolContext?.tab,
       subagent: (d, p, sig) => this.runSubAgent(d, p, sig),
+      // Only the top-level agent can coordinate; a sub-agent gets no runner, so a
+      // sub-agent that reaches for coordinated subtasks is refused by the task tool.
+      coordinate: this.isSubAgent ? undefined : (subtasks, sig) => this.runCoordinatedTask(subtasks, sig),
       setTodos: (items) => {
         this.todos = items;
       },
@@ -879,7 +888,12 @@ export class Engine {
    * iterations / 50k tokens. Its intermediate turns never enter this engine's
    * history; its cost folds into ours and is tracked separately for /cost.
    */
-  async runSubAgent(description: string, prompt: string, signal?: AbortSignal): Promise<SubAgentResult> {
+  async runSubAgent(
+    description: string,
+    prompt: string,
+    signal?: AbortSignal,
+    opts?: { maxIter?: number; tokenBudget?: number },
+  ): Promise<SubAgentResult> {
     if (this.overBudget()) return { text: "Refused: the session budget ceiling has been reached — not spawning a sub-agent.", tools: 0, tokens: 0, capped: "budget" };
     this.bus?.emit({ type: "subagent.start", tabId: this.agentId, description });
     const session = createSession(this.cwd, this.modelId, "yolo"); // read-only tools; yolo only avoids prompts
@@ -893,10 +907,11 @@ export class Engine {
       autoCommit: false,
     });
     sub.toolAllowList = SUBAGENT_TOOLS;
-    sub.maxIterations = SUBAGENT_MAX_ITER;
-    sub.tokenBudget = SUBAGENT_TOKEN_BUDGET;
+    sub.maxIterations = opts?.maxIter ?? SUBAGENT_MAX_ITER;
+    sub.tokenBudget = opts?.tokenBudget ?? SUBAGENT_TOKEN_BUDGET;
     sub.interactive = false;
     sub.noPersist = true;
+    sub.isSubAgent = true;
     if (signal) signal.addEventListener("abort", () => sub.abort(), { once: true });
 
     let tools = 0;
@@ -927,8 +942,33 @@ export class Engine {
     this.cost.completionTokens += sub.cost.completionTokens;
     this.cost.usd += sub.cost.usd;
     this.cost.subAgentUsd = (this.cost.subAgentUsd ?? 0) + sub.cost.usd;
+    (this.cost.subAgents ??= []).push({ label: description, usd: sub.cost.usd });
     this.bus?.emit({ type: "subagent.end", tabId: this.agentId, description, result: text.slice(0, 500) });
     return { text, tools, tokens, capped: sub.capped };
+  }
+
+  /**
+   * Coordinated task: spawn every subtask as its own read-only sub-agent, ALL in
+   * parallel, each with a tight isolated budget (8 iterations / 15k tokens). Each
+   * sub-agent emits its own subagent.start/end on the bus, so the web floor shows
+   * one figure per subtask appearing at once and vanishing individually as each
+   * finishes. Only the final summaries return to the caller (the coordinator) —
+   * every intermediate tool call stays inside the sub-agent and never enters this
+   * engine's history. Per-sub-agent cost lands in this.cost.subAgents for /cost.
+   */
+  async runCoordinatedTask(
+    subtasks: { description: string; prompt: string }[],
+    signal?: AbortSignal,
+  ): Promise<CoordinatedResult[]> {
+    return Promise.all(
+      subtasks.map(async (t) => {
+        const res = await this.runSubAgent(t.description, t.prompt, signal, {
+          maxIter: COORD_SUBAGENT_MAX_ITER,
+          tokenBudget: COORD_SUBAGENT_TOKEN_BUDGET,
+        });
+        return { ...res, description: t.description };
+      }),
+    );
   }
 
   /**

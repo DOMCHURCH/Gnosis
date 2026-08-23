@@ -1295,6 +1295,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         const uncached = Math.max(0, engine.cost.promptTokens - cached);
         const sub = engine.cost.subAgentUsd ?? 0;
         const oracle = engine.cost.oracleUsd ?? 0;
+        const runs = engine.cost.subAgents ?? [];
         const extras: string[] = [];
         if (sub > 0) extras.push(`$${sub.toFixed(4)} sub-agents`);
         if (oracle > 0) extras.push(`$${oracle.toFixed(4)} oracle`);
@@ -1302,6 +1303,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           `in: ${uncached} uncached + ${cached} cached · out: ${engine.cost.completionTokens} · $${engine.cost.usd.toFixed(4)}` +
             (extras.length ? ` (incl. ${extras.join(", ")})` : ""),
         );
+        // Per-sub-agent attribution: the coordinator's own spend, then each sub-agent.
+        if (runs.length > 0) {
+          const coordinator = Math.max(0, engine.cost.usd - sub - oracle);
+          const parts = [`coordinator: $${coordinator.toFixed(4)}`];
+          runs.forEach((r, i) => parts.push(`sub-agent-${i + 1} (${r.label}): $${r.usd.toFixed(4)}`));
+          sysLog(parts.join(", "));
+        }
         break;
       }
       case "verbose": {

@@ -120,7 +120,35 @@ export const todoSchema = z.object({
 
 export const taskSchema = z.object({
   description: z.string().describe("Short label for the sub-task (3–6 words), shown in the transcript."),
-  prompt: z.string().describe("The full instruction for the sub-agent: what to find or investigate, and what to report back."),
+  prompt: z
+    .string()
+    .optional()
+    .describe(
+      "The full instruction for the sub-agent: what to find or investigate, and what to report back. Required for a " +
+        "single sub-agent; omit (or use as optional framing) when passing `subtasks` for a coordinated task.",
+    ),
+  coordinate: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set true together with `subtasks` to run a COORDINATED task: every subtask spawns its own read-only " +
+        "sub-agent in parallel and you (the coordinator) synthesize their summaries into one answer.",
+    ),
+  subtasks: z
+    .array(
+      z.object({
+        description: z.string().describe("Short label for this sub-agent (3–6 words), shown as a figure on the floor."),
+        prompt: z.string().describe("The full, self-contained instruction for this one sub-agent."),
+      }),
+    )
+    .optional()
+    .describe(
+      "Coordinated form: a list of independent scoped objectives. Each runs as its own read-only sub-agent IN " +
+        "PARALLEL (tighter caps: 8 iterations / 15k tokens each), and only their final summaries return to you — " +
+        "their intermediate tool calls never enter your history. Use when a task splits into independent areas " +
+        "(different files, topics, or codebases) that can be investigated at the same time. When provided, the " +
+        "top-level `prompt` is ignored except as optional framing.",
+    ),
 });
 
 export const viewImageSchema = z.object({

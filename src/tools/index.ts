@@ -64,6 +64,19 @@ export interface SubAgentResult {
 /** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
 export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
 
+/** One coordinated sub-agent's scoped objective. */
+export interface SubTask {
+  description: string;
+  prompt: string;
+}
+/** Result of one coordinated sub-agent (its label + final summary + accounting). */
+export interface CoordinatedResult extends SubAgentResult {
+  description: string;
+}
+/** Spawns every subtask as a parallel read-only sub-agent (tight caps) and returns
+ * each one's summary in the same order. Refused inside a sub-agent (no recursion). */
+export type CoordinateRunner = (subtasks: SubTask[], signal?: AbortSignal) => Promise<CoordinatedResult[]>;
+
 /** Result of an oracle consultation: the answer plus accounting. */
 export interface OracleResult {
   text: string;
@@ -87,6 +100,9 @@ export interface ToolContext {
   roots?: string[];
   tab?: TabRuntime;
   subagent?: SubAgentRunner;
+  /** Present only in the top-level agent (never in a sub-agent): run a coordinated
+   * set of parallel sub-agents for the `task` tool's `subtasks` form. */
+  coordinate?: CoordinateRunner;
   /** Replace the session's task list (rendered live above the input). Absent
    * headless / in sub-agents, where the tool simply returns its summary. */
   setTodos?: (items: TodoItem[]) => void;
@@ -194,7 +210,9 @@ export const TOOLS: Record<string, ToolDef> = {
       "Delegate an open-ended search or investigation to a fresh read-only sub-agent (\"find where X is handled\", " +
       "\"which files touch Y\"). It has its own context and only read/glob/grep/http — it explores, then returns a " +
       "concise summary as the result. Its intermediate steps never enter your history, so prefer it over grepping " +
-      "large amounts of output into your own context. Cannot write, run commands, or spawn further sub-agents.",
+      "large amounts of output into your own context. Cannot write, run commands, or spawn further sub-agents. " +
+      "For work that splits into independent areas, pass `coordinate: true` with a `subtasks` array: each subtask " +
+      "runs as its own sub-agent in parallel and you synthesize all their summaries — faster and lighter on context.",
     schema: taskSchema,
     mutating: false,
     run: runTask,

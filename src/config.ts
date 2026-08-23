@@ -56,6 +56,10 @@ export interface CostState {
   usd: number;
   /** Of usd, the portion spent by `task` sub-agents (shown separately in /cost). */
   subAgentUsd?: number;
+  /** Per-sub-agent dollar attribution, in the order the sub-agents were spawned.
+   * A coordinated task appends one entry per parallel sub-agent; a plain task
+   * appends a single entry. Drives the per-sub-agent breakdown in /cost. */
+  subAgents?: { label: string; usd: number }[];
   /** Of usd, the portion spent by the `oracle` tool (shown separately in /cost). */
   oracleUsd?: number;
 }
