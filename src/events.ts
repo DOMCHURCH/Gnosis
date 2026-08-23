@@ -38,6 +38,12 @@ export type DomEvent =
   | { type: "line"; tabId: number; item: unknown }
   | { type: "tool.start"; tabId: number; tool: string; args: unknown }
   | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }
+  // Streaming file edits: a large edit (after approval) writes progressively. The
+  // right pane of the diff viewer fills in from edit.line events; edit.commit locks
+  // it in. The file is written to disk only at commit, never mid-stream.
+  | { type: "edit.start"; tabId: number; path: string; original: string; totalLines: number }
+  | { type: "edit.line"; tabId: number; index: number; text: string; changed: boolean; chars: number }
+  | { type: "edit.commit"; tabId: number; path: string; ok: boolean; summary: string }
   | { type: "subagent.start"; tabId: number; description: string }
   | { type: "subagent.end"; tabId: number; description: string; result: string }
   | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }

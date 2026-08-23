@@ -50,6 +50,26 @@ export interface State {
   goals: Record<number, GoalState | null>;
   /** The latest goal review per tab (goal.review) — verdict shown above the rail. */
   reviews: Record<number, GoalReview>;
+  /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
+   * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
+  streamEdits: Record<number, StreamEdit | null>;
+}
+
+/** An in-flight (or just-committed) streaming edit, driving the live diff viewer. */
+export interface StreamEdit {
+  path: string;
+  /** Original file content, split into lines — the static left pane. */
+  original: string[];
+  /** Total lines expected in the new content (drives the progress bar). */
+  totalLines: number;
+  /** New-content lines received so far — the right pane fills in from these. */
+  lines: { text: string; changed: boolean }[];
+  chars: number;
+  /** False while streaming (blinking cursor + progress bar); true after edit.commit
+   * (diff locked in, undo button shown). */
+  done: boolean;
+  ok: boolean;
+  summary: string;
 }
 
 /** One raw chat line before grouping. `rule` marks a code-fence boundary; `text`
@@ -73,7 +93,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, streamEdits: {} };
 
 /** Append a raw chat line, capping PER TAB so the feed can't grow unbounded and
  * a busy tab can't evict another tab's history (which would make switching floors
@@ -203,6 +223,26 @@ export function reducer(state: State, action: Action): State {
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
       const ln: RawLine = { key: `t${action.tabId}-${withTx.chatLines.length}-${Date.now()}`, tabId: action.tabId, from, kind: "tool", epoch, time: clock(), tool: action.tool, primary: action.primary, secondary: action.secondary, ok: action.ok, summary: action.summary, detail: action.detail };
       return { ...pushLine(withTx, ln), fileEpoch: state.fileEpoch + 1, vaultEpoch: state.vaultEpoch + 1 };
+    }
+    case "edit.start":
+      return {
+        ...state,
+        streamEdits: {
+          ...state.streamEdits,
+          [action.tabId]: { path: action.path, original: action.original.split("\n"), totalLines: action.totalLines, lines: [], chars: 0, done: false, ok: false, summary: "" },
+        },
+      };
+    case "edit.line": {
+      const cur = state.streamEdits[action.tabId];
+      if (!cur || cur.done) return state;
+      // edit.line events are ordered by index; append (guard against gaps/dupes).
+      const lines = action.index === cur.lines.length ? [...cur.lines, { text: action.text, changed: action.changed }] : cur.lines;
+      return { ...state, streamEdits: { ...state.streamEdits, [action.tabId]: { ...cur, lines, chars: action.chars } } };
+    }
+    case "edit.commit": {
+      const cur = state.streamEdits[action.tabId];
+      if (!cur) return state;
+      return { ...state, streamEdits: { ...state.streamEdits, [action.tabId]: { ...cur, done: true, ok: action.ok, summary: action.summary } } };
     }
     case "subagent.start":
       return withItem(

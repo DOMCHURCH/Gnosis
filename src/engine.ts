@@ -23,7 +23,7 @@ export function limitPhrase(detail: string): string {
   while (end < msg.length && /\d/.test(msg[end]!)) end++;
   return msg.slice(0, end);
 }
-import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult, type CoordinatedResult } from "./tools/index.js";
+import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult, type CoordinatedResult, type EditStream } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -1323,12 +1323,38 @@ export class Engine {
     return this.runAndCommit(tool, args, cb);
   }
 
+  /** Build the streaming-edit channel: mirror progress onto the event bus (for web
+   * clients) and show a live character count in the TUI's transient line. The tool
+   * itself decides whether an edit is large enough to stream. */
+  private makeEditStream(cb: Callbacks): EditStream {
+    const bus = this.bus;
+    const tabId = this.agentId;
+    return {
+      start: (p, original, totalLines) => {
+        cb.onPending(`writing ${p} — 0 chars`);
+        try { bus?.emit({ type: "edit.start", tabId, path: p, original, totalLines }); } catch { /* emit and forget */ }
+      },
+      line: (index, text, changed, chars) => {
+        cb.onPending(`writing… ${index + 1} lines, ${chars} chars`);
+        try { bus?.emit({ type: "edit.line", tabId, index, text, changed, chars }); } catch { /* emit and forget */ }
+      },
+      commit: (p, ok, summary) => {
+        cb.onPending("");
+        try { bus?.emit({ type: "edit.commit", tabId, path: p, ok, summary }); } catch { /* emit and forget */ }
+      },
+    };
+  }
+
   /** Run a file tool and, on success, auto-commit the file it touched (write/edit
    * only; no-op when autoCommit is off or the tool failed) + fire PostToolUse. */
   private async runAndCommit(tool: ToolDef, args: any, cb: Callbacks): Promise<ToolResult> {
     let result: ToolResult;
+    // A large edit streams its write line-by-line — but only where there's a live
+    // view to show it (the TUI, or a web client via the bus). Headless stays atomic.
+    const ctx = this.toolCtx();
+    if (tool.name === "edit" && (this.interactive || this.bus)) ctx.editStream = this.makeEditStream(cb);
     try {
-      result = await tool.run(args, this.abortController?.signal, this.toolCtx());
+      result = await tool.run(args, this.abortController?.signal, ctx);
     } catch (e) {
       return { output: `${tool.name}: ${(e as Error).message}`, isError: true };
     }

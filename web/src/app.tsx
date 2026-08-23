@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
+import { StreamDiff } from "./StreamDiff";
 import { OverlayModal } from "./OverlayModal";
 import { LeftPanel } from "./LeftPanel";
 import { VaultSaveModal } from "./VaultSaveModal";
@@ -244,6 +245,11 @@ export function App() {
             onSet={(g) => { if (activeId != null) send({ type: "goal.set", tabId: activeId, ...g }); }}
             onClear={() => { if (activeId != null) send({ type: "goal.clear", tabId: activeId }); }}
           />
+        }
+        streamPanel={
+          activeId != null && state.streamEdits[activeId]
+            ? <StreamDiff edit={state.streamEdits[activeId]!} onUndo={() => send({ type: "command", tabId: activeId, command: "/undo" })} />
+            : null
         }
         canSaveVault={!!vault?.configured}
         onSaveMsg={(content) => setSaveTarget(content)}

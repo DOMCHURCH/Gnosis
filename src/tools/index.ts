@@ -35,6 +35,17 @@ import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
 import { runMemory } from "./memory.js";
 
+/** Progressive-write channel for the edit tool. Set by the engine (after the
+ * permission gate passes) only for streamable edits; absent → atomic write. The
+ * engine forwards these onto the event bus (edit.start/line/commit) and shows a
+ * live char count in the TUI. The tool still writes to disk exactly once, at the
+ * moment it calls commit(). */
+export interface EditStream {
+  start(path: string, original: string, totalLines: number): void;
+  line(index: number, text: string, changed: boolean, chars: number): void;
+  commit(path: string, ok: boolean, summary: string): void;
+}
+
 export interface ToolResult {
   output: string;
   isError: boolean;
@@ -112,6 +123,9 @@ export interface ToolContext {
   attachImage?: (img: ImagePart) => void;
   /** Consult the stronger oracle model (single turn, no tools) for `oracle`. */
   oracle?: OracleRunner;
+  /** Set (post-approval) when a large edit should stream its write line-by-line.
+   * Absent → the edit tool writes atomically (small edits, headless, sub-agents). */
+  editStream?: EditStream;
 }
 
 export interface ToolDef {

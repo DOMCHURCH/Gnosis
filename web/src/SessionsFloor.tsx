@@ -50,6 +50,8 @@ export interface SessionsProps {
   onSaveMsg?: (content: string) => void;
   /** The goal bar, rendered directly above the chat rail. */
   goalBar?: ReactNode;
+  /** Live streaming-edit diff viewer for the active tab (null when none). */
+  streamPanel?: ReactNode;
   /** Optional collapsible panel rendered at the far left (the File Browser). */
   leftPanel?: ReactNode;
   /** Optional collapsible panel rendered at the far right (the Background jobs panel). */
@@ -466,6 +468,8 @@ export function SessionsFloor(props: SessionsProps) {
             </div>
 
             {props.goalBar}
+
+            {props.streamPanel}
 
             <div ref={dockRef} style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
               {!narrow && <div onMouseDown={startResize} title="drag to resize the chat" style={{ height: 8, flex: "0 0 auto", cursor: "ns-resize", background: "#101017", borderBottom: "1px solid #2A2A38" }} />}
