@@ -45,7 +45,14 @@ npm install -g dom-agent      # or, from source: npm link
 Add your OpenRouter key to `~/.dom/.env`:
 
 ```sh
-OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_API_KEY=sk-or-...     # required — all model calls route through OpenRouter
+BRAVE_API_KEY=BSA...             # optional — enables the web_search tool (Brave Search API)
+```
+
+Optional: to route `groq/`-prefixed models natively to Groq, add a Groq key to `~/.dom/config.json`:
+
+```json
+{ "groqApiKey": "gsk_..." }
 ```
 
 Then run it:
@@ -76,9 +83,16 @@ Common in-session slash commands:
 
 Type `@` to attach files and `/` to autocomplete commands.
 
-## Keys
+## Keys & network
 
-dom never stores your API key anywhere except `~/.dom/.env` on your own machine. No key is bundled with the package. There is no telemetry. The OpenRouter key is yours and stays local — it is read at request time and sent only to OpenRouter.
+All keys are yours and stay local — read at request time from `~/.dom/.env` (or `~/.dom/config.json` for Groq), never bundled with the package, and never sent anywhere except the service they belong to. There is no telemetry.
+
+dom makes outbound HTTP(S) requests to:
+
+- **OpenRouter** (`openrouter.ai`) — every model call, plus the public `/models` catalog. Uses `OPENROUTER_API_KEY`.
+- **Groq** (`api.groq.com`) — only when you run a `groq/`-prefixed model; fetches its `/models` and routes chat completions natively. Uses `groqApiKey` from `~/.dom/config.json`. Skipped entirely if no Groq key is set.
+- **Brave Search** (`api.search.brave.com`) — the `web_search` tool. Uses `BRAVE_API_KEY`. Skipped if unset.
+- **Arbitrary public hosts** — the `http` tool fetches URLs you (or the agent) request. Loopback, private-network, and cloud-metadata addresses are refused. Secrets are never inlined: reference them as `${VAR_NAME}` and the value is pulled from `~/.dom/.env` at send time.
 
 ## Development
 
