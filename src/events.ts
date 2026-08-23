@@ -49,7 +49,8 @@ export type DomEvent =
   | { type: "message.sent"; from: string; to: string; hops: number }
   | { type: "goal.state"; tabId: number; goal: { text: string; active: boolean; roundsLeft: number; maxRounds: number; reviewModel?: string } | null }
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
-  | { type: "vault.changed" };
+  | { type: "vault.changed" }
+  | { type: "connections.changed" };
 
 export type Listener = (e: DomEvent) => void;
 
@@ -86,6 +87,8 @@ export interface AppBridge {
   getAgents(): AgentSnapshot[];
   /** The slash-command registry (same one the TUI's /help uses), sent on connect. */
   getCommands(): { name: string; args?: string; desc: string }[];
+  /** Loaded skills (name/description/scope), for the CONNECTIONS tab. Optional. */
+  getSkills?(): { name: string; description: string; scope: string }[];
 
   // Client → server actions (set by the UI; absent until it mounts).
   onInput?(tabId: number, text: string, attachments?: Attachment[]): void;

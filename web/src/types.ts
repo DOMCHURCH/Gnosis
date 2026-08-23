@@ -85,7 +85,8 @@ export type DomEvent =
   | { type: "message.sent"; from: string; to: string; hops: number }
   | { type: "goal.state"; tabId: number; goal: GoalState | null }
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
-  | { type: "vault.changed" };
+  | { type: "vault.changed" }
+  | { type: "connections.changed" };
 
 /** The goal bar's per-tab standing goal (mirrors src/engine.ts GoalState). */
 export interface GoalState {
@@ -115,7 +116,8 @@ export type ClientMessage =
   | { type: "job.kill"; jobId: string }
   | { type: "goal.set"; tabId: number; text: string; maxRounds?: number; reviewModel?: string; active?: boolean }
   | { type: "goal.clear"; tabId: number }
-  | { type: "vault.save"; reqId: number; filename: string; tags: string[]; content: string };
+  | { type: "vault.save"; reqId: number; filename: string; tags: string[]; content: string }
+  | { type: "mcp.toggle"; name: string; enabled: boolean };
 
 /** One background job as returned by GET /api/jobs (mirrors src/jobs.ts Job). */
 export interface JobInfo {
@@ -128,6 +130,28 @@ export interface JobInfo {
   exitCode: number | null;
   pid?: number;
   port: number | null;
+}
+
+/** One MCP server's state for the CONNECTIONS tab (mirrors src/mcp/manager.ts). */
+export interface McpConnection {
+  name: string;
+  transport: string;
+  status: "disabled" | "connecting" | "connected" | "error";
+  toolCount: number;
+  mutating: boolean;
+  disabled: boolean;
+  error: string | null;
+  description: string;
+  tools: { name: string; description: string }[];
+}
+export interface KeyInfo { name: string; present: boolean; last4: string | null; feature: string }
+export interface SkillInfo { name: string; description: string; scope: string }
+/** GET /api/connections payload. */
+export interface ConnectionsData {
+  mcp: McpConnection[];
+  keys: KeyInfo[];
+  skills: SkillInfo[];
+  jobs: JobInfo[];
 }
 
 /** A live selection overlay mirrored from the TUI (model/session/file/history). */

@@ -24,6 +24,36 @@ import { jobs, bridgeJobsToBus } from "./jobs.js";
 import { spawnPty, killAllPtys } from "./pty.js";
 import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
+import { mcp } from "./mcp/manager.js";
+import { loadEnv, loadConfig } from "./config.js";
+
+// Keys the CONNECTIONS tab knows about, with the feature each one enables. Others
+// present in ~/.dom/.env are also surfaced (name + last 4 only).
+const KNOWN_KEYS = [
+  { name: "OPENROUTER_API_KEY", feature: "model calls (required)" },
+  { name: "BRAVE_API_KEY", feature: "web_search tool" },
+  { name: "CONTEXT7_API_KEY", feature: "Context7 MCP (higher rate limits)" },
+];
+
+/** Presence + last-4 of the keys that matter, never the full value. */
+async function collectKeys(): Promise<{ name: string; present: boolean; last4: string | null; feature: string }[]> {
+  const env = await loadEnv();
+  const cfg = await loadConfig();
+  const seen = new Set<string>();
+  const out: { name: string; present: boolean; last4: string | null; feature: string }[] = [];
+  for (const k of KNOWN_KEYS) {
+    const val = env[k.name] ?? process.env[k.name];
+    out.push({ name: k.name, present: !!val, last4: val ? String(val).slice(-4) : null, feature: k.feature });
+    seen.add(k.name);
+  }
+  out.push({ name: "groqApiKey", present: !!cfg.groqApiKey, last4: cfg.groqApiKey ? cfg.groqApiKey.slice(-4) : null, feature: "Groq models (config.json)" });
+  seen.add("groqApiKey");
+  for (const [k, v] of Object.entries(env)) {
+    if (seen.has(k) || !/key|token|secret/i.test(k)) continue;
+    out.push({ name: k, present: true, last4: v.slice(-4), feature: "" });
+  }
+  return out;
+}
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -197,6 +227,17 @@ async function handleApi(url: URL, bridge: AppBridge, res: http.ServerResponse):
     sendJson(res, 200, preview);
     return true;
   }
+  // CONNECTIONS tab: MCP servers + status/tools, API-key presence, loaded skills,
+  // and background jobs bound to a port (the HTTP section).
+  if (url.pathname === "/api/connections") {
+    sendJson(res, 200, {
+      mcp: mcp.connections(),
+      keys: await collectKeys(),
+      skills: bridge.getSkills ? bridge.getSkills() : [],
+      jobs: jobs.list().filter((j) => j.port != null),
+    });
+    return true;
+  }
   return false;
 }
 
@@ -260,6 +301,14 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
       break;
     case "overlay.cancel":
       bridge.answerOverlay(String(msg.id ?? ""), null);
+      break;
+    case "mcp.toggle":
+      // Enable/disable an MCP server for this session, then tell every client to
+      // re-fetch the CONNECTIONS data (status + tool counts change).
+      void mcp
+        .setEnabled(String(msg.name ?? ""), Boolean(msg.enabled))
+        .then(() => bridge.bus.emit({ type: "connections.changed" }))
+        .catch(() => {});
       break;
     case "agent.create":
       bridge.onCreateAgent?.(msg.name, msg.purpose);

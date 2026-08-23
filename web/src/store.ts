@@ -43,6 +43,9 @@ export interface State {
   /** Bumped on tool.end and on vault.changed so the Obsidian panel re-reads the
    * vault note tree after dom (or a "save to vault") writes a note. */
   vaultEpoch: number;
+  /** Bumped on connections.changed and job start/end so the CONNECTIONS tab
+   * re-reads /api/connections (MCP status, HTTP jobs). */
+  connectionsEpoch: number;
   /** The goal bar's standing goal per tab (goal.state), null when cleared. */
   goals: Record<number, GoalState | null>;
   /** The latest goal review per tab (goal.review) — verdict shown above the rail. */
@@ -70,7 +73,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, goals: {}, reviews: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {} };
 
 /** Append a raw chat line, capping PER TAB so the feed can't grow unbounded and
  * a busy tab can't evict another tab's history (which would make switching floors
@@ -215,13 +218,13 @@ export function reducer(state: State, action: Action): State {
     case "job.start": {
       const tid = action.tabId ?? state.selected;
       const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: [...(state.jobs[action.tabId] ?? []), { id: action.jobId, command: action.command }] } : state.jobs;
-      const next = { ...state, jobs, jobEpoch: state.jobEpoch + 1 };
+      const next = { ...state, jobs, jobEpoch: state.jobEpoch + 1, connectionsEpoch: state.connectionsEpoch + 1 };
       return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId}: ${action.command}` });
     }
     case "job.end": {
       const tid = action.tabId ?? state.selected;
       const jobs = action.tabId != null ? { ...state.jobs, [action.tabId]: (state.jobs[action.tabId] ?? []).filter((j) => j.id !== action.jobId) } : state.jobs;
-      const next = { ...state, jobs, jobEpoch: state.jobEpoch + 1 };
+      const next = { ...state, jobs, jobEpoch: state.jobEpoch + 1, connectionsEpoch: state.connectionsEpoch + 1 };
       return tid == null ? next : withItem(next, tid, { kind: "system", text: `⎈ job ${action.jobId} ${action.status}` });
     }
     case "message.sent": {
@@ -253,6 +256,8 @@ export function reducer(state: State, action: Action): State {
       return state.overlay?.id === action.id ? { ...state, overlay: null } : state;
     case "vault.changed":
       return { ...state, vaultEpoch: state.vaultEpoch + 1 };
+    case "connections.changed":
+      return { ...state, connectionsEpoch: state.connectionsEpoch + 1 };
     case "goal.state":
       return { ...state, goals: { ...state.goals, [action.tabId]: action.goal } };
     case "goal.review": {

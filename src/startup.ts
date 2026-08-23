@@ -4,6 +4,8 @@ import { Engine } from "./engine.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { loadSkills } from "./skills.js";
 import { ensurePublicApisCache } from "./publicapis.js";
+import { ensureMcpConfig } from "./mcp/config.js";
+import { mcp } from "./mcp/manager.js";
 import { runNonBlockingHook } from "./hooks.js";
 import { fetchModels } from "./models.js";
 import type { ModelInfo } from "./provider.js";
@@ -186,6 +188,14 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // at most once every 30 days; ensurePublicApisCache never throws.
   if (!flags.headless && skills.some((s) => s.name === "public-apis")) {
     void ensurePublicApisCache().catch(() => {});
+  }
+
+  // MCP: ensure ~/.dom/mcp.json exists (writes the default 3-server registry on
+  // first run), then connect servers in the background so tools publish into the
+  // registry once ready. Non-blocking — never delays boot. Skipped for one-shot
+  // pipe/headless runs (spawning servers for a single turn isn't worth it).
+  if (!flags.headless) {
+    void ensureMcpConfig().then(() => mcp.init()).catch(() => {});
   }
 
   return { engine, models, config, resumed, defaultModel, skillWarnings };

@@ -107,6 +107,10 @@ export interface ToolDef {
   /** `signal` aborts a long-running tool (only bash honours it today); `ctx`
    * carries multi-tab runtime access for send_message/list_tabs. */
   run: (args: any, signal?: AbortSignal, ctx?: ToolContext) => Promise<ToolResult>;
+  /** MCP tools carry a raw JSON Schema (used verbatim for the model) instead of a
+   * zod schema; `source` marks where the tool came from. */
+  jsonSchema?: Record<string, unknown>;
+  source?: "builtin" | "mcp";
 }
 
 export const TOOLS: Record<string, ToolDef> = {
@@ -252,16 +256,38 @@ export const TOOLS: Record<string, ToolDef> = {
 
 export const TOOL_NAMES = Object.keys(TOOLS);
 
-/** The tools array sent to the API, derived from the zod schemas. Pass `names` to
- * restrict the set (e.g. plan mode advertises only read-only tools). */
+// Dynamic MCP tools, published by the MCP manager whenever servers connect,
+// disconnect, or toggle. Namespaced mcp__<server>__<tool> so they never collide
+// with built-ins. Kept separate from TOOLS (which stays static + immutable).
+let MCP_TOOLS: Record<string, ToolDef> = {};
+export function setMcpToolDefs(defs: Record<string, ToolDef>): void {
+  MCP_TOOLS = defs;
+}
+export function mcpToolNames(): string[] {
+  return Object.keys(MCP_TOOLS);
+}
+/** Resolve a tool by name across built-ins and connected MCP servers. */
+export function resolveTool(name: string): ToolDef | undefined {
+  return TOOLS[name] ?? MCP_TOOLS[name];
+}
+/** All advertised tool names (built-ins + connected MCP tools). */
+export function allToolNames(): string[] {
+  return [...TOOL_NAMES, ...Object.keys(MCP_TOOLS)];
+}
+
+/** The tools array sent to the API. Built-ins derive parameters from their zod
+ * schema; MCP tools pass their JSON Schema verbatim. Pass `names` to restrict the
+ * set (e.g. plan mode advertises only read-only tools). */
 export function toolDefinitions(names?: readonly string[]): ToolSchema[] {
-  const list = names ? names.map((n) => TOOLS[n]).filter((t): t is ToolDef => !!t) : Object.values(TOOLS);
+  const list = names
+    ? names.map((n) => resolveTool(n)).filter((t): t is ToolDef => !!t)
+    : [...Object.values(TOOLS), ...Object.values(MCP_TOOLS)];
   return list.map((t) => ({
     type: "function",
     function: {
       name: t.name,
       description: t.description,
-      parameters: toJsonSchema(t.schema),
+      parameters: t.jsonSchema ?? toJsonSchema(t.schema),
     },
   }));
 }

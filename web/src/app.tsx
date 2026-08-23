@@ -9,6 +9,7 @@ import { BackgroundPanel } from "./BackgroundPanel";
 import { TerminalDock } from "./Terminal";
 import { apiGet } from "./api";
 import type { VaultTree } from "./filetypes";
+import type { ConnectionsData } from "./types";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
@@ -54,6 +55,11 @@ export function App() {
   const [vault, setVault] = useState<VaultTree | null>(null);
   const [saveTarget, setSaveTarget] = useState<string | null>(null);
   useEffect(() => { void apiGet<VaultTree>("/api/vault/tree").then(setVault); }, [state.vaultEpoch]);
+  // CONNECTIONS tab data (MCP servers, keys, skills, HTTP jobs). Re-fetched when
+  // connectionsEpoch bumps (mcp toggle / job start-end).
+  const [connections, setConnections] = useState<ConnectionsData | null>(null);
+  const refreshConnections = () => { void apiGet<ConnectionsData>("/api/connections").then(setConnections); };
+  useEffect(() => { refreshConnections(); }, [state.connectionsEpoch]);
   const [, bump] = useState(0);
   const debugRef = useRef<{ byFloor: Record<number, any[]>; userCb: ((m: any) => void) | null; approvalCb: ((m: any) => void) | null }>({ byFloor: {}, userCb: null, approvalCb: null });
 
@@ -213,7 +219,7 @@ export function App() {
         }
         canSaveVault={!!vault?.configured}
         onSaveMsg={(content) => setSaveTarget(content)}
-        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} />}
+        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} connections={connections} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} onRefreshConnections={refreshConnections} onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })} />}
         rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
       />
       {saveTarget != null && (

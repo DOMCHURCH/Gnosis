@@ -1461,6 +1461,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const wireBridge = (b: AppBridge) => {
     b.getAgents = () =>
       controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput() }));
+    b.getSkills = () => controller.active().engine.skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope }));
     b.onInput = (tabId, text, attachments) => {
       const tab = controller.byId(tabId) ?? controller.active();
       let finalText = text;

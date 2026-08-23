@@ -23,7 +23,7 @@ export function limitPhrase(detail: string): string {
   while (end < msg.length && /\d/.test(msg[end]!)) end++;
   return msg.slice(0, end);
 }
-import { TOOLS, TOOL_NAMES, toolDefinitions, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult } from "./tools/index.js";
+import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -58,6 +58,16 @@ const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_ta
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
+
+/** Compact one-line rendering of tool args for an MCP permission preview. */
+function compactArgs(args: unknown): string {
+  try {
+    const s = JSON.stringify(args ?? {});
+    return s.length > 200 ? s.slice(0, 197) + "…" : s;
+  } catch {
+    return "{}";
+  }
+}
 const SUBAGENT_MAX_ITER = 15;
 const SUBAGENT_TOKEN_BUDGET = 50_000;
 // The verifier subagent is deliberately blind to the generator's reasoning: it
@@ -342,7 +352,10 @@ export class Engine {
    * multi-tab meta-tools), leaving only read-only research tools. */
   availableToolNames(): readonly string[] {
     if (this.toolAllowList) return this.toolAllowList;
-    return this.mode === "plan" ? TOOL_NAMES.filter((n) => !PLAN_EXCLUDED.has(n)) : TOOL_NAMES;
+    if (this.mode !== "plan") return allToolNames();
+    // Plan mode: built-ins keep the existing exclusion set; MCP tools are advertised
+    // only when read-only (mutating ones are rejected by the gate anyway).
+    return allToolNames().filter((n) => (TOOLS[n] ? !PLAN_EXCLUDED.has(n) : !resolveTool(n)?.mutating));
   }
 
   /** System prompt for the current turn, with the stated working directory
@@ -1095,7 +1108,7 @@ export class Engine {
   }
 
   private async gateAndExecute(call: ToolCall, cb: Callbacks): Promise<ToolResult> {
-    const tool = TOOLS[call.name];
+    const tool = resolveTool(call.name);
     if (!tool) return { output: `unknown tool: ${call.name}`, isError: true };
     // Belt-and-braces: the tool isn't even advertised here, but if the model
     // hallucinates one anyway, refuse it. Sub-agents (allow-list) see it as an
@@ -1145,7 +1158,9 @@ export class Engine {
       const preview =
         tool.name === "http"
           ? buildHttpPreview(args.method, String(args.url ?? ""), decision.dangerous)
-          : buildBashPreview(this.cwd, String(args.command ?? ""), decision.reason);
+          : tool.source === "mcp"
+            ? buildBashPreview(this.cwd, `${tool.name}(${compactArgs(args)})`, decision.reason ?? "MCP tool call")
+            : buildBashPreview(this.cwd, String(args.command ?? ""), decision.reason);
       const ans = await cb.requestPermission(preview);
       if (ans === "no") return this.rejectionResult(tool, args, cb);
       if (ans === "always" && !decision.dangerous) this.approvals.add(approvalKey(tool, args));
