@@ -25,6 +25,7 @@ import { spawnPty, killAllPtys } from "./pty.js";
 import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
 import { mcp } from "./mcp/manager.js";
+import { panelSummary, clearSessionMemory } from "./sessionmemory.js";
 import { loadEnv, loadConfig } from "./config.js";
 
 // Keys the CONNECTIONS tab knows about, with the feature each one enables. Others
@@ -238,6 +239,11 @@ async function handleApi(url: URL, bridge: AppBridge, res: http.ServerResponse):
     });
     return true;
   }
+  // MEMORY panel (CONNECTIONS tab): automatic learned-context summary.
+  if (url.pathname === "/api/memory") {
+    sendJson(res, 200, await panelSummary());
+    return true;
+  }
   return false;
 }
 
@@ -307,6 +313,12 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
       // re-fetch the CONNECTIONS data (status + tool counts change).
       void mcp
         .setEnabled(String(msg.name ?? ""), Boolean(msg.enabled))
+        .then(() => bridge.bus.emit({ type: "connections.changed" }))
+        .catch(() => {});
+      break;
+    case "memory.clear":
+      // Wipe the automatic learned context, then tell clients to re-fetch.
+      void clearSessionMemory()
         .then(() => bridge.bus.emit({ type: "connections.changed" }))
         .catch(() => {});
       break;

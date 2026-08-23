@@ -3,6 +3,7 @@ import path from "node:path";
 import { domDir } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 import { buildRepoMap } from "./repomap.js";
+import { buildLearnedContext } from "./sessionmemory.js";
 
 /** The stated-working-directory line's stable prefix, shared with the engine. */
 export const WORKING_DIR_PREFIX = "Working directory: ";
@@ -106,6 +107,16 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [],
     await readAgents(globalAgentsPath, "Global instructions");
   }
   await readAgents(projectAgentsPath, "Project instructions");
+
+  // LEARNED CONTEXT: the distilled patterns + decisions from past sessions, so the
+  // model walks in knowing what worked before. Best-effort; only the summary (never
+  // raw session content) is injected. Empty until the first session is recorded.
+  try {
+    const learned = await buildLearnedContext();
+    if (learned) lines.push("", learned);
+  } catch {
+    /* no learned context yet — not fatal */
+  }
 
   return lines.join("\n");
 }

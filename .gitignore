@@ -2,3 +2,10 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+dist*/
+
+# Automatic session memory + manual memory bank live under ~/.dom/memory and must
+# never leave the machine. Ignored here too in case dom runs with a nested .dom dir.
+.dom/
+

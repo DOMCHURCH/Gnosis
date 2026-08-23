@@ -22,7 +22,7 @@ export const COMMANDS: CommandDef[] = [
   { name: "/alltabs", desc: "tiled read-only overview of every tab" },
   { name: "/worktree", args: "<name|list|merge|remove>", desc: "isolate work in a git worktree + tab" },
   { name: "/workspace", args: "<add|list|remove>", desc: "manage search roots (grep/glob span all)" },
-  { name: "/memory", args: "[add <note>|clear]", desc: "durable project memory bank" },
+  { name: "/memory", args: "[add <note>|show|stats|clear]", desc: "project memory bank + automatic learned context" },
   { name: "/schedule", args: "[add <spec> | <prompt>|remove <id>]", desc: "scheduled runs" },
   { name: "/skills", desc: "list loaded skills" },
   { name: "/clear", desc: "clear the conversation" },

@@ -10,7 +10,7 @@ import { BackgroundPanel } from "./BackgroundPanel";
 import { TerminalDock } from "./Terminal";
 import { apiGet } from "./api";
 import type { VaultTree } from "./filetypes";
-import type { ConnectionsData } from "./types";
+import type { ConnectionsData, MemoryData } from "./types";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
@@ -60,6 +60,11 @@ export function App() {
   const [connections, setConnections] = useState<ConnectionsData | null>(null);
   const refreshConnections = () => { void apiGet<ConnectionsData>("/api/connections").then(setConnections); };
   useEffect(() => { refreshConnections(); }, [state.connectionsEpoch]);
+  // MEMORY panel data (automatic learned context). Shares the connectionsEpoch so a
+  // memory.clear (which emits connections.changed) re-fetches it.
+  const [memory, setMemory] = useState<MemoryData | null>(null);
+  const refreshMemory = () => { void apiGet<MemoryData>("/api/memory").then(setMemory); };
+  useEffect(() => { refreshMemory(); }, [state.connectionsEpoch]);
   const [, bump] = useState(0);
   const debugRef = useRef<{ byFloor: Record<number, any[]>; userCb: ((m: any) => void) | null; approvalCb: ((m: any) => void) | null }>({ byFloor: {}, userCb: null, approvalCb: null });
 
@@ -253,7 +258,7 @@ export function App() {
         }
         canSaveVault={!!vault?.configured}
         onSaveMsg={(content) => setSaveTarget(content)}
-        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} connections={connections} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} onRefreshConnections={refreshConnections} onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })} />}
+        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} connections={connections} memory={memory} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} onRefreshConnections={() => { refreshConnections(); refreshMemory(); }} onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })} onClearMemory={() => send({ type: "memory.clear" })} />}
         rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
       />
       {saveTarget != null && (

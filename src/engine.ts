@@ -11,6 +11,7 @@ import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
 import { gitHead, gitDiff, gitDiffHead } from "./gitinfo.js";
 import { redactSecrets } from "./redact.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
+import { recordSession } from "./sessionmemory.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
 export function limitPhrase(detail: string): string {
@@ -58,6 +59,14 @@ const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_ta
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
+
+/** Pull the first JSON object out of a model reply (tolerates ``` fences / prose). */
+function extractJsonObject(text: string): string {
+  const t = text.replace(/```(?:json)?/gi, "").trim();
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  return start >= 0 && end > start ? t.slice(start, end + 1) : "{}";
+}
 
 /** Compact one-line rendering of tool args for an MCP permission preview. */
 function compactArgs(args: unknown): string {
@@ -781,6 +790,11 @@ export class Engine {
       const stopHook = await runNonBlockingHook(this.cwd, "Stop", { sessionId: this.sessionId(), model: this.modelId });
       if (stopHook.warn) cb.onSystem(`! ${stopHook.warn}`);
     } finally {
+      // Automatic session memory: on a turn that touched files, distill what happened
+      // into the learned bank. Best-effort and never allowed to break the turn.
+      if (this.turnEditedFiles.size > 0 && !this.isSubAgent) {
+        await this.extractSessionMemory(userText).catch(() => {});
+      }
       this.abortController = null;
       cb.onTurnCost?.({
         promptTokens: this.cost.promptTokens - costAtStart.prompt,
@@ -1008,6 +1022,67 @@ export class Engine {
     this.cost.usd += dollars;
     this.cost.oracleUsd = (this.cost.oracleUsd ?? 0) + dollars;
     return { text: result.text || "(the oracle returned no answer)", model, tokens: result.usage.prompt_tokens + result.usage.completion_tokens, usd: dollars };
+  }
+
+  /**
+   * Automatic session memory (Feature): after a file-touching turn, run a cheap
+   * distillation pass over the turn and append a structured fact to the learned
+   * bank (~/.dom/memory). Only the summary — never raw session content — is ever
+   * re-injected into a future system prompt. Best-effort; fully swallowed on error.
+   */
+  private async extractSessionMemory(userText: string): Promise<void> {
+    const cfg = await loadConfig();
+    if (cfg.autoMemory === false) return;
+    const edited = [...this.turnEditedFiles].map((a) => path.relative(this.cwd, a).split(path.sep).join("/"));
+    if (edited.length === 0) return;
+
+    // A compact digest of the turn's tail — decisions/errors live here.
+    const digest = this.messages
+      .slice(-24)
+      .map((m) => {
+        if (m.role === "tool") return `TOOL ${m.name}${m.isError ? " (error)" : ""}: ${String(m.result ?? "").slice(0, 300)}`;
+        if (m.role === "assistant") return m.text ? `ASSISTANT: ${m.text.slice(0, 400)}` : "";
+        if (m.role === "user") return m.text ? `USER: ${m.text.slice(0, 300)}` : "";
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+
+    const model = cfg.memoryModel || this.modelId;
+    const system =
+      "You distill one coding-session turn into a compact JSON fact for a long-term memory bank. Output ONLY minified " +
+      "JSON with exactly these string keys: decision (an architectural/design decision made this turn, else \"\"), " +
+      "pattern (a reusable approach or convention the agent applied, else \"\"), error_recovery (an error hit and how " +
+      "it was resolved, else \"\"). Each value is one short sentence or \"\". No prose, no code fences.";
+    const q = `Files edited: ${edited.join(", ")}\nUser asked: ${userText.slice(0, 300)}\n\nTurn digest:\n${digest}`;
+
+    let decision = "", pattern = "", error_recovery = "";
+    try {
+      const result = await streamCompletion(
+        { apiKey: this.apiKey, model, messages: serialize([{ role: "user", text: q }], system, null), tools: [], signal: new AbortController().signal, cache: false },
+        () => {},
+      );
+      // Fold the (small) distillation cost into the session total, quietly.
+      this.cost.promptTokens += result.usage.prompt_tokens;
+      this.cost.completionTokens += result.usage.completion_tokens;
+      if (result.usage.cost > 0) this.cost.usd += result.usage.cost;
+      const j = JSON.parse(extractJsonObject(result.text)) as Record<string, unknown>;
+      decision = typeof j.decision === "string" ? j.decision : "";
+      pattern = typeof j.pattern === "string" ? j.pattern : "";
+      error_recovery = typeof j.error_recovery === "string" ? j.error_recovery : "";
+    } catch {
+      /* distillation failed — still record the raw fact (files touched) below */
+    }
+
+    await recordSession({
+      sessionId: this.sessionId(),
+      timestamp: new Date().toISOString(),
+      files_touched: edited,
+      decision: decision || undefined,
+      pattern: pattern || undefined,
+      error_recovery: error_recovery || undefined,
+      userAsk: userText.slice(0, 300),
+    });
   }
 
   /**

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { VaultTree } from "./filetypes";
-import type { ConnectionsData } from "./types";
+import type { ConnectionsData, MemoryData } from "./types";
 import { FilesBody } from "./FileBrowser";
 import { ObsidianBody } from "./ObsidianPanel";
 import { ConnectionsBody } from "./ConnectionsPanel";
@@ -18,10 +18,12 @@ export function LeftPanel(props: {
   fileEpoch: number;
   vault: VaultTree | null;
   connections: ConnectionsData | null;
+  memory: MemoryData | null;
   onAttach: (path: string) => void;
   onRefreshVault: () => void;
   onRefreshConnections: () => void;
   onToggleMcp: (name: string, enabled: boolean) => void;
+  onClearMemory: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("files");
@@ -69,7 +71,7 @@ export function LeftPanel(props: {
         ) : active === "obsidian" ? (
           <ObsidianBody vault={props.vault} />
         ) : (
-          <ConnectionsBody data={props.connections} onToggle={props.onToggleMcp} />
+          <ConnectionsBody data={props.connections} memory={props.memory} onToggle={props.onToggleMcp} onClearMemory={props.onClearMemory} />
         )}
       </div>
     </div>

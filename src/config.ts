@@ -39,6 +39,12 @@ export interface Config {
   /** Auto-run the verifier subagent on a turn that touched 2+ files. Default off;
    * /verify always triggers it manually. */
   autoVerify?: boolean;
+  /** Automatic session memory: after each file-touching turn, distill what happened
+   * into the learned-context bank (~/.dom/memory). Default ON; set false to disable. */
+  autoMemory?: boolean;
+  /** Small, fast model used for the automatic-memory distillation pass. Falls back
+   * to the session model when unset. */
+  memoryModel?: string;
   /** Dollar ceiling per session. On reaching it dom halts the turn, refuses new
    * sub-agent/oracle spawns, and prompts to continue or stop. Default 2. */
   maxSessionUsd?: number;

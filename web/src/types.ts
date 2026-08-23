@@ -120,7 +120,8 @@ export type ClientMessage =
   | { type: "goal.set"; tabId: number; text: string; maxRounds?: number; reviewModel?: string; active?: boolean }
   | { type: "goal.clear"; tabId: number }
   | { type: "vault.save"; reqId: number; filename: string; tags: string[]; content: string }
-  | { type: "mcp.toggle"; name: string; enabled: boolean };
+  | { type: "mcp.toggle"; name: string; enabled: boolean }
+  | { type: "memory.clear" };
 
 /** One background job as returned by GET /api/jobs (mirrors src/jobs.ts Job). */
 export interface JobInfo {
@@ -155,6 +156,13 @@ export interface ConnectionsData {
   keys: KeyInfo[];
   skills: SkillInfo[];
   jobs: JobInfo[];
+}
+
+/** GET /api/memory payload — the automatic learned-context summary. */
+export interface MemoryData {
+  sessions: number;
+  topFiles: { path: string; count: number }[];
+  decisions: string[];
 }
 
 /** A live selection overlay mirrored from the TUI (model/session/file/history). */

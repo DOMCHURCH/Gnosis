@@ -1,4 +1,4 @@
-import type { ConnectionsData, McpConnection } from "./types";
+import type { ConnectionsData, McpConnection, MemoryData } from "./types";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -38,7 +38,7 @@ function Toggle(props: { on: boolean; onChange: (v: boolean) => void; title?: st
 
 /** The CONNECTIONS tab body: MCP servers (with a per-server enable/disable
  * toggle), API-key presence, loaded skills, and port-bound background jobs. */
-export function ConnectionsBody(props: { data: ConnectionsData | null; onToggle: (name: string, enabled: boolean) => void }) {
+export function ConnectionsBody(props: { data: ConnectionsData | null; memory?: MemoryData | null; onToggle: (name: string, enabled: boolean) => void; onClearMemory?: () => void }) {
   const d = props.data;
   if (!d) return <div style={{ fontFamily: MONO, fontSize: 11, color: "#6B6B7B", padding: 8 }}>loading…</div>;
 
@@ -109,6 +109,39 @@ export function ConnectionsBody(props: { data: ConnectionsData | null; onToggle:
             <span style={{ fontSize: 9, color: "#6B6B7B", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.command}</span>
           </div>
         ))}
+      </Section>
+
+      {/* --- MEMORY (automatic learned context) --- */}
+      <Section title="MEMORY">
+        {(() => {
+          const m = props.memory;
+          if (!m) return <div style={{ fontSize: 10, color: "#6B6B7B", padding: "2px 4px" }}>loading…</div>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "2px 4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Chip color="#818CF8">{m.sessions} session{m.sessions === 1 ? "" : "s"}</Chip>
+                <span style={{ flex: 1 }} />
+                <button type="button" onClick={props.onClearMemory} title="wipe automatic learned context"
+                  style={{ fontSize: 8, letterSpacing: 1, color: "#F0A0A0", background: "#15151C", border: "1px solid #3A2A2A", padding: "2px 6px", cursor: "pointer" }}>
+                  clear memory
+                </button>
+              </div>
+              <div style={{ fontSize: 8, letterSpacing: 1, color: "#4A4A58" }}>TOP FILES</div>
+              {m.topFiles.length === 0 && <div style={{ fontSize: 9, color: "#6B6B7B" }}>none yet</div>}
+              {m.topFiles.map((f) => (
+                <div key={f.path} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9 }}>
+                  <span style={{ flex: 1, minWidth: 0, color: "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
+                  <span style={{ color: "#6B6B7B" }}>×{f.count}</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 8, letterSpacing: 1, color: "#4A4A58", marginTop: 2 }}>LAST DECISIONS</div>
+              {m.decisions.length === 0 && <div style={{ fontSize: 9, color: "#6B6B7B" }}>none yet</div>}
+              {m.decisions.map((dec, i) => (
+                <div key={i} style={{ fontSize: 9, color: "#6B6B7B", lineHeight: 1.4 }}>• {dec}</div>
+              ))}
+            </div>
+          );
+        })()}
       </Section>
     </div>
   );

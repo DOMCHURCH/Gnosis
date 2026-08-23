@@ -38,6 +38,7 @@ import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
 import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
+import { buildLearnedContext, learnedStats, clearSessionMemory } from "../sessionmemory.js";
 import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
 import { EventBus, createBridge, type AppBridge } from "../events.js";
 import { startServer, type ServerHandle } from "../server.js";
@@ -1151,17 +1152,22 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         const eng = controller.active().engine;
         const sub = (parts[1] ?? "").toLowerCase();
         if (sub === "clear") {
-          void clearMemory(eng.cwd).then(() => sysLog("memory: bank cleared for this project."));
+          // Wipe both the manual per-project bank and the automatic learned context.
+          void Promise.all([clearMemory(eng.cwd), clearSessionMemory()]).then(() => sysLog("memory: manual bank + automatic learned context cleared."));
         } else if (sub === "add") {
           const note = parts.slice(2).join(" ");
           if (!note) sysLog("usage: /memory add <note>");
           else void appendMemory(eng.cwd, note).then((n) => sysLog(`✓ memory: saved (${n} note${n === 1 ? "" : "s"}).`));
+        } else if (sub === "show") {
+          void buildLearnedContext().then((c) => sysLog(c || "memory: no automatic learned context yet — it builds after sessions that touch files."));
+        } else if (sub === "stats") {
+          void learnedStats().then((s) => sysLog(`memory: ${s.sessions} session${s.sessions === 1 ? "" : "s"} recorded · ${s.files} file${s.files === 1 ? "" : "s"} tracked · oldest ${s.oldest ?? "—"}`));
         } else {
           void readMemory(eng.cwd).then((c) =>
             sysLog(
               c
-                ? `memory (${countEntries(c)} notes) — ${memoryPath(eng.cwd)}:\n${c}`
-                : "memory: empty for this project. The model saves notes with the memory tool; /memory add <note> adds one; /memory clear erases.",
+                ? `memory (${countEntries(c)} notes) — ${memoryPath(eng.cwd)}:\n${c}\n(also: /memory show learned context · /memory stats · /memory clear)`
+                : "memory: manual bank empty. The model saves notes with the memory tool; /memory add <note> adds one. Automatic learned context: /memory show · /memory stats · /memory clear.",
             ),
           );
         }
