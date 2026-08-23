@@ -108,10 +108,27 @@ export function floorFigures(state, tabId) {
   return figs;
 }
 
+/** Geometry for one seated figure at desk slot `sl` = [x, y]. Shared by real,
+ * debug, and manual figures so they line up on the desks identically. */
+function placeFigure(id, color, state, sl, selectedId, manual) {
+  return {
+    key: id, id, color, opacity: state === "idle" ? (manual ? 0.4 : 0.55) : (manual ? 0.72 : 1), manual: !!manual,
+    deskX: sl[0], deskY: sl[1], agX: sl[0] + 48, agY: sl[1] - 96,
+    armL: state === "thinking" ? { animation: "domArmA .34s ease-in-out infinite" } : undefined,
+    armR: state === "thinking" ? { animation: "domArmB .34s ease-in-out infinite" } : undefined,
+    cueX: sl[0] + 128, cueY: sl[1] - 72, cueYBig: sl[1] - 84,
+    isThinking: state === "thinking", isAwaiting: state === "awaiting", isSpeaking: state === "speaking",
+    selected: id === selectedId, ringX: sl[0] + 40, ringY: sl[1] - 104,
+  };
+}
+
 /** Place a floor's figures into fixed zone slots (coordinator 1, planning 2,
  * application 2, coding 8, subagents 6); overflow goes off-floor (roster only),
- * never overlapping. Returns everything the renderer needs. Mirrors renderVals(). */
-export function layoutFloor(figures, selectedId, debugFigures) {
+ * never overlapping. `manuals` are decorative, client-only figures pinned to a
+ * specific (zone, slot) — they render on their desk but a real/debug figure that
+ * needs that slot takes it over (the manual is reported in `takenOverManualIds`
+ * so the caller can drop it). Returns everything the renderer needs. */
+export function layoutFloor(figures, selectedId, debugFigures, manuals) {
   const all = [...figures, ...(debugFigures || [])];
   const byZone = {};
   const offFloor = [];
@@ -128,45 +145,63 @@ export function layoutFloor(figures, selectedId, debugFigures) {
     else offFloor.push(a);
   }
 
+  // Seat manual agents on their pinned slot — unless a real/debug figure already
+  // occupies it (takeover) or the slot is invalid/duplicated (dropped silently).
+  const manualBySlot = {}; // zone -> { slotIndex: manual }
+  const manualSeated = {}; // zone -> [manual] rendered on their desks
+  const takenOverManualIds = [];
+  ZONES.forEach((z) => { manualBySlot[z.id] = {}; manualSeated[z.id] = []; });
+  for (const m of manuals || []) {
+    const zone = ZONE_BY_ID[m.zone];
+    if (!zone || m.slot == null || m.slot < 0 || m.slot >= zone.slots.length) { takenOverManualIds.push(m.id); continue; }
+    if (m.slot < byZone[m.zone].length || manualBySlot[m.zone][m.slot]) { takenOverManualIds.push(m.id); continue; }
+    manualBySlot[m.zone][m.slot] = m;
+    manualSeated[m.zone].push(m);
+  }
+
   const zonePlates = [], zoneCurbs = [], zoneLabels = [], freeDesks = [], placed = [], nameTags = [];
   ZONES.forEach((zone) => {
     const list = byZone[zone.id];
     const total = all.filter((a) => (ZONE_BY_ID[a.zone] ? a.zone : "coding") === zone.id).length;
-    const collapsed = list.length === 0;
+    const occupied = list.length + manualSeated[zone.id].length;
+    // A zone stays collapsed only when it has NEITHER real nor manual figures —
+    // so a placed manual expands its zone and reveals the remaining free desks.
+    const collapsed = occupied === 0;
     const stripH = 76;
-    zonePlates.push({ key: zone.id, x: zone.x, y: zone.y, w: zone.w, h: collapsed ? stripH : zone.d, fill: zone.color, op: collapsed ? 0.03 : 0.055 });
+    zonePlates.push({ key: zone.id, zone: zone.id, collapsed, x: zone.x, y: zone.y, w: zone.w, h: collapsed ? stripH : zone.d, fill: zone.color, op: collapsed ? 0.03 : 0.055 });
     zoneCurbs.push({ key: `${zone.id}-l`, x: zone.x, y: zone.y, w: 8, h: collapsed ? stripH : zone.d, fill: zone.color, op: collapsed ? 0.35 : 0.9 });
     zoneCurbs.push({ key: `${zone.id}-b`, x: zone.x, y: zone.y + (collapsed ? stripH - 6 : zone.d - 6), w: zone.w, h: 6, fill: zone.color, op: collapsed ? 0.18 : 0.4 });
     zoneLabels.push({
       key: zone.id, left: pctX(zone.label[0]), top: pctY(zone.label[1]),
       accent: collapsed ? "#6B6B7B" : zone.color, name: zone.name,
-      count: collapsed ? `IDLE · 0/${zone.slots.length}` : (total > zone.slots.length ? `${list.length}/${total} · ${total - list.length} off-floor` : `${list.length}/${zone.slots.length}`),
+      count: collapsed ? `IDLE · 0/${zone.slots.length}` : (total > zone.slots.length ? `${list.length}/${total} · ${total - list.length} off-floor` : `${occupied}/${zone.slots.length}`),
       countColor: total > zone.slots.length ? "#FBBF24" : "#6B6B7B",
       // When empty, one dim line explaining what would put an agent here.
       hint: collapsed ? ZONE_HINT[zone.id] : "",
     });
     if (collapsed) return;
-    zone.slots.forEach((sl, i) => { if (i >= list.length) freeDesks.push({ key: `${zone.id}-f${i}`, x: sl[0], y: sl[1] }); });
     list.forEach((a, i) => {
       const sl = zone.slots[i];
-      const color = colorById[a.id];
-      placed.push({
-        key: a.id, id: a.id, color, opacity: a.state === "idle" ? 0.55 : 1,
-        deskX: sl[0], deskY: sl[1], agX: sl[0] + 48, agY: sl[1] - 96,
-        armL: a.state === "thinking" ? { animation: "domArmA .34s ease-in-out infinite" } : undefined,
-        armR: a.state === "thinking" ? { animation: "domArmB .34s ease-in-out infinite" } : undefined,
-        cueX: sl[0] + 128, cueY: sl[1] - 72, cueYBig: sl[1] - 84,
-        isThinking: a.state === "thinking", isAwaiting: a.state === "awaiting", isSpeaking: a.state === "speaking",
-        selected: a.id === selectedId, ringX: sl[0] + 40, ringY: sl[1] - 104,
-      });
+      placed.push(placeFigure(a.id, colorById[a.id], a.state, sl, selectedId, false));
       nameTags.push({ key: `${a.id}-t`, left: pctX(sl[0] + 80), top: pctY(sl[1] - 130), name: a.name, stateColor: STATE_COLOR[a.state] || "#6B6B7B", border: a.state === "awaiting" ? "#FBBF24" : "#2A2A38" });
+    });
+    // Slots past the real figures: a pinned manual sits there, else a free desk.
+    zone.slots.forEach((sl, i) => {
+      if (i < list.length) return;
+      const m = manualBySlot[zone.id][i];
+      if (m) {
+        placed.push(placeFigure(m.id, zone.color, m.state || "idle", sl, selectedId, true));
+        nameTags.push({ key: `${m.id}-t`, left: pctX(sl[0] + 80), top: pctY(sl[1] - 130), name: m.name, stateColor: STATE_COLOR[m.state] || "#6B6B7B", border: m.state === "awaiting" ? "#FBBF24" : "#2A2A38" });
+      } else {
+        freeDesks.push({ key: `${zone.id}-f${i}`, x: sl[0], y: sl[1], zone: zone.id, slot: i });
+      }
     });
   });
 
   const roster = all.map((a) => {
     const off = offFloor.indexOf(a) !== -1;
     return {
-      key: a.id, id: a.id, name: a.name, action: a.action,
+      key: a.id, id: a.id, name: a.name, action: a.action, manual: false,
       accent: off ? "#2A2A38" : (ZONE_BY_ID[a.zone] || ZONE_BY_ID.coding).color,
       color: off ? "#6B6B7B" : colorById[a.id],
       tag: off ? "OFF-FLOOR" : a.state.toUpperCase(),
@@ -175,13 +210,22 @@ export function layoutFloor(figures, selectedId, debugFigures) {
       opacity: off ? 0.6 : 1,
     };
   });
+  // Manual agents in WHO IS WORKING: "[name] · manual · <state>".
+  for (const zid of Object.keys(manualSeated)) for (const m of manualSeated[zid]) {
+    roster.push({
+      key: m.id, id: m.id, name: m.name, action: "manual", manual: true,
+      accent: ZONE_BY_ID[zid].color, color: STATE_COLOR[m.state] || "#6B6B7B",
+      tag: (m.state || "idle").toUpperCase(), stateColor: STATE_COLOR[m.state] || "#6B6B7B",
+      bg: m.id === selectedId ? "#1D1D27" : "transparent", opacity: 1,
+    });
+  }
 
-  return { zonePlates, zoneCurbs, zoneLabels, freeDesks, placed, nameTags, roster, offFloor, colorById };
+  return { zonePlates, zoneCurbs, zoneLabels, freeDesks, placed, nameTags, roster, offFloor, colorById, takenOverManualIds };
 }
 
 /** The whole view model: the rail of floors, the active floor's layout + figures,
  * and the global header lines. `debugByFloor[tabId]` are window.domOffice overlays. */
-export function sessionsModel(state, activeId, selectedId, debugByFloor) {
+export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals) {
   const order = state.order || [];
   const active = activeId != null && state.agents[activeId] ? activeId : order[0] ?? null;
 
@@ -200,7 +244,7 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor) {
   });
 
   const figs = active != null ? floorFigures(state, active) : [];
-  const layout = layoutFloor(figs, selectedId, active != null && debugByFloor ? debugByFloor[active] : []);
+  const layout = layoutFloor(figs, selectedId, active != null && debugByFloor ? debugByFloor[active] : [], manuals || []);
   const tab = active != null ? state.agents[active] : null;
   const working = figs.filter((a) => a.state === "thinking" || a.state === "speaking").length;
   const floorAwaiting = figs.filter((a) => a.state === "awaiting").length;

@@ -12,6 +12,12 @@ import type { VaultTree } from "./filetypes";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
+import type { FigState, ManualAgent, ZoneId } from "./sessions";
+import { ManualAgentPopover } from "./ManualAgentPopover";
+
+// Manual agents live only in this browser session: mirrored to localStorage so
+// they survive React churn, but cleared on a real page refresh.
+const MANUAL_KEY = "dom-manual-agents";
 
 // Guess a MIME type from the filename when the browser doesn't supply one.
 function guessMime(name: string): string {
@@ -50,8 +56,32 @@ export function App() {
   const [, bump] = useState(0);
   const debugRef = useRef<{ byFloor: Record<number, any[]>; userCb: ((m: any) => void) | null; approvalCb: ((m: any) => void) | null }>({ byFloor: {}, userCb: null, approvalCb: null });
 
+  // Decorative manual agents placed on desks (client-only, cleared on refresh).
+  const [manuals, setManuals] = useState<ManualAgent[]>([]);
+  const [manualEditor, setManualEditor] = useState<{ mode: "add"; zone: ZoneId; slot: number } | { mode: "edit"; agent: ManualAgent } | null>(null);
+  useEffect(() => { try { localStorage.removeItem(MANUAL_KEY); } catch { /* private mode */ } }, []);
+  useEffect(() => { try { localStorage.setItem(MANUAL_KEY, JSON.stringify(manuals)); } catch { /* quota/private */ } }, [manuals]);
+
   const activeId = state.selected != null && state.agents[state.selected] ? state.selected : state.order[0] ?? null;
-  const model = sessionsModel(state, activeId, selFig, debugRef.current.byFloor);
+  const model = sessionsModel(state, activeId, selFig, debugRef.current.byFloor, manuals);
+
+  // A real/debug figure claimed a manual desk → drop the manual silently.
+  const takenOver = model.layout.takenOverManualIds;
+  useEffect(() => {
+    if (takenOver.length) setManuals((ms) => ms.filter((m) => !takenOver.includes(m.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [takenOver.join(",")]);
+
+  const addManual = (zone: ZoneId, slot: number, name: string, figState: FigState) =>
+    setManuals((ms) => [...ms, { id: `manual:${Date.now()}-${Math.round(Math.random() * 1e6)}`, name, zone, slot, state: figState }]);
+  const updateManual = (id: string, patch: Partial<ManualAgent>) => setManuals((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const removeManual = (id: string) => setManuals((ms) => ms.filter((m) => m.id !== id));
+  // Clicking a manual figure edits it; any other figure selects it as before.
+  const onSelectFig = (id: string | null) => {
+    if (id && id.startsWith("manual:")) { const m = manuals.find((x) => x.id === id); if (m) setManualEditor({ mode: "edit", agent: m }); return; }
+    setSelFig(id);
+  };
+  const onDeskClick = (zone: ZoneId, slot: number) => setManualEditor({ mode: "add", zone, slot });
 
   const sendTo = (id: number, text: string) =>
     text.startsWith("/") ? send({ type: "command", tabId: id, command: text }) : send({ type: "input", tabId: id, text });
@@ -154,7 +184,8 @@ export function App() {
         requestFiles={requestFiles}
         onSelectFloor={(id) => { select(id); setSelFig(null); }}
         onAddFloor={() => send({ type: "agent.create" })}
-        onSelectFig={setSelFig}
+        onSelectFig={onSelectFig}
+        onDeskClick={onDeskClick}
         onClose={() => setSelFig(null)}
         onApprove={() => answer("yes")}
         onDeny={() => answer("no")}
@@ -186,6 +217,19 @@ export function App() {
       />
       {saveTarget != null && (
         <VaultSaveModal content={saveTarget} onSave={saveVault} onClose={() => setSaveTarget(null)} />
+      )}
+      {manualEditor && (
+        <ManualAgentPopover
+          mode={manualEditor.mode}
+          zone={manualEditor.mode === "add" ? manualEditor.zone : manualEditor.agent.zone}
+          slot={manualEditor.mode === "add" ? manualEditor.slot : manualEditor.agent.slot}
+          defaultName={`agent-${manuals.length + 1}`}
+          agent={manualEditor.mode === "edit" ? manualEditor.agent : undefined}
+          onAdd={(name, figState) => { if (manualEditor.mode === "add") addManual(manualEditor.zone, manualEditor.slot, name, figState); }}
+          onUpdate={(patch) => { if (manualEditor.mode === "edit") updateManual(manualEditor.agent.id, patch); }}
+          onRemove={() => { if (manualEditor.mode === "edit") removeManual(manualEditor.agent.id); }}
+          onClose={() => setManualEditor(null)}
+        />
       )}
       {state.overlay && (
         <OverlayModal

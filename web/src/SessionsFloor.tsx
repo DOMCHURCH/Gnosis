@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { SessionsModel } from "./sessions";
+import type { SessionsModel, ZoneId } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
 import type { ChatSegment, ToolPayload } from "./chatgroups";
@@ -23,6 +23,8 @@ export interface SessionsProps {
   onSelectFloor: (id: number) => void;
   onAddFloor: () => void;
   onSelectFig: (id: string | null) => void;
+  /** Click an empty desk (or a collapsed zone) to place a manual agent there. */
+  onDeskClick: (zone: ZoneId, slot: number) => void;
   onClose: () => void;
   onApprove: () => void;
   onDeny: () => void;
@@ -55,6 +57,33 @@ export interface SessionsProps {
 }
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
+
+// Chat panel layout persists across the browser session (survives refresh).
+const CHAT_H_KEY = "dom-chat-height";      // docked height in px (null = default)
+const CHAT_DETACH_KEY = "dom-chat-detached";
+const CHAT_FLOAT_KEY = "dom-chat-float";   // { x, y, w, h } when floating
+const CHAT_MIN_H = 200;
+const chatMaxH = () => Math.round((typeof window !== "undefined" ? window.innerHeight : 900) * 0.9);
+const defaultChatH = () => Math.max(CHAT_MIN_H, Math.min(chatMaxH(), Math.round((typeof window !== "undefined" ? window.innerHeight : 900) * 0.6)));
+function lsGet<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v == null ? fallback : (JSON.parse(v) as T); } catch { return fallback; }
+}
+function lsSet(key: string, value: unknown) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode / quota */ } }
+
+// Floating-panel resize handles: cursor + absolute position per edge/corner.
+type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+const RESIZE_CURSOR: Record<Edge, string> = { n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize", ne: "nesw-resize", sw: "nesw-resize", nw: "nwse-resize", se: "nwse-resize" };
+const RESIZE_POS: Record<Edge, React.CSSProperties> = {
+  n: { top: -4, left: 8, right: 8, height: 8 },
+  s: { bottom: -4, left: 8, right: 8, height: 8 },
+  e: { top: 8, bottom: 8, right: -4, width: 8 },
+  w: { top: 8, bottom: 8, left: -4, width: 8 },
+  ne: { top: -4, right: -4, width: 14, height: 14 },
+  nw: { top: -4, left: -4, width: 14, height: 14 },
+  se: { bottom: -4, right: -4, width: 14, height: 14 },
+  sw: { bottom: -4, left: -4, width: 14, height: 14 },
+};
+const EDGES: Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 /** Flatten a chat message's segments back to markdown text (code segments re-fenced)
  * — the payload for "save to vault". */
@@ -89,6 +118,53 @@ export function SessionsFloor(props: SessionsProps) {
   const [floorOpen, setFloorOpen] = useState(false); // narrow: expand the full floor
   const [filesOpen, setFilesOpen] = useState(false);  // narrow/mobile: file browser bottom sheet
   const [jobsOpen, setJobsOpen] = useState(false);    // narrow/mobile: background jobs bottom sheet
+
+  // Chat panel: docked height (resizable), detach/float, floating rect. Persisted.
+  const [chatHeight, setChatHeight] = useState<number | null>(() => lsGet<number | null>(CHAT_H_KEY, null));
+  const [detached, setDetached] = useState<boolean>(() => lsGet<boolean>(CHAT_DETACH_KEY, false));
+  const [floatRect, setFloatRect] = useState<{ x: number; y: number; w: number; h: number }>(() => lsGet(CHAT_FLOAT_KEY, { x: 140, y: 96, w: 460, h: 520 }));
+  const [snapping, setSnapping] = useState(false); // brief animation when docking
+  useEffect(() => { lsSet(CHAT_H_KEY, chatHeight); }, [chatHeight]);
+  useEffect(() => { lsSet(CHAT_DETACH_KEY, detached); }, [detached]);
+  useEffect(() => { lsSet(CHAT_FLOAT_KEY, floatRect); }, [floatRect]);
+
+  const dockRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<{ y: number; h: number } | null>(null);        // docked vertical resize
+  const dragRef = useRef<{ mx: number; my: number; x: number; y: number } | null>(null); // floating move
+  const fResizeRef = useRef<{ mx: number; my: number; r: { x: number; y: number; w: number; h: number }; edge: string } | null>(null); // floating resize
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (resizeRef.current) {
+        const r = resizeRef.current;
+        setChatHeight(Math.max(CHAT_MIN_H, Math.min(chatMaxH(), r.h + (r.y - e.clientY))));
+      } else if (dragRef.current) {
+        const d = dragRef.current;
+        setFloatRect((fr) => ({ ...fr, x: Math.max(0, d.x + (e.clientX - d.mx)), y: Math.max(0, d.y + (e.clientY - d.my)) }));
+      } else if (fResizeRef.current) {
+        const { mx, my, r, edge } = fResizeRef.current;
+        const dx = e.clientX - mx, dy = e.clientY - my;
+        let { x, y, w, h } = r;
+        if (edge.includes("e")) w = r.w + dx;
+        if (edge.includes("s")) h = r.h + dy;
+        if (edge.includes("w")) { w = r.w - dx; x = r.x + dx; }
+        if (edge.includes("n")) { h = r.h - dy; y = r.y + dy; }
+        if (w < 300) { if (edge.includes("w")) x = r.x + (r.w - 300); w = 300; }
+        if (h < CHAT_MIN_H) { if (edge.includes("n")) y = r.y + (r.h - CHAT_MIN_H); h = CHAT_MIN_H; }
+        setFloatRect({ x, y, w, h });
+      }
+    };
+    const up = () => { resizeRef.current = null; dragRef.current = null; fResizeRef.current = null; };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+  }, []);
+
+  const startResize = (e: React.MouseEvent) => { e.preventDefault(); resizeRef.current = { y: e.clientY, h: chatHeight ?? (dockRef.current?.offsetHeight ?? defaultChatH()) }; };
+  const startFloatDrag = (e: React.MouseEvent) => { dragRef.current = { mx: e.clientX, my: e.clientY, x: floatRect.x, y: floatRect.y }; };
+  const startFloatResize = (edge: string) => (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); fResizeRef.current = { mx: e.clientX, my: e.clientY, r: floatRect, edge }; };
+  const detach = () => setDetached(true);
+  const snapBack = () => { setSnapping(true); window.setTimeout(() => { setSnapping(false); setDetached(false); }, 200); };
+  const floating = detached && !narrow; // detach is a desktop-only affordance
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
@@ -225,7 +301,13 @@ export function SessionsFloor(props: SessionsProps) {
                         <rect x="32" y="32" width="1376" height="836" fill="url(#tile)" />
 
                         {L.zonePlates.map((z) => (
-                          <rect key={z.key} x={z.x} y={z.y} width={z.w} height={z.h} fill={z.fill} fillOpacity={z.op} />
+                          z.collapsed && z.zone
+                            ? <g key={z.key} onClick={() => props.onDeskClick(z.zone!, 0)} style={{ cursor: "pointer" }}>
+                                <rect x={z.x} y={z.y} width={z.w} height={z.h} fill={z.fill} fillOpacity={z.op} />
+                                <rect x={z.x + z.w - 44} y={z.y + z.h / 2 - 3} width="20" height="6" fill="#6B6B7B" />
+                                <rect x={z.x + z.w - 37} y={z.y + z.h / 2 - 10} width="6" height="20" fill="#6B6B7B" />
+                              </g>
+                            : <rect key={z.key} x={z.x} y={z.y} width={z.w} height={z.h} fill={z.fill} fillOpacity={z.op} />
                         ))}
                         {L.zoneCurbs.map((c) => (
                           <rect key={c.key} x={c.x} y={c.y} width={c.w} height={c.h} fill={c.fill} fillOpacity={c.op} />
@@ -284,7 +366,12 @@ export function SessionsFloor(props: SessionsProps) {
                         <rect x="1320" y="740" width="80" height="4" fill="#1A171F" />
 
                         {L.freeDesks.map((d) => (
-                          <use key={d.key} href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
+                          <g key={d.key} onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
+                            <use href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
+                            {/* a dim "+" marks the desk as placeable */}
+                            <rect x={d.x + 44} y={d.y - 66} width="24" height="6" fill="#6B6B7B" opacity="0.7" />
+                            <rect x={d.x + 53} y={d.y - 75} width="6" height="24" fill="#6B6B7B" opacity="0.7" />
+                          </g>
                         ))}
 
                         {L.placed.map((a) => (
@@ -358,7 +445,9 @@ export function SessionsFloor(props: SessionsProps) {
             </div>
           </div>
 
-          {/* right column — roster + chat */}
+          {/* right column — roster + chat. Hidden while the chat is floating so
+              the office floor expands to fill the freed width. */}
+          {!floating && (
           <div style={{ flex: "1 1 320px", minWidth: "min(100%, 300px)", display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", maxHeight: 320 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
@@ -369,7 +458,7 @@ export function SessionsFloor(props: SessionsProps) {
                 {L.roster.map((r) => (
                   <div key={r.key} onClick={() => props.onSelectFig(r.id)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", cursor: "pointer", borderLeft: `3px solid ${r.accent}`, background: r.bg, opacity: r.opacity }}>
                     <span style={{ fontSize: 11, letterSpacing: 1, color: r.color, whiteSpace: "nowrap" }}>{r.name}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.action}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.action}{r.manual ? " · manual" : ""}</span>
                     <span style={{ fontSize: 9, letterSpacing: 1, color: r.stateColor, whiteSpace: "nowrap" }}>{r.tag}</span>
                   </div>
                 ))}
@@ -378,55 +467,12 @@ export function SessionsFloor(props: SessionsProps) {
 
             {props.goalBar}
 
-            <div style={{ background: "#15151C", border: "2px solid #2A2A38", flex: "1 1 auto", minHeight: 340, display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
-                <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
-                <span style={{ fontSize: 9, letterSpacing: 1, color: "#22D3EE" }}>LIVE</span>
-              </div>
-              <div style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-                {props.chat.map((m) => {
-                  if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
-                  const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
-                  return (
-                    <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
-                        <span style={{ width: 8, height: 8, background: m.color }} />
-                        <span style={{ color: m.color }}>{m.from}</span>
-                        <span style={{ color: "#6B6B7B" }}>{m.time}</span>
-                      </div>
-                      <div style={{ fontSize: 11, lineHeight: 1.6, color: resolvedColor ?? "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                        {m.segments.map((s, i) => s.type === "code"
-                          ? <CodeBlock key={i} lang={s.lang} text={s.text} />
-                          : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap", color: resolvedColor ?? undefined }}>{s.text}</div>)}
-                      </div>
-                      {m.isApproval && (
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" onClick={() => props.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
-                          <button type="button" onClick={() => props.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
-                        </div>
-                      )}
-                      {props.canSaveVault && props.onSaveMsg && m.kind === "assistant" && (
-                        <div style={{ display: "flex" }}>
-                          <button type="button" title="save this message as an Obsidian note" onClick={() => props.onSaveMsg!(messageToText(m))}
-                            style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#A78BFA", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
-                            ⬇ SAVE TO VAULT
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                <AttachBar attachments={props.attachments} onRemove={props.onRemoveAttachment} />
-                <ChatInput value={props.draft} onChange={props.onDraft} onSubmit={props.onSend} commands={props.commands} requestFiles={props.requestFiles} tabId={props.activeTabId} onAddFiles={props.onAddFiles} canImage={props.canImage} canDoc={props.canDoc} />
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
-                  <button type="button" onClick={props.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
-                </div>
-              </div>
+            <div ref={dockRef} style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
+              {!narrow && <div onMouseDown={startResize} title="drag to resize the chat" style={{ height: 8, flex: "0 0 auto", cursor: "ns-resize", background: "#101017", borderBottom: "1px solid #2A2A38" }} />}
+              <ChatPanel {...props} detached={false} canDetach={!narrow} onToggleDetach={detach} />
             </div>
           </div>
+          )}
           {/* Background jobs: inline when there's room; a bottom sheet on narrow/mobile. */}
           {!narrow && props.rightPanel}
         </div>
@@ -437,6 +483,16 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         {mobile && <div style={{ height: 56 }} />}{/* spacer so the fixed bar doesn't cover content */}
+
+        {/* Detached chat: a floating, draggable, resizable panel. Snap back with ⊟. */}
+        {floating && (
+          <div style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: 60, background: "#15151C", border: "2px solid #2A2A38", boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
+            <ChatPanel {...props} detached canDetach onToggleDetach={snapBack} onHeaderMouseDown={startFloatDrag} />
+            {EDGES.map((edge) => (
+              <div key={edge} onMouseDown={startFloatResize(edge)} style={{ position: "absolute", cursor: RESIZE_CURSOR[edge], zIndex: 2, ...RESIZE_POS[edge] }} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Narrow/mobile: a FILES button that opens the file browser as a bottom sheet. */}
@@ -635,5 +691,106 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
         <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
       </div>
     </div>
+  );
+}
+
+// The chat rail's inner content (header · scrolling messages · pinned input). Used
+// both docked (in the right column) and floating (detached). The messages area has
+// a fixed height from its flex parent and scrolls internally, so a long task never
+// grows the panel; auto-scroll follows new messages while the user is at the bottom,
+// and a "↓ new message" pill appears when they've scrolled up to read history.
+function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; onToggleDetach: () => void; onHeaderMouseDown?: (e: React.MouseEvent) => void }) {
+  const { model } = p;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const [unseen, setUnseen] = useState(false);
+  const atBottomRef = useRef(true);
+  const lastLen = useRef(p.chat.length);
+
+  const onScroll = () => {
+    const el = scrollRef.current; if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    atBottomRef.current = near;
+    setAtBottom(near);
+    if (near) setUnseen(false);
+  };
+  // Pin to bottom on first mount.
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, []);
+  // New messages: follow if at/near bottom, else surface the pill.
+  useEffect(() => {
+    if (p.chat.length > lastLen.current) {
+      const el = scrollRef.current;
+      if (atBottomRef.current && el) el.scrollTop = el.scrollHeight;
+      else setUnseen(true);
+    }
+    lastLen.current = p.chat.length;
+  }, [p.chat.length]);
+  const jumpToBottom = () => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; atBottomRef.current = true; setAtBottom(true); setUnseen(false); };
+
+  return (
+    <>
+      <div onMouseDown={p.onHeaderMouseDown} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38", flex: "0 0 auto", cursor: p.onHeaderMouseDown ? "move" : "default", userSelect: "none" }}>
+        <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 9, letterSpacing: 1, color: "#22D3EE" }}>LIVE</span>
+          {p.canDetach && (
+            <button type="button" title={p.detached ? "dock (snap back)" : "detach into a floating panel"} onMouseDown={(e) => e.stopPropagation()} onClick={p.onToggleDetach}
+              style={{ fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: 0 }}>
+              {p.detached ? "⊟" : "⊞"}
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{ position: "relative", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div ref={scrollRef} onScroll={onScroll} style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+          {p.chat.map((m) => {
+            if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
+            const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
+            return (
+              <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
+                  <span style={{ width: 8, height: 8, background: m.color }} />
+                  <span style={{ color: m.color }}>{m.from}</span>
+                  <span style={{ color: "#6B6B7B" }}>{m.time}</span>
+                </div>
+                <div style={{ fontSize: 11, lineHeight: 1.6, color: resolvedColor ?? "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {m.segments.map((s, i) => s.type === "code"
+                    ? <CodeBlock key={i} lang={s.lang} text={s.text} />
+                    : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap", color: resolvedColor ?? undefined }}>{s.text}</div>)}
+                </div>
+                {m.isApproval && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" onClick={() => p.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
+                    <button type="button" onClick={() => p.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
+                  </div>
+                )}
+                {p.canSaveVault && p.onSaveMsg && m.kind === "assistant" && (
+                  <div style={{ display: "flex" }}>
+                    <button type="button" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))}
+                      style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#A78BFA", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
+                      ⬇ SAVE TO VAULT
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {unseen && !atBottom && (
+          <button type="button" onClick={jumpToBottom}
+            style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, borderRadius: 12, padding: "5px 12px", cursor: "pointer", boxShadow: "0 6px 16px rgba(0,0,0,0.5)" }}>
+            ↓ new message
+          </button>
+        )}
+      </div>
+      <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, flex: "0 0 auto" }}>
+        <AttachBar attachments={p.attachments} onRemove={p.onRemoveAttachment} />
+        <ChatInput value={p.draft} onChange={p.onDraft} onSubmit={p.onSend} commands={p.commands} requestFiles={p.requestFiles} tabId={p.activeTabId} onAddFiles={p.onAddFiles} canImage={p.canImage} canDoc={p.canDoc} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
+          <button type="button" onClick={p.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
+        </div>
+      </div>
+    </>
   );
 }

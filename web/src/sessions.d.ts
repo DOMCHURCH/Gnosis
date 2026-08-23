@@ -23,29 +23,34 @@ export interface Figure {
   color?: string;
 }
 
+/** A decorative, client-only figure the user drops on a specific desk. It has no
+ * Engine, no history, and is never sent over the event bus. */
+export interface ManualAgent { id: string; name: string; zone: ZoneId; slot: number; state: FigState; }
+
 export interface Placed {
-  key: string; id: string; color: string; opacity: number;
+  key: string; id: string; color: string; opacity: number; manual: boolean;
   deskX: number; deskY: number; agX: number; agY: number;
   armL?: CSSProperties; armR?: CSSProperties;
   cueX: number; cueY: number; cueYBig: number;
   isThinking: boolean; isAwaiting: boolean; isSpeaking: boolean;
   selected: boolean; ringX: number; ringY: number;
 }
-export interface ZonePlate { key: string; x: number; y: number; w: number; h: number; fill: string; op: number; }
+export interface ZonePlate { key: string; zone?: ZoneId; collapsed?: boolean; x: number; y: number; w: number; h: number; fill: string; op: number; }
 export interface ZoneLabel { key: string; left: string; top: string; accent: string; name: string; count: string; countColor: string; hint: string; }
 export interface NameTag { key: string; left: string; top: string; name: string; stateColor: string; border: string; }
-export interface RosterRow { key: string; id: string; name: string; action: string; accent: string; color: string; tag: string; stateColor: string; bg: string; opacity: number; }
+export interface RosterRow { key: string; id: string; name: string; action: string; manual: boolean; accent: string; color: string; tag: string; stateColor: string; bg: string; opacity: number; }
 
 export interface FloorLayout {
   zonePlates: ZonePlate[];
   zoneCurbs: ZonePlate[];
   zoneLabels: ZoneLabel[];
-  freeDesks: { key: string; x: number; y: number }[];
+  freeDesks: { key: string; x: number; y: number; zone: ZoneId; slot: number }[];
   placed: Placed[];
   nameTags: NameTag[];
   roster: RosterRow[];
   offFloor: Figure[];
   colorById: Record<string, string>;
+  takenOverManualIds: string[];
 }
 
 export interface FloorTab {
@@ -73,5 +78,5 @@ export interface SessionsModel {
 export function figureState(tab: { awaitingPermission?: boolean; busy?: boolean; speaking?: boolean }): FigState;
 export function zoneForTab(tab: { mode?: string }, ctx: { ownsSub?: boolean }): ZoneId;
 export function floorFigures(state: any, tabId: number): Figure[];
-export function layoutFloor(figures: Figure[], selectedId: string | null, debugFigures?: any[]): FloorLayout;
-export function sessionsModel(state: any, activeId: number | null, selectedId: string | null, debugByFloor?: Record<number, any[]>): SessionsModel;
+export function layoutFloor(figures: Figure[], selectedId: string | null, debugFigures?: any[], manuals?: ManualAgent[]): FloorLayout;
+export function sessionsModel(state: any, activeId: number | null, selectedId: string | null, debugByFloor?: Record<number, any[]>, manuals?: ManualAgent[]): SessionsModel;
