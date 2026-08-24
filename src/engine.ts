@@ -14,6 +14,7 @@ import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, ty
 import { recordSession } from "./sessionmemory.js";
 import { isWebFile } from "./design.js";
 import { captureScreenshot } from "./screenshot.js";
+import { chooseLsp, countLspErrors, type Markers } from "./lsp.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
 export function limitPhrase(detail: string): string {
@@ -716,23 +717,29 @@ export class Engine {
         cb.onAssistant(assistant);
 
         if (!result.toolCalls.length) {
-          // Auto lint/test loop: if this turn edited files, run the checks; on
-          // failure feed it back and let the model fix (cap MAX_FIX_ITERATIONS).
+          // Auto lint/test loop + LSP Lite: if this turn edited files, run the
+          // configured checks AND the language type checker; on any failure feed the
+          // combined report back and let the model fix it (cap MAX_FIX_ITERATIONS).
           if (this.editedThisTurn && !this.abortController.signal.aborted) {
             const checks = await this.runChecks(cb);
-            if (checks && !checks.ok) {
+            const lsp = await this.runLspCheck(cb);
+            const reports: string[] = [];
+            if (checks && !checks.ok) reports.push(checks.report);
+            if (lsp && !lsp.ok) reports.push(lsp.report);
+            const anyRan = !!checks || !!lsp;
+            if (reports.length) {
               if (this.fixIterations < MAX_FIX_ITERATIONS) {
                 this.fixIterations++;
                 this.editedThisTurn = false;
                 this.messages.push({
                   role: "user",
-                  text: `Automated checks failed after your edits. Fix the code so they pass, then stop.\n\n${checks.report}`,
+                  text: `Automated checks failed after your edits. Fix the code so they pass, then stop.\n\n${reports.join("\n\n")}`,
                 });
                 cb.onSystem(`⟳ checks failed — fix attempt ${this.fixIterations}/${MAX_FIX_ITERATIONS}`);
                 continue;
               }
               cb.onSystem(`✗ checks still failing after ${MAX_FIX_ITERATIONS} fix attempts — stopping`);
-            } else if (checks && checks.ok && this.fixIterations > 0) {
+            } else if (anyRan && this.fixIterations > 0) {
               cb.onSystem("✓ checks pass");
             }
           }
@@ -1127,6 +1134,35 @@ export class Engine {
       if (res.isError) failures.push(`${label} (\`${cmd}\`) failed:\n${res.output}`);
     }
     return { ok: failures.length === 0, report: failures.join("\n\n") };
+  }
+
+  /**
+   * LSP Lite: after a turn that edited code, type-check the language it touched and
+   * feed any errors back so the model fixes them unasked. The checker is chosen from
+   * the edited files + project markers (tsconfig.json → tsc, Cargo.toml → cargo,
+   * a python project file → mypy) and runs only when its marker is present. A dim
+   * "type check: N errors" line is shown either way. Config `lspCheck` (default ON).
+   */
+  private async runLspCheck(cb: Callbacks): Promise<{ ok: boolean; report: string; count: number } | null> {
+    const cfg = await loadConfig();
+    if (cfg.lspCheck === false) return null;
+    const edited = [...this.turnEditedFiles].map((f) => path.relative(this.cwd, f).split(path.sep).join("/"));
+    if (!edited.length) return null;
+    const has = (f: string) => existsSync(path.join(this.cwd, f));
+    const markers: Markers = {
+      tsconfig: has("tsconfig.json"),
+      cargo: has("Cargo.toml"),
+      python: has("pyproject.toml") || has("setup.py") || has("setup.cfg") || has("mypy.ini"),
+    };
+    const check = chooseLsp(edited, markers);
+    if (!check) return null;
+    cb.onSystem(`⟳ ${check.label}: ${check.command}`);
+    const res = await runBash({ command: check.command, timeout: 180 }, this.abortController?.signal, this.toolCtx());
+    if (res.aborted) return { ok: true, report: "", count: 0 };
+    const count = countLspErrors(check.lang, res.output);
+    cb.onSystem(`type check: ${count} error${count === 1 ? "" : "s"}`);
+    if (count === 0) return { ok: true, report: "", count: 0 }; // clean, or a toolchain hiccup — don't loop
+    return { ok: false, report: `${check.label} (\`${check.command}\`) reported ${count} error${count === 1 ? "" : "s"}:\n${res.output.slice(0, 6000)}`, count };
   }
 
   /**

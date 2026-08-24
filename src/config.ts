@@ -45,6 +45,10 @@ export interface Config {
   /** Small, fast model used for the automatic-memory distillation pass. Falls back
    * to the session model when unset. */
   memoryModel?: string;
+  /** LSP Lite: after a turn that edits code, run the language's type checker
+   * (tsc/mypy/cargo check) and feed any errors back so the model fixes them unasked.
+   * Default ON; runs only when the matching project marker is present. */
+  lspCheck?: boolean;
   /** Dollar ceiling per session. On reaching it dom halts the turn, refuses new
    * sub-agent/oracle spawns, and prompts to continue or stop. Default 2. */
   maxSessionUsd?: number;
