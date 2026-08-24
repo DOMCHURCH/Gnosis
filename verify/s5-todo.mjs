@@ -5,6 +5,9 @@
 process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-todo";
 process.env.HOME = process.env.USERPROFILE;
 
+// Ink batches its output under CI and never writes the intermediate frames these
+// assertions read. Must be imported before ink — see verify/_inkenv.mjs.
+import "./_inkenv.mjs";
 import React from "react";
 import { render } from "ink";
 import { EventEmitter } from "node:events";

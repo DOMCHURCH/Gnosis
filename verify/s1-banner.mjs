@@ -2,6 +2,9 @@
 // and can't repaint after a mid-session /model switch, so the live model belongs
 // only to the status bar. Here we render the Banner in isolation and assert no
 // model id / name / provider label appears anywhere in its output.
+// Ink batches its output under CI and never writes the intermediate frames these
+// assertions read. Must be imported before ink — see verify/_inkenv.mjs.
+import "./_inkenv.mjs";
 import React from "react";
 import { render } from "ink";
 import { EventEmitter } from "node:events";

@@ -1,6 +1,9 @@
 // Verify (UI): the Picker's "save as default" secondary action — Ctrl+S triggers
 // onSave with the highlighted row, distinct from Enter's onSelect. This is the
 // picker path for saving a model as the default. No network.
+// Ink batches its output under CI and never writes the intermediate frames these
+// assertions read. Must be imported before ink — see verify/_inkenv.mjs.
+import "./_inkenv.mjs";
 import React from "react";
 import { render } from "ink";
 import { EventEmitter } from "node:events";
