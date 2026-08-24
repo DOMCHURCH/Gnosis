@@ -28,8 +28,8 @@
 |---|---|---|---|---|
 | Any OpenRouter model | ✓ | ✗ | ✓ | ✓ |
 | Mid-session model switch | ✓ | ✗ | ✗ | ✓ |
-| Browser UI | ✓ | ✗ | ✗ | ✓ |
-| Windows-first | ✓ | ✗ | ✗ | ✗ |
+| Self-hosted browser UI | ✓ | ✗ | ✗ | ✓ |
+| LAN QR code (drive it from your phone) | ✓ | ✗ | ✗ | ✗ |
 | Obsidian vault memory | ✓ | ✗ | ✗ | ✗ |
 | MCP client | ✓ | ✓ | ✗ | ✓ |
 | Pixel-art office floor | ✓ | ✗ | ✗ | ✗ |
