@@ -34,7 +34,7 @@ export type DomEvent =
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }
   | { type: "turn.start"; tabId: number }
-  | { type: "turn.end"; tabId: number; cost: number; tokens: number }
+  | { type: "turn.end"; tabId: number; cost: number; tokens: number; cachedTokens: number }
   | { type: "line"; tabId: number; item: unknown }
   | { type: "tool.start"; tabId: number; tool: string; args: unknown }
   | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }

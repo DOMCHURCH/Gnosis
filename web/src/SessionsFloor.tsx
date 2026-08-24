@@ -4,11 +4,18 @@ import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
 import type { ChatSegment, ToolPayload } from "./chatgroups";
 import { DiffView, FileView } from "./DiffView";
+import { elapsedLabel } from "./telemetry.js";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: boolean; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
+  /** Telemetry for the agent's tab (tokens, tool counts, success rate, sparkline). */
+  tele: {
+    tokens: number; cachedTokens: number; turns: number;
+    tools: { name: string; count: number; ok: number; fail: number }[];
+    total: number; successRate: number | null; spark: string; turnStart: number | null;
+  };
 }
 
 export interface SessionsProps {
@@ -409,38 +416,16 @@ export function SessionsFloor(props: SessionsProps) {
                   </div>
 
                   {sel && (
-                    <div style={{ position: "absolute", right: 12, bottom: 12, width: "min(330px, 92%)", maxHeight: "92%", overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: "2px solid #2A2A38" }}>
-                        <span style={{ width: 8, height: 8, background: sel.stateColor }} />
-                        <span style={{ fontSize: 12, letterSpacing: 2, color: sel.color }}>{sel.name}</span>
-                        <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", marginLeft: "auto" }}>{sel.zone}</span>
-                        <button type="button" onClick={props.onClose} style={{ fontFamily: "inherit", fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
-                      </div>
-                      <div style={{ padding: 11, display: "flex", flexDirection: "column", gap: 9 }}>
-                        <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 8, textWrap: "pretty" }}>{sel.action}</div>
-                        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>RECENT OUTPUT</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3, background: "#0B0B10", border: "2px solid #2A2A38", padding: 8, maxHeight: 88, overflowY: "auto" }}>
-                          {(sel.output.length ? sel.output : ["no output yet"]).map((o, i) => (
-                            <div key={i} style={{ fontSize: 10, lineHeight: 1.5, color: "#6B6B7B", whiteSpace: "pre-wrap" }}>{o}</div>
-                          ))}
-                        </div>
-                        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>THINKING</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 88, overflowY: "auto" }}>
-                          {(sel.thinking.length ? sel.thinking : ["no thinking recorded"]).map((t, i) => (
-                            <div key={i} style={{ fontSize: 10, lineHeight: 1.5, color: "#8A8A9B", textWrap: "pretty" }}>{t}</div>
-                          ))}
-                        </div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" onClick={props.onApprove} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: sel.awaiting ? "#FBBF24" : "#15151C", color: sel.awaiting ? "#0D0D12" : "#6B6B7B", border: 0, padding: "7px 8px", cursor: "pointer", flex: 1 }}>APPROVE</button>
-                          <button type="button" onClick={props.onDeny} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DENY</button>
-                          <button type="button" onClick={props.onDismiss} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#E879F9", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DISMISS</button>
-                        </div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: "6px 7px", outline: "none", fontFamily: MONO }} />
-                          <button type="button" onClick={props.onSteer} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "6px 9px", cursor: "pointer" }}>STEER</button>
-                        </div>
-                      </div>
-                    </div>
+                    <AgentTelemetryPanel
+                      sel={sel}
+                      steer={props.steer}
+                      onClose={props.onClose}
+                      onApprove={props.onApprove}
+                      onDeny={props.onDeny}
+                      onDismiss={props.onDismiss}
+                      onSteer={props.onSteer}
+                      onSteerDraft={props.onSteerDraft}
+                    />
                   )}
                 </div>
               </div>
@@ -541,6 +526,87 @@ export function SessionsFloor(props: SessionsProps) {
           <button type="button" onClick={props.onAddFloor} style={{ fontFamily: MONO, flex: "0 0 auto", width: 40, height: 40, background: "#101017", color: "#6B6B7B", border: "2px dashed #2A2A38", cursor: "pointer", fontSize: 15 }}>+</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// The agent telemetry panel: replaces the old simple popup. Shows the selected
+// agent's current task + status, live elapsed time, tokens (total + cached), tool
+// calls by name with a success rate, and a per-turn token sparkline — all folded
+// from the event stream. Keeps the approve/deny/dismiss/steer controls.
+function Stat(props: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, background: "#0B0B10", border: "1px solid #2A2A38", padding: "5px 7px", minWidth: 0 }}>
+      <span style={{ fontSize: 8, letterSpacing: 1, color: "#4A4A58" }}>{props.label}</span>
+      <span style={{ fontSize: 12, color: props.color ?? "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.value}</span>
+    </div>
+  );
+}
+function AgentTelemetryPanel(props: {
+  sel: SelDetail; steer: string;
+  onClose: () => void; onApprove: () => void; onDeny: () => void; onDismiss: () => void; onSteer: () => void; onSteerDraft: (v: string) => void;
+}) {
+  const { sel } = props;
+  const t = sel.tele;
+  // Live 1s tick while the agent is mid-turn so elapsed counts up.
+  const [, setNow] = useState(0);
+  useEffect(() => {
+    if (t.turnStart == null) return;
+    const iv = setInterval(() => setNow((n) => n + 1), 1000);
+    return () => clearInterval(iv);
+  }, [t.turnStart]);
+  const elapsed = t.turnStart != null ? elapsedLabel(t.turnStart, Date.now()) : "idle";
+  const rate = t.successRate == null ? "—" : `${Math.round(t.successRate * 100)}%`;
+  const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+  return (
+    <div style={{ position: "absolute", right: 12, bottom: 12, width: "min(340px, 94%)", maxHeight: "94%", overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: "2px solid #2A2A38" }}>
+        <span style={{ width: 8, height: 8, background: sel.stateColor }} />
+        <span style={{ fontSize: 12, letterSpacing: 2, color: sel.color }}>{sel.name}</span>
+        <span style={{ fontSize: 9, letterSpacing: 1, color: sel.stateColor }}>{sel.state.toUpperCase()}</span>
+        <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", marginLeft: "auto" }}>{sel.zone}</span>
+        <button type="button" onClick={props.onClose} style={{ fontFamily: "inherit", fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
+      </div>
+      <div style={{ padding: 11, display: "flex", flexDirection: "column", gap: 9 }}>
+        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>CURRENT TASK</div>
+        <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 8, textWrap: "pretty" }}>{sel.action}</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
+          <Stat label="ELAPSED" value={elapsed} color={t.turnStart != null ? "#22D3EE" : "#6B6B7B"} />
+          <Stat label="TURNS" value={String(t.turns)} />
+          <Stat label="SUCCESS" value={rate} color={t.successRate != null && t.successRate < 0.8 ? "#FBBF24" : "#4ADE80"} />
+          <Stat label="TOKENS" value={fmtK(t.tokens)} />
+          <Stat label="CACHED" value={fmtK(t.cachedTokens)} color="#818CF8" />
+          <Stat label="TOOLS" value={String(t.total)} />
+        </div>
+
+        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>ACTIVITY · TOKENS/TURN</div>
+        <div style={{ fontSize: 15, lineHeight: 1, letterSpacing: 1, color: "#22D3EE", background: "#0B0B10", border: "1px solid #2A2A38", padding: "6px 8px", overflow: "hidden", whiteSpace: "nowrap" }}>
+          {t.spark || <span style={{ fontSize: 10, color: "#4A4A58" }}>no turns yet</span>}
+        </div>
+
+        <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>TOOL CALLS</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, background: "#0B0B10", border: "2px solid #2A2A38", padding: 8, maxHeight: 120, overflowY: "auto" }}>
+          {t.tools.length ? t.tools.map((tc) => (
+            <div key={tc.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+              <span style={{ flex: 1, minWidth: 0, color: "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tc.name}</span>
+              {tc.fail > 0 && <span style={{ color: "#F87171" }}>{tc.fail}✗</span>}
+              <span style={{ color: "#6B6B7B" }}>×{tc.count}</span>
+            </div>
+          )) : <div style={{ fontSize: 10, color: "#6B6B7B" }}>no tool calls yet</div>}
+        </div>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" onClick={props.onApprove} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: sel.awaiting ? "#FBBF24" : "#15151C", color: sel.awaiting ? "#0D0D12" : "#6B6B7B", border: 0, padding: "7px 8px", cursor: "pointer", flex: 1 }}>APPROVE</button>
+          <button type="button" onClick={props.onDeny} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DENY</button>
+          <button type="button" onClick={props.onDismiss} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#E879F9", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DISMISS</button>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: "6px 7px", outline: "none", fontFamily: MONO }} />
+          <button type="button" onClick={props.onSteer} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "6px 9px", cursor: "pointer" }}>STEER</button>
+        </div>
+      </div>
     </div>
   );
 }

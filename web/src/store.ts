@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { Agent, ClientMessage, DomEvent, GoalReview, GoalState, MessageLink, OverlayState, PermissionRequest, SubAgent, TranscriptItem } from "./types";
 import { resolveApproval } from "./chatgroups.js";
+import { foldTelemetry } from "./telemetry.js";
+import type { Telemetry } from "./telemetry";
 
 export interface State {
   connected: boolean;
@@ -50,6 +52,9 @@ export interface State {
   goals: Record<number, GoalState | null>;
   /** The latest goal review per tab (goal.review) — verdict shown above the rail. */
   reviews: Record<number, GoalReview>;
+  /** Per-tab telemetry (tool counts, tokens, turns, elapsed) folded from the event
+   * stream — drives the agent telemetry panel. */
+  telemetry: Record<number, Telemetry>;
   /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
    * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
   streamEdits: Record<number, StreamEdit | null>;
@@ -93,7 +98,12 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, streamEdits: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, streamEdits: {} };
+
+/** Fold a tabId-bearing event into that tab's telemetry record. */
+function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
+  return { ...state.telemetry, [action.tabId]: foldTelemetry(state.telemetry[action.tabId], action, Date.now()) };
+}
 
 /** Append a raw chat line, capping PER TAB so the feed can't grow unbounded and
  * a busy tab can't evict another tab's history (which would make switching floors
@@ -163,6 +173,8 @@ export function reducer(state: State, action: Action): State {
       return patchAgent(state, action.tabId, (a) => ({ ...a, mode: action.mode }));
     case "agent.busy":
       return patchAgent(state, action.tabId, (a) => ({ ...a, busy: action.busy }));
+    case "turn.start":
+      return { ...state, telemetry: foldTel(state, action) };
     case "turn.end": {
       // A turn just finished → the agent 'spoke' for a beat (drives the speaking
       // cue). The activity line is derived from live state (activityFor), never the
@@ -174,6 +186,7 @@ export function reducer(state: State, action: Action): State {
         // A finished turn ends the current message block and closes any open fence.
         turnEpoch: { ...withCost.turnEpoch, [action.tabId]: (withCost.turnEpoch[action.tabId] ?? 0) + 1 },
         inCode: { ...withCost.inCode, [action.tabId]: false },
+        telemetry: foldTel(state, action),
       };
     }
     case "@clearSpeaking":
@@ -222,7 +235,7 @@ export function reducer(state: State, action: Action): State {
       const epoch = state.turnEpoch[action.tabId] ?? 0;
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
       const ln: RawLine = { key: `t${action.tabId}-${withTx.chatLines.length}-${Date.now()}`, tabId: action.tabId, from, kind: "tool", epoch, time: clock(), tool: action.tool, primary: action.primary, secondary: action.secondary, ok: action.ok, summary: action.summary, detail: action.detail };
-      return { ...pushLine(withTx, ln), fileEpoch: state.fileEpoch + 1, vaultEpoch: state.vaultEpoch + 1 };
+      return { ...pushLine(withTx, ln), fileEpoch: state.fileEpoch + 1, vaultEpoch: state.vaultEpoch + 1, telemetry: foldTel(state, action) };
     }
     case "edit.start":
       return {

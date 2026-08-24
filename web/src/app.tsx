@@ -12,6 +12,7 @@ import { apiGet } from "./api";
 import type { VaultTree } from "./filetypes";
 import type { ConnectionsData, MemoryData } from "./types";
 import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
+import { toolList, toolStats, sparkline } from "./telemetry.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
 import type { FigState, ManualAgent, ZoneId } from "./sessions";
@@ -123,8 +124,22 @@ export function App() {
   // Selected-figure detail for the popup.
   const figs = activeId != null ? floorFigures(state, activeId) : [];
   const selF = figs.find((f) => f.id === selFig) || null;
+  const selTele = selF ? state.telemetry[selF.tabId] : undefined;
+  const selToolStats = toolStats(selTele);
   const sel: SelDetail | null = selF
-    ? { id: selF.id, name: selF.name, zone: zoneLabel(selF.zone), color: model.layout.colorById[selF.id] ?? "#C9C9D6", stateColor: STATE_COLOR[selF.state] ?? "#6B6B7B", state: selF.state, action: selF.action, output: selF.output, thinking: selF.thinking, awaiting: selF.state === "awaiting" }
+    ? {
+        id: selF.id, name: selF.name, zone: zoneLabel(selF.zone), color: model.layout.colorById[selF.id] ?? "#C9C9D6", stateColor: STATE_COLOR[selF.state] ?? "#6B6B7B", state: selF.state, action: selF.action, output: selF.output, thinking: selF.thinking, awaiting: selF.state === "awaiting",
+        tele: {
+          tokens: selTele?.tokens ?? 0,
+          cachedTokens: selTele?.cachedTokens ?? 0,
+          turns: selTele?.turns ?? 0,
+          tools: toolList(selTele),
+          total: selToolStats.total,
+          successRate: selToolStats.successRate,
+          spark: sparkline(selTele?.tokensSeries ?? []),
+          turnStart: selTele?.turnStart ?? null,
+        },
+      }
     : null;
 
   // Auto-save to Obsidian: after a turn ends, if the vault is configured and the

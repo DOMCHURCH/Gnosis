@@ -270,6 +270,7 @@ export class TabsController {
     const c0 = this.bus ? tab.engine.cost : undefined;
     const startUsd = c0?.usd ?? 0;
     const startTok = c0 ? c0.promptTokens + c0.completionTokens : 0;
+    const startCached = c0 ? c0.cachedPromptTokens ?? 0 : 0;
     this.bus?.emit({ type: "agent.busy", tabId: tab.id, busy: true });
     this.bus?.emit({ type: "turn.start", tabId: tab.id });
     this.onChange();
@@ -283,7 +284,7 @@ export class TabsController {
       tab.currentSender = null;
       if (this.bus) {
         const c1 = tab.engine.cost;
-        this.bus.emit({ type: "turn.end", tabId: tab.id, cost: (c1?.usd ?? 0) - startUsd, tokens: (c1 ? c1.promptTokens + c1.completionTokens : 0) - startTok });
+        this.bus.emit({ type: "turn.end", tabId: tab.id, cost: (c1?.usd ?? 0) - startUsd, tokens: (c1 ? c1.promptTokens + c1.completionTokens : 0) - startTok, cachedTokens: (c1 ? c1.cachedPromptTokens ?? 0 : 0) - startCached });
         this.bus.emit({ type: "agent.busy", tabId: tab.id, busy: false });
       }
       this.onChange();
