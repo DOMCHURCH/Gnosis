@@ -28,7 +28,7 @@ usage:
   dom -p "prompt" --save     ...and persist the one-shot turn as a session
   dom --json "prompt"        headless: stream structured JSONL events to stdout, exit
   dom schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
-  dom serve [--port 7777]    TUI + a localhost web view over the same engines
+  dom serve [--port 7777] [--public]   TUI + a localhost web view (--public: Cloudflare Tunnel)
   dom --help | --version
 
 Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
@@ -119,8 +119,28 @@ async function main() {
       }
       process.exit(1);
     }
-    // First output, on STDOUT, before the banner/TUI so it's always visible.
-    process.stdout.write(`dom serve — open in your browser:\n  ${server.url}\n(127.0.0.1 only · token required · Ctrl+C to stop)\n\n`);
+    // Optional Cloudflare Tunnel so `dom serve` is reachable from any device. The
+    // public URL carries the SAME session token, so the token gate still protects it.
+    let publicUrl: string | null = null;
+    if (flags.public) {
+      try {
+        const { startTunnel } = await import("./tunnel.js");
+        const t = await startTunnel(server.port);
+        publicUrl = `${t.url}/?token=${server.token}`;
+        server.setPublicUrl(t.url);
+        const stop = () => t.stop();
+        process.on("exit", stop);
+        process.on("SIGINT", stop);
+      } catch (e) {
+        process.stdout.write(`(public tunnel unavailable: ${(e as Error).message} — continuing local-only)\n`);
+      }
+    }
+    // First output, on STDOUT, before the banner/TUI so it's always visible. Each URL
+    // is followed by a scannable QR code so a phone doesn't have to type the token.
+    const { serveBlock } = await import("./serveprint.js");
+    const links = [{ label: "LOCAL ", url: server.url }];
+    if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
+    process.stdout.write(`dom serve — scan or open:\n${await serveBlock(links)}\n(127.0.0.1 only · token required · Ctrl+C to stop)\n\n`);
 
     // No terminal attached → run the server headlessly (the browser drives it).
     if (!process.stdin.isTTY || !process.stdout.isTTY) {

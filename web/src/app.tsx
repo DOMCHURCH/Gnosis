@@ -5,6 +5,10 @@ import { StreamDiff } from "./StreamDiff";
 import { DesignPanel } from "./DesignPanel";
 import { KanbanBoard } from "./KanbanBoard";
 import type { KanbanColumn } from "./kanban";
+import { QrPopover } from "./QrPopover";
+import { WebhooksBody } from "./WebhooksPanel";
+import { classifyNote, noteSlug } from "./notesort.js";
+import { tokenizedUrl, token } from "./api";
 import { OverlayModal } from "./OverlayModal";
 import { LeftPanel } from "./LeftPanel";
 import { VaultSaveModal } from "./VaultSaveModal";
@@ -49,6 +53,11 @@ function fileToBase64(file: File): Promise<string> {
 export function App() {
   const { state, send, select, requestFiles, saveVault } = useDomSocket();
   const [selFig, setSelFig] = useState<string | null>(null);
+  // Reactive viewport width so the terminal dock (a desktop affordance) is hidden on
+  // phones — the mobile layout has no terminal.
+  const [vw, setVw] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => { const on = () => setVw(window.innerWidth); window.addEventListener("resize", on); return () => window.removeEventListener("resize", on); }, []);
+  const isMobile = vw < 640;
   // Top-level view: the office FLOOR (default) or the KANBAN board.
   const [view, setView] = useState<"floor" | "kanban">("floor");
   // Client-only kanban column overrides (ACTIVE/PARKED); REVIEW is derived from plan
@@ -160,7 +169,8 @@ export function App() {
   // save it automatically under a slug from the first line + today's date, and mark
   // that turn so the chat shows "auto-saved" instead of the SAVE TO VAULT button.
   const savedTurnsRef = useRef<Set<string>>(new Set());
-  const [savedTurns, setSavedTurns] = useState<Record<string, boolean>>({});
+  // Maps turn id → the vault-relative path it was auto-saved to (shown in the rail).
+  const [savedTurns, setSavedTurns] = useState<Record<string, string>>({});
   const endedEpoch = activeId != null ? (state.turnEpoch[activeId] ?? 0) - 1 : -1;
   useEffect(() => {
     if (activeId == null || !vault?.configured || endedEpoch < 0) return;
@@ -169,15 +179,13 @@ export function App() {
     savedTurnsRef.current.add(id);
     const lines = state.chatLines.filter((l) => l.tabId === activeId && l.epoch === endedEpoch);
     const text = lines.filter((l) => l.kind === "assistant" && l.text).map((l) => l.text!).join("\n").trim();
-    if (!text) return;
+    const userMessage = lines.filter((l) => l.kind === "user" && l.text).map((l) => l.text!).join(" ");
     const hasCode = lines.some((l) => l.rule); // a ─── code fence in this turn
-    const words = text.split(/\s+/).filter(Boolean).length;
-    const hasTable = text.split("\n").filter((l) => /^\s*\|.*\|\s*$/.test(l)).length >= 2;
-    if (!(hasCode || words > 200 || hasTable)) return;
-    const first = (text.split("\n").find((l) => l.trim()) ?? "response").replace(/[`#*_>[\]-]/g, " ").trim();
-    const slug = (first.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "response").toLowerCase();
+    // Intent-based routing: Code/ · Research/ · Decisions/ · or don't save.
+    const verdict = classifyNote({ text, hasCode, userMessage });
+    if (!verdict.save) return;
     const date = new Date().toISOString().slice(0, 10);
-    void saveVault(`${slug}-${date}`, ["auto-saved"], text).then((r) => { if (r.ok) setSavedTurns((p) => ({ ...p, [id]: true })); });
+    void saveVault(`${noteSlug(text)}-${date}`, ["auto-saved"], text, verdict.folder).then((r) => { if (r.ok && r.path) setSavedTurns((p) => ({ ...p, [id]: r.path! })); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, vault?.configured, endedEpoch]);
 
@@ -200,7 +208,7 @@ export function App() {
         permId: g.permId,
         resolved: g.resolved,
         tool: g.tool,
-        autoSaved: g.kind === "assistant" && !!savedTurns[`${activeId}:${epochByKey[g.key]}`],
+        autoSaved: g.kind === "assistant" ? savedTurns[`${activeId}:${epochByKey[g.key]}`] : undefined,
       };
     });
 
@@ -257,21 +265,42 @@ export function App() {
   };
   const openFromKanban = (tabId: number) => { select(tabId); setSelFig(null); setView("floor"); };
 
+  // Serve status + QR. The LOCAL url is this page's own tokenized URL; PUBLIC (when
+  // /serve --public is up) comes from the bus (serve.public), falling back to
+  // /api/serveinfo for clients that connected before the tunnel came up.
+  const [serveInfo, setServeInfo] = useState<{ public: string | null } | null>(null);
+  useEffect(() => { void apiGet<{ public: string | null }>("/api/serveinfo").then(setServeInfo); }, [state.publicUrl]);
+  const publicBase = state.publicUrl ?? serveInfo?.public ?? null;
+  const localTokenUrl = typeof location !== "undefined" ? tokenizedUrl(location.origin) : "";
+  const publicTokenUrl = publicBase ? `${publicBase.replace(/\/$/, "")}/?token=${token()}` : null;
+  const [serveMenu, setServeMenu] = useState(false);
+  const [qr, setQr] = useState<{ title: string; url: string } | null>(null);
+  const chip = (label: string, active: boolean, onClick: () => void, leftEdge: boolean) => (
+    <button type="button" onClick={onClick} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: active ? "#1D1D27" : "#101017", color: active ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: leftEdge ? "2px solid #2A2A38" : 0 }}>{label}</button>
+  );
+
   const viewToggle = (
-    <div style={{ position: "fixed", top: 10, right: 14, zIndex: 70, display: "flex", gap: 0, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
-      {(["floor", "kanban"] as const).map((v) => (
-        <button key={v} type="button" onClick={() => setView(v)}
-          style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: view === v ? "#1D1D27" : "#101017", color: view === v ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: v === "kanban" ? 0 : "2px solid #2A2A38" }}>
-          {v.toUpperCase()}
-        </button>
-      ))}
+    <div style={{ position: "fixed", top: 10, right: 14, zIndex: 70, display: "flex", flexDirection: "column", alignItems: "flex-end", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+      <div style={{ display: "flex" }}>
+        {chip("FLOOR", view === "floor", () => setView("floor"), true)}
+        {chip("KANBAN", view === "kanban", () => setView("kanban"), false)}
+        {chip("◆ SERVE", serveMenu, () => setServeMenu((o) => !o), false)}
+      </div>
+      {serveMenu && (
+        <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", minWidth: 120 }}>
+          <button type="button" onClick={() => { setQr({ title: "LOCAL URL", url: localTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#22D3EE", border: 0, borderBottom: publicTokenUrl ? "1px solid #2A2A38" : 0 }}>LOCAL · QR</button>
+          {publicTokenUrl && <button type="button" onClick={() => { setQr({ title: "PUBLIC URL", url: publicTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#4ADE80", border: 0 }}>PUBLIC · QR</button>}
+        </div>
+      )}
     </div>
   );
+  const qrPopover = qr ? <QrPopover title={qr.title} url={qr.url} onClose={() => setQr(null)} /> : null;
 
   if (view === "kanban") {
     return (
       <>
         {viewToggle}
+        {qrPopover}
         <KanbanBoard state={state} overrides={kanbanOverrides} onMove={moveKanban} onOpen={openFromKanban} />
         {state.overlay && (
           <OverlayModal key={state.overlay.id} overlay={state.overlay} onSelect={(value) => send({ type: "overlay.select", id: state.overlay!.id, value })} onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })} />
@@ -283,6 +312,7 @@ export function App() {
   return (
     <>
       {viewToggle}
+      {qrPopover}
       <SessionsFloor
         model={model}
         chat={chat}
@@ -329,8 +359,9 @@ export function App() {
         }
         canSaveVault={!!vault?.configured}
         onSaveMsg={(content) => setSaveTarget(content)}
-        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} connections={connections} memory={memory} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} onRefreshConnections={() => { refreshConnections(); refreshMemory(); }} onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })} onClearMemory={() => send({ type: "memory.clear" })} />}
+        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} connections={connections} memory={memory} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} onRefreshConnections={() => { refreshConnections(); refreshMemory(); }} onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })} onClearMemory={() => send({ type: "memory.clear" })} webhookEpoch={state.webhookEpoch} />}
         rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
+        webhooksPanel={<WebhooksBody webhookEpoch={state.webhookEpoch} localOrigin={typeof location !== "undefined" ? location.origin : ""} />}
       />
       {saveTarget != null && (
         <VaultSaveModal content={saveTarget} onSave={saveVault} onClose={() => setSaveTarget(null)} />
@@ -356,7 +387,7 @@ export function App() {
           onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })}
         />
       )}
-      <TerminalDock tabId={activeId} />
+      {!isMobile && <TerminalDock tabId={activeId} />}
     </>
   );
 }

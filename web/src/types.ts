@@ -91,7 +91,9 @@ export type DomEvent =
   | { type: "goal.state"; tabId: number; goal: GoalState | null }
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
   | { type: "vault.changed" }
-  | { type: "connections.changed" };
+  | { type: "connections.changed" }
+  | { type: "webhook.received"; id: string; label: string; method: string; size: number }
+  | { type: "serve.public"; url: string | null };
 
 /** The goal bar's per-tab standing goal (mirrors src/engine.ts GoalState). */
 export interface GoalState {
@@ -121,7 +123,7 @@ export type ClientMessage =
   | { type: "job.kill"; jobId: string }
   | { type: "goal.set"; tabId: number; text: string; maxRounds?: number; reviewModel?: string; active?: boolean }
   | { type: "goal.clear"; tabId: number }
-  | { type: "vault.save"; reqId: number; filename: string; tags: string[]; content: string }
+  | { type: "vault.save"; reqId: number; filename: string; tags: string[]; content: string; folder?: string }
   | { type: "mcp.toggle"; name: string; enabled: boolean }
   | { type: "memory.clear" };
 
@@ -165,6 +167,26 @@ export interface MemoryData {
   sessions: number;
   topFiles: { path: string; count: number }[];
   decisions: string[];
+}
+
+/** One captured webhook (mirrors src/webhooks.ts WebhookEntry). */
+export interface WebhookEntry {
+  id: string;
+  label: string;
+  method: string;
+  contentType: string;
+  headers: Record<string, string>;
+  body: string;
+  size: number;
+  truncated: boolean;
+  statusReturned: number;
+  receivedAt: number;
+}
+/** GET /api/webhooks payload. */
+export interface WebhookData {
+  webhooks: WebhookEntry[];
+  labels: string[];
+  public: string | null;
 }
 
 /** A live selection overlay mirrored from the TUI (model/session/file/history). */

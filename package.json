@@ -33,6 +33,8 @@
     "ink-text-input": "^6.0.0",
     "markdown-it": "^15.0.0",
     "node-pty": "^1.1.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tree-sitter-wasms": "^0.1.11",
@@ -49,6 +51,7 @@
     "@upstash/context7-mcp": "^4.0.3",
     "@vitejs/plugin-react": "^6.1.0",
     "chrome-devtools-mcp": "^1.7.0",
+    "cloudflared": "^0.7.3",
     "typescript": "^5.6.3",
     "vite": "^8.2.2",
     "vite-plugin-singlefile": "^2.3.3"

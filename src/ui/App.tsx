@@ -41,6 +41,7 @@ import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from 
 import { buildLearnedContext, learnedStats, clearSessionMemory } from "../sessionmemory.js";
 import { resolveDesignUrl } from "../design.js";
 import { captureScreenshot } from "../screenshot.js";
+import { webhooks } from "../webhooks.js";
 import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
 import { EventBus, createBridge, type AppBridge } from "../events.js";
 import { startServer, type ServerHandle } from "../server.js";
@@ -160,7 +161,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   bridgeRef.current = bridge;
   // The running web server (persistent line above the status bar). Seeded from the
   // handle `dom serve` started, else null until `/serve` starts one.
-  const [serve, setServe] = useState<{ url: string; handle: ServerHandle } | null>(
+  const [serve, setServe] = useState<{ url: string; handle: ServerHandle; publicUrl?: string; tunnel?: { stop(): void } } | null>(
     serveHandle ? { url: serveHandle.url, handle: serveHandle } : null,
   );
   const serveRef = useRef(serve);
@@ -326,6 +327,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
 
   const hardExit = () => {
     if (ctrlCTimer.current) clearTimeout(ctrlCTimer.current);
+    serveRef.current?.tunnel?.stop(); // kill any public tunnel cleanly on Ctrl+C
     try {
       process.stdin.setRawMode?.(false);
     } catch {
@@ -1419,6 +1421,22 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "design":
         void handleDesign(arg);
         break;
+      case "webhooks":
+      case "webhook": {
+        if (arg.trim().toLowerCase() === "clear") {
+          webhooks.clear();
+          sysLog("webhooks: buffer cleared");
+          break;
+        }
+        const list = webhooks.list();
+        if (!list.length) {
+          sysLog("webhooks: none received yet. POST to /webhook/<label>?token=… (see the WEBHOOKS tab in the web UI).");
+        } else {
+          sysLog(`webhooks (${list.length}):`);
+          for (const w of list.slice(0, 20)) sysLog(`  ${w.method} /webhook/${w.label} · ${w.size}B · ${w.id}`);
+        }
+        break;
+      }
       case "jobs":
         listJobs();
         break;
@@ -1545,8 +1563,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       tab.engine.clearGoal();
       b.bus.emit({ type: "goal.state", tabId: tab.id, goal: null });
     };
-    b.onVaultSave = async (filename, tags, content) => {
-      const r = await saveVaultNote(filename, tags, content);
+    b.onVaultSave = async (filename, tags, content, folder) => {
+      const r = await saveVaultNote(filename, tags, content, folder);
       if (r.ok) b.bus.emit({ type: "vault.changed" });
       return r;
     };
@@ -1561,11 +1579,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (toks[0] === "stop") {
       const cur = serveRef.current;
       if (!cur) return sysLog("serve: not running");
+      cur.tunnel?.stop();
       await cur.handle.close();
       setServe(null);
       sysLog("serve stopped");
       return;
     }
+    const wantPublic = toks.includes("--public");
     const pi = toks.indexOf("--port");
     const port = pi >= 0 && toks[pi + 1] ? Number(toks[pi + 1]) : undefined;
     if (port !== undefined && !Number.isInteger(port)) return sysLog("usage: /serve [stop] [--port <n>]");
@@ -1593,9 +1613,29 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       else sysLog(`serve: could not start — ${(e as Error).message}`);
       return;
     }
-    setServe({ url: handle.url, handle });
-    sysLog(`${g.diamond} serve  ${handle.url}`);
-    sysLog("(127.0.0.1 only · token required · open it in a browser · /serve stop to shut down)");
+    // Optional Cloudflare Tunnel (--public): reachable from any device; same token.
+    let publicUrl: string | undefined;
+    let tunnel: { stop(): void } | undefined;
+    if (wantPublic) {
+      sysLog("serve: opening a public tunnel…");
+      try {
+        const { startTunnel } = await import("../tunnel.js");
+        const t = await startTunnel(handle.port);
+        tunnel = t;
+        publicUrl = `${t.url}/?token=${handle.token}`;
+        handle.setPublicUrl(t.url);
+        b.bus.emit({ type: "serve.public", url: t.url });
+      } catch (e) {
+        sysLog(`serve: public tunnel unavailable (${(e as Error).message}) — continuing local-only`);
+      }
+    }
+    setServe({ url: handle.url, handle, publicUrl, tunnel });
+    // Print each URL with a scannable QR so a phone doesn't type the token.
+    const { serveBlock } = await import("../serveprint.js");
+    const links = [{ label: "LOCAL ", url: handle.url }];
+    if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
+    for (const line of (await serveBlock(links)).split("\n")) sysLog(line);
+    sysLog("(127.0.0.1 only · token required · scan or open it · /serve stop to shut down)");
   };
 
   // Bridge background-job lifecycle to the bus, and let a web answer dismiss the
@@ -1937,11 +1977,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         </Box>
       ) : null}
 
-      {/* Persistent web-view line while `/serve` (or `dom serve`) is running. */}
+      {/* Persistent web-view line while `/serve` (or `dom serve`) is running. Shows
+          both the local and (when --public) the public URL. */}
       {serve ? (
         <Box marginTop={tabbarShown ? 0 : 1} width={inner}>
           <Text color={col(C.cyan)} wrap="truncate">
             {g.diamond} serve  <Text color={col(C.value)}>{serve.url}</Text>
+            {serve.publicUrl ? <Text color={col(C.dim)}>{"  ·  public "}<Text color={col(C.value)}>{serve.publicUrl}</Text></Text> : null}
           </Text>
         </Box>
       ) : null}

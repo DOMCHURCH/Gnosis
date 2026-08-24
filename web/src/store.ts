@@ -62,6 +62,10 @@ export interface State {
   plans: Record<number, TaskPlan | null>;
   /** Latest design-mode before/after screenshot pair per tab (design.shot). */
   designShots: Record<number, { path: string; before: string | null; after: string } | null>;
+  /** Bumped on every webhook.received so the WEBHOOKS tab re-reads /api/webhooks. */
+  webhookEpoch: number;
+  /** The public tunnel URL (base, no token) when `/serve --public` is up, else null. */
+  publicUrl: string | null;
   /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
    * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
   streamEdits: Record<number, StreamEdit | null>;
@@ -105,7 +109,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, streamEdits: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {} };
 
 /** Fold a tabId-bearing event into that tab's telemetry record. */
 function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
@@ -268,6 +272,10 @@ export function reducer(state: State, action: Action): State {
       return { ...state, plans: { ...state.plans, [action.tabId]: planFromEvent(action) } };
     case "design.shot":
       return { ...state, designShots: { ...state.designShots, [action.tabId]: { path: action.path, before: action.before, after: action.after } } };
+    case "webhook.received":
+      return { ...state, webhookEpoch: state.webhookEpoch + 1 };
+    case "serve.public":
+      return { ...state, publicUrl: action.url };
     case "subagent.start":
       return withItem(
         { ...state, subagents: [...state.subagents, { parentId: action.tabId, description: action.description, key: `${action.tabId}:${action.description}:${state.subagents.length}` }], plans: { ...state.plans, [action.tabId]: foldPlan(state.plans[action.tabId] ?? null, action, Date.now()) } },
@@ -432,15 +440,16 @@ export function useDomSocket() {
     });
   }, []);
 
-  // "Save to vault": write a chat message as a new note; resolves with the ack.
-  const saveVault = useCallback((filename: string, tags: string[], content: string): Promise<SaveResult> => {
+  // "Save to vault": write a chat message as a new note; resolves with the ack. An
+  // optional folder (Code/Research/Decisions) routes auto-saved notes into subfolders.
+  const saveVault = useCallback((filename: string, tags: string[], content: string, folder?: string): Promise<SaveResult> => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.resolve({ ok: false, error: "not connected" });
     const reqId = ++vaultRef.current.seq;
     return new Promise<SaveResult>((resolve) => {
       vaultRef.current.pending.set(reqId, resolve);
       setTimeout(() => { if (vaultRef.current.pending.delete(reqId)) resolve({ ok: false, error: "timed out" }); }, 8000);
-      ws.send(JSON.stringify({ type: "vault.save", reqId, filename, tags, content }));
+      ws.send(JSON.stringify({ type: "vault.save", reqId, filename, tags, content, folder }));
     });
   }, []);
 

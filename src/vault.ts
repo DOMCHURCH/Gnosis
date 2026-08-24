@@ -68,22 +68,46 @@ function composeNote(content: string, tags: string[]): string {
   return fm + "\n" + body;
 }
 
-/** Save a new note into the vault. Refuses to overwrite an existing note (adds a
- * ` 2`, ` 3`... suffix). Returns the vault-relative path written, or an error. */
-export async function saveVaultNote(filename: string, tags: string[], content: string): Promise<SaveNoteResult> {
+/** Sanitize an optional destination folder to a single safe segment (letters,
+ * digits, dash, underscore) — e.g. "Code", "Research", "Decisions". Anything with
+ * separators, dots, or illegal characters collapses so no traversal is possible. */
+function safeFolder(folder?: string): string {
+  if (!folder) return "";
+  const seg = folder.trim().split(/[\\/]/)[0] ?? "";
+  const clean = seg.replace(/[^A-Za-z0-9_-]/g, "").replace(/^\.+/, "");
+  return clean;
+}
+
+/** Save a new note into the vault (optionally under a subfolder, created on demand).
+ * Refuses to overwrite an existing note (adds a ` 2`, ` 3`... suffix). Returns the
+ * vault-relative path written, or an error. */
+export async function saveVaultNote(filename: string, tags: string[], content: string, folder?: string): Promise<SaveNoteResult> {
   const root = await vaultRoot();
   if (!root) return { ok: false, error: "no Obsidian vault is configured" };
 
   const base = safeNoteFilename(filename);
-  let target = path.join(root, base);
-  // Guard: the resolved file must stay directly inside the vault root.
+  const sub = safeFolder(folder);
+  const dir = sub ? path.join(root, sub) : root;
+  const dirResolved = path.resolve(dir);
   const rootResolved = path.resolve(root);
-  if (path.dirname(path.resolve(target)) !== rootResolved) {
+  // Guard: the destination directory must be the root or a direct child of it.
+  if (dirResolved !== rootResolved && path.dirname(dirResolved) !== rootResolved) {
+    return { ok: false, error: "invalid folder" };
+  }
+  let target = path.join(dir, base);
+  // Guard: the resolved file must stay directly inside the destination directory.
+  if (path.dirname(path.resolve(target)) !== dirResolved) {
     return { ok: false, error: "invalid note name" };
+  }
+  // Create the folder if it doesn't exist (e.g. Code/, Research/, Decisions/).
+  try {
+    if (sub) await fs.mkdir(dir, { recursive: true });
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
   }
   // Don't clobber an existing note — find a free "<name> N.md".
   const stem = base.replace(/\.md$/i, "");
-  for (let n = 2; existsSync(target); n++) target = path.join(root, `${stem} ${n}.md`);
+  for (let n = 2; existsSync(target); n++) target = path.join(dir, `${stem} ${n}.md`);
 
   try {
     await fs.writeFile(target, composeNote(content, tags), "utf8");

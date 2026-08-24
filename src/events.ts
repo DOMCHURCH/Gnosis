@@ -63,7 +63,11 @@ export type DomEvent =
   | { type: "goal.state"; tabId: number; goal: { text: string; active: boolean; roundsLeft: number; maxRounds: number; reviewModel?: string } | null }
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
   | { type: "vault.changed" }
-  | { type: "connections.changed" };
+  | { type: "connections.changed" }
+  // A webhook was captured (POST /webhook/:label) — clients re-read /api/webhooks.
+  | { type: "webhook.received"; id: string; label: string; method: string; size: number }
+  // The public tunnel URL for `/serve --public` came up (or went away with null).
+  | { type: "serve.public"; url: string | null };
 
 export type Listener = (e: DomEvent) => void;
 
@@ -113,9 +117,10 @@ export interface AppBridge {
   /** Goal bar: set/update or clear a tab's standing goal (web UI). */
   onGoalSet?(tabId: number, goal: { text: string; maxRounds?: number; reviewModel?: string; active?: boolean }): void;
   onGoalClear?(tabId: number): void;
-  /** Obsidian panel "save to vault": write a new note from a chat message. Resolves
-   * with the vault-relative path written, or an error. Emits vault.changed on success. */
-  onVaultSave?(filename: string, tags: string[], content: string): Promise<{ ok: boolean; path?: string; error?: string }>;
+  /** Obsidian panel "save to vault": write a new note from a chat message, optionally
+   * into a subfolder (Code/Research/Decisions for auto-save). Resolves with the
+   * vault-relative path written, or an error. Emits vault.changed on success. */
+  onVaultSave?(filename: string, tags: string[], content: string, folder?: string): Promise<{ ok: boolean; path?: string; error?: string }>;
 
   // Permission coordination. The engine registers a pending request keyed by id;
   // either the TUI overlay or a web client resolves it (first wins).

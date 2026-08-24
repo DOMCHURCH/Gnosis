@@ -26,7 +26,28 @@ import type { AppBridge, DomEvent } from "./events.js";
 import type { PermissionAnswer } from "./permissions.js";
 import { mcp } from "./mcp/manager.js";
 import { panelSummary, clearSessionMemory } from "./sessionmemory.js";
+import { webhooks } from "./webhooks.js";
 import { loadEnv, loadConfig } from "./config.js";
+
+/** Read a request body to a string, capped at maxBytes (excess is drained, not stored). */
+function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let done = false;
+    const finish = () => { if (done) return; done = true; resolve(Buffer.concat(chunks).toString("utf8")); };
+    req.on("data", (c: Buffer) => { size += c.length; if (size <= maxBytes) chunks.push(c); });
+    req.on("end", finish);
+    req.on("error", finish);
+  });
+}
+
+/** Flatten node's header bag to a plain string→string map (arrays joined). */
+function flatHeaders(h: http.IncomingHttpHeaders): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(h)) out[k] = Array.isArray(v) ? v.join(", ") : String(v ?? "");
+  return out;
+}
 
 // Keys the CONNECTIONS tab knows about, with the feature each one enables. Others
 // present in ~/.dom/.env are also surfaced (name + last 4 only).
@@ -181,7 +202,34 @@ function cwdForTab(bridge: AppBridge, tabId: number): string | null {
  * The cwd comes from the live agent, and file reads are guarded to stay inside it
  * (readFileInRoot). Returns true if it handled the request.
  */
-async function handleApi(url: URL, bridge: AppBridge, res: http.ServerResponse): Promise<boolean> {
+async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge, res: http.ServerResponse, getPublicUrl: () => string | null): Promise<boolean> {
+  // Serve info: the public tunnel URL (if `/serve --public` is up), so the WEBHOOKS
+  // tab can show the URL external services actually need to reach.
+  if (url.pathname === "/api/serveinfo") {
+    sendJson(res, 200, { public: getPublicUrl() });
+    return true;
+  }
+  // Webhook inspector: the whole ring buffer, plus the public URL for the generator.
+  if (url.pathname === "/api/webhooks") {
+    sendJson(res, 200, { webhooks: webhooks.list(), labels: webhooks.labels(), public: getPublicUrl() });
+    return true;
+  }
+  // Replay a stored webhook to a local target URL (POST { target }).
+  const replay = url.pathname.match(/^\/api\/webhooks\/([^/]+)\/replay$/);
+  if (replay) {
+    const entry = webhooks.get(replay[1]!);
+    if (!entry) { sendJson(res, 404, { error: "unknown webhook" }); return true; }
+    let target = "";
+    try { target = String(JSON.parse(await readBody(req, 8192)).target ?? ""); } catch { /* no/invalid body */ }
+    if (!/^https?:\/\//i.test(target)) { sendJson(res, 400, { error: "provide a target http(s) URL" }); return true; }
+    try {
+      const r = await fetch(target, { method: entry.method, headers: entry.contentType ? { "content-type": entry.contentType } : {}, body: entry.method === "GET" || entry.method === "HEAD" ? undefined : entry.body });
+      sendJson(res, 200, { ok: r.ok, status: r.status });
+    } catch (e) {
+      sendJson(res, 200, { ok: false, error: (e as Error).message });
+    }
+    return true;
+  }
   if (url.pathname === "/api/tree") {
     const tabId = Number(url.searchParams.get("tabId"));
     const cwd = cwdForTab(bridge, tabId);
@@ -353,7 +401,7 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
       const done = (r: { ok: boolean; path?: string; error?: string }) => send({ type: "vault.saved", reqId, ...r });
       if (!bridge.onVaultSave) { done({ ok: false, error: "vault save unavailable" }); break; }
       void bridge
-        .onVaultSave(String(msg.filename ?? ""), tags, String(msg.content ?? ""))
+        .onVaultSave(String(msg.filename ?? ""), tags, String(msg.content ?? ""), msg.folder ? String(msg.folder) : undefined)
         .then(done)
         .catch((e) => done({ ok: false, error: (e as Error)?.message ?? "save failed" }));
       break;
@@ -403,11 +451,15 @@ export interface ServerHandle {
   token: string;
   port: number;
   clients(): number;
+  /** Record the public tunnel URL (base, no token) so /api/serveinfo exposes it. */
+  setPublicUrl(url: string | null): void;
   close(): Promise<void>;
 }
 
 export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
+  // The public tunnel URL (base, no token), set by /serve --public via setPublicUrl.
+  let publicUrl: string | null = null;
   // Resolved from the binary's own location (not the cwd) so assets are found no
   // matter where `dom serve` was launched.
   const staticDir = WEB_ASSETS_DIR;
@@ -442,8 +494,20 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       res.end("unauthorized");
       return;
     }
+    // Webhook capture: any method to /webhook/:label is stored in the ring buffer
+    // and announced on the bus. The token gate above already protects it.
+    if (url.pathname.startsWith("/webhook/")) {
+      void (async () => {
+        const label = decodeURIComponent(url.pathname.slice("/webhook/".length)).replace(/\/+$/, "") || "default";
+        const body = await readBody(req, 256 * 1024);
+        const entry = webhooks.record({ label, method: req.method ?? "POST", contentType: String(req.headers["content-type"] ?? ""), headers: flatHeaders(req.headers), body, statusReturned: 200 });
+        bridge.bus.emit({ type: "webhook.received", id: entry.id, label: entry.label, method: entry.method, size: entry.size });
+        sendJson(res, 200, { ok: true, id: entry.id, label: entry.label });
+      })().catch(() => { res.writeHead(500); res.end("error"); });
+      return;
+    }
     if (url.pathname.startsWith("/api/")) {
-      void handleApi(url, bridge, res).then((handled) => {
+      void handleApi(req, url, bridge, res, () => publicUrl).then((handled) => {
         if (!handled) { res.writeHead(404); res.end("not found"); }
       }).catch(() => { res.writeHead(500); res.end("error"); });
       return;
@@ -559,6 +623,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     token,
     port,
     clients: () => clients.size,
+    setPublicUrl: (u) => { publicUrl = u; },
     close: () =>
       new Promise<void>((resolve) => {
         busUnsub();

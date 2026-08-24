@@ -43,6 +43,8 @@ export interface Flags {
   serve: boolean;
   /** `--port <n>`: port for `dom serve` (default 7777). */
   port?: number;
+  /** `--public`: also open a Cloudflare Tunnel so `dom serve` is reachable anywhere. */
+  public?: boolean;
 }
 
 export function parseArgs(argv: string[]): Flags {
@@ -75,6 +77,9 @@ export function parseArgs(argv: string[]): Flags {
         break;
       case "--port":
         flags.port = Number(argv[++i]);
+        break;
+      case "--public":
+        flags.public = true;
         break;
       case "-c":
       case "--continue":

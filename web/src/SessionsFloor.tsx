@@ -7,8 +7,9 @@ import { DiffView, FileView } from "./DiffView";
 import { elapsedLabel } from "./telemetry.js";
 import { TaskPlanView } from "./TaskPlanView";
 import type { TaskPlan } from "./taskplan";
+import { FloorGraphic } from "./FloorGraphic";
 
-export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: boolean; }
+export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: string; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
@@ -70,6 +71,8 @@ export interface SessionsProps {
   leftPanel?: ReactNode;
   /** Optional collapsible panel rendered at the far right (the Background jobs panel). */
   rightPanel?: ReactNode;
+  /** The WEBHOOKS panel body — its own bottom-nav tab on mobile. */
+  webhooksPanel?: ReactNode;
 }
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -129,8 +132,9 @@ export function SessionsFloor(props: SessionsProps) {
   const L = model.layout;
   const [zoom, setZoom] = useState(1); // 1 = fit; > 1 scrolls
   const vw = useViewport();
-  const mobile = vw > 0 && vw < 640; // phones: floor hidden, chat full-width, bottom tab bar
+  const mobile = vw > 0 && vw < 640; // phones: dedicated one-handed layout (bottom nav)
   const narrow = vw > 0 && vw < 900; // tablets: floor collapses to a zone strip
+  const [mobileTab, setMobileTab] = useState<"chat" | "floor" | "files" | "webhooks">("chat");
   const [floorOpen, setFloorOpen] = useState(false); // narrow: expand the full floor
   const [filesOpen, setFilesOpen] = useState(false);  // narrow/mobile: file browser bottom sheet
   const [jobsOpen, setJobsOpen] = useState(false);    // narrow/mobile: background jobs bottom sheet
@@ -181,6 +185,91 @@ export function SessionsFloor(props: SessionsProps) {
   const detach = () => setDetached(true);
   const snapBack = () => { setSnapping(true); window.setTimeout(() => { setSnapping(false); setDetached(false); }, 200); };
   const floating = detached && !narrow; // detach is a desktop-only affordance
+
+  // --- MOBILE (< 640px): a one-handed layout — bottom nav over full-screen tabs,
+  // bottom sheets for agent detail and permission prompts. Everything above already
+  // ran its hooks, so this early return is safe.
+  if (mobile) {
+    const pendingPerm = props.chat.find((m) => m.isApproval && !m.resolved);
+    const nav: [typeof mobileTab, string, string][] = [["chat", "▤", "CHAT"], ["floor", "◫", "FLOOR"], ["files", "≡", "FILES"], ["webhooks", "⚑", "WEBHOOKS"]];
+    return (
+      <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
+        <style>{"@keyframes domSheet{from{transform:translateY(100%)}to{transform:translateY(0)}} .dom-sheet{animation:domSheet .2s ease-out}"}</style>
+        <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", paddingBottom: 56 }}>
+          {mobileTab === "chat" && (
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              <ChatPanel {...props} detached={false} canDetach={false} onToggleDetach={() => {}} mobile />
+            </div>
+          )}
+          {mobileTab === "floor" && (
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTitle}</span>
+                <span style={{ marginLeft: "auto", fontSize: 9, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
+              </div>
+              <div style={{ position: "relative", background: "#15151C", border: "2px solid #2A2A38", padding: 8 }}>
+                <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+              </div>
+            </div>
+          )}
+          {mobileTab === "files" && <div style={{ flex: 1, minHeight: 0, display: "flex", padding: 8 }}>{props.leftPanel}</div>}
+          {mobileTab === "webhooks" && <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>{props.webhooksPanel}</div>}
+        </div>
+
+        {/* bottom navigation */}
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: 40, display: "flex", background: "#15151C", borderTop: "2px solid #2A2A38" }}>
+          {nav.map(([id, icon, label]) => {
+            const active = mobileTab === id;
+            return (
+              <button key={id} type="button" onClick={() => setMobileTab(id)} style={{ flex: 1, minHeight: 44, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, background: "transparent", border: 0, cursor: "pointer", color: active ? "#22D3EE" : "#6B6B7B", fontFamily: MONO }}>
+                <span style={{ fontSize: 16 }}>{icon}</span>
+                <span style={{ fontSize: 8, letterSpacing: 1 }}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* agent detail bottom sheet (tap an agent on the FLOOR tab) */}
+        {sel && (
+          <div onClick={props.onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "flex-end" }}>
+            <div className="dom-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "72vh", overflow: "auto", background: "#0D0D12", borderTop: "2px solid #2A2A38", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}><div style={{ width: 40, height: 4, background: "#2A2A38" }} /></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 14px 10px" }}>
+                <span style={{ width: 9, height: 9, background: sel.stateColor }} />
+                <span style={{ fontSize: 14, letterSpacing: 1, color: sel.color }}>{sel.name}</span>
+                <span style={{ fontSize: 10, letterSpacing: 1, color: sel.stateColor }}>{sel.state.toUpperCase()}</span>
+                <button type="button" onClick={props.onClose} style={{ marginLeft: "auto", fontSize: 16, minWidth: 44, minHeight: 44, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
+              </div>
+              <div style={{ padding: "0 14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>CURRENT TASK</div>
+                <div style={{ fontSize: 12, lineHeight: 1.6, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 10 }}>{sel.action}</div>
+                <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>RECENT OUTPUT</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, background: "#0B0B10", border: "2px solid #2A2A38", padding: 10 }}>
+                  {(sel.output.length ? sel.output : ["no output yet"]).map((o, i) => (<div key={i} style={{ fontSize: 11, lineHeight: 1.5, color: "#6B6B7B", whiteSpace: "pre-wrap" }}>{o}</div>))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* permission prompt as a bottom sheet (not a modal) */}
+        {pendingPerm && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 55, background: "rgba(5,5,8,0.7)", display: "flex", alignItems: "flex-end" }}>
+            <div className="dom-sheet" style={{ width: "100%", background: "#0D0D12", borderTop: "2px solid #FBBF24", display: "flex", flexDirection: "column", padding: 14, gap: 12 }}>
+              <div style={{ fontSize: 10, letterSpacing: 2, color: "#FBBF24" }}>APPROVAL NEEDED</div>
+              <div style={{ fontSize: 12, lineHeight: 1.5, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 10, maxHeight: "40vh", overflow: "auto", whiteSpace: "pre-wrap" }}>
+                {pendingPerm.segments.map((s) => s.text).join("\n")}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button type="button" onClick={() => props.onApproveMsg(pendingPerm.permId)} style={{ flex: 1, minHeight: 44, fontFamily: MONO, fontSize: 12, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, cursor: "pointer" }}>APPROVE</button>
+                <button type="button" onClick={() => props.onDenyMsg(pendingPerm.permId)} style={{ flex: 1, minHeight: 44, fontFamily: MONO, fontSize: 12, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", cursor: "pointer" }}>DENY</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
@@ -239,193 +328,7 @@ export function SessionsFloor(props: SessionsProps) {
                 <div style={{ position: "relative" }}>
                   <div style={{ overflowX: zoom > 1 ? "auto" : "hidden", overflowY: "hidden" }}>
                     <div style={{ position: "relative", width: `${zoom * 100}%` }}>
-                      <svg viewBox="0 0 1440 900" width="100%" preserveAspectRatio="xMidYMid meet" shapeRendering="crispEdges" style={{ display: "block" }} xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <pattern id="tile" width="32" height="32" patternUnits="userSpaceOnUse">
-                            <rect x="0" y="0" width="32" height="32" fill="#23202A" />
-                            <rect x="0" y="0" width="32" height="2" fill="#282430" />
-                            <rect x="0" y="0" width="2" height="32" fill="#282430" />
-                          </pattern>
-                          <g id="agBody">
-                            <rect x="16" y="4" width="32" height="12" fill="#3A3038" />
-                            <rect x="16" y="16" width="32" height="20" fill="#C9C9D6" />
-                            <rect x="20" y="24" width="8" height="8" fill="#0D0D12" />
-                            <rect x="36" y="24" width="8" height="8" fill="#0D0D12" />
-                            <rect x="12" y="36" width="40" height="32" fill="currentColor" />
-                            <rect x="24" y="36" width="16" height="8" fill="#C9C9D6" />
-                            <rect x="16" y="68" width="12" height="24" fill="#3A3038" />
-                            <rect x="36" y="68" width="12" height="24" fill="#3A3038" />
-                            <rect x="12" y="92" width="16" height="4" fill="#0D0D12" />
-                            <rect x="36" y="92" width="16" height="4" fill="#0D0D12" />
-                          </g>
-                          <g id="armL"><rect x="4" y="40" width="8" height="24" fill="currentColor" fillOpacity="0.6" /></g>
-                          <g id="armR"><rect x="52" y="40" width="8" height="24" fill="currentColor" fillOpacity="0.6" /></g>
-                          <g id="desk">
-                            <rect x="4" y="-48" width="52" height="32" fill="#0F0D16" stroke="#CFC8B7" strokeWidth="2" />
-                            <rect x="56" y="-44" width="8" height="32" fill="#8E8878" />
-                            <rect x="8" y="-44" width="44" height="14" fill="currentColor" fillOpacity="0.9" />
-                            <rect x="8" y="-28" width="26" height="4" fill="#3A3038" />
-                            <rect x="24" y="-16" width="12" height="8" fill="#B4AC9A" />
-                            <rect x="16" y="-8" width="28" height="6" fill="#CFC8B7" />
-                            <rect x="16" y="-2" width="28" height="4" fill="#8E8878" />
-                            <rect x="0" y="0" width="112" height="22" fill="#4A4252" />
-                            <rect x="0" y="0" width="112" height="4" fill="#584F62" />
-                            <rect x="0" y="22" width="112" height="14" fill="#332C3B" />
-                            <rect x="112" y="4" width="8" height="32" fill="#292330" />
-                            <rect x="0" y="36" width="120" height="4" fill="#1A171F" />
-                            <rect x="60" y="4" width="40" height="10" fill="#2A2A38" />
-                            <rect x="60" y="14" width="40" height="4" fill="#1B1B24" />
-                          </g>
-                          <g id="deskEmpty">
-                            <rect x="4" y="-48" width="52" height="32" fill="#12101A" stroke="#3A3441" strokeWidth="2" />
-                            <rect x="56" y="-44" width="8" height="32" fill="#3A3441" />
-                            <rect x="24" y="-16" width="12" height="8" fill="#3A3441" />
-                            <rect x="16" y="-8" width="28" height="6" fill="#4A4252" />
-                            <rect x="0" y="0" width="112" height="22" fill="#332C3B" />
-                            <rect x="0" y="0" width="112" height="4" fill="#3D3547" />
-                            <rect x="0" y="22" width="112" height="14" fill="#241F2B" />
-                            <rect x="112" y="4" width="8" height="32" fill="#1F1B25" />
-                            <rect x="60" y="4" width="40" height="10" fill="#2A2430" />
-                          </g>
-                          <g id="busy">
-                            <rect x="0" y="0" width="8" height="8" fill="currentColor" style={{ animation: "domDot 1.2s steps(1) infinite" }} />
-                            <rect x="12" y="0" width="8" height="8" fill="currentColor" style={{ animation: "domDot 1.2s steps(1) .2s infinite" }} />
-                            <rect x="24" y="0" width="8" height="8" fill="currentColor" style={{ animation: "domDot 1.2s steps(1) .4s infinite" }} />
-                          </g>
-                          <g id="await" style={{ animation: "domBlink 1.1s steps(1) infinite" }}>
-                            <rect x="0" y="0" width="24" height="24" fill="#FBBF24" />
-                            <rect x="10" y="4" width="4" height="10" fill="#0D0D12" />
-                            <rect x="10" y="16" width="4" height="4" fill="#0D0D12" />
-                          </g>
-                          <g id="speak" style={{ animation: "domBob 1.6s ease-in-out infinite" }}>
-                            <rect x="0" y="0" width="24" height="24" fill="#12101A" stroke="#CFC8B7" strokeWidth="2" />
-                            <rect x="6" y="10" width="4" height="4" fill="#C9C9D6" />
-                            <rect x="14" y="10" width="4" height="4" fill="#C9C9D6" />
-                          </g>
-                          <g id="plant">
-                            <rect x="4" y="8" width="8" height="16" fill="#4ADE80" fillOpacity="0.55" />
-                            <rect x="12" y="0" width="8" height="24" fill="#4ADE80" fillOpacity="0.7" />
-                            <rect x="20" y="10" width="8" height="14" fill="#4ADE80" fillOpacity="0.45" />
-                            <rect x="6" y="24" width="20" height="6" fill="#4A4252" />
-                            <rect x="6" y="30" width="20" height="12" fill="#332C3B" />
-                            <rect x="26" y="26" width="6" height="16" fill="#241F2B" />
-                            <rect x="6" y="42" width="26" height="4" fill="#1A171F" />
-                          </g>
-                        </defs>
-
-                        <rect x="0" y="0" width="1440" height="900" fill="#12111A" />
-                        <rect x="16" y="16" width="1408" height="868" fill="#CFC8B7" />
-                        <rect x="32" y="32" width="1376" height="836" fill="url(#tile)" />
-
-                        {L.zonePlates.map((z) => (
-                          z.collapsed && z.zone
-                            ? <g key={z.key} onClick={() => props.onDeskClick(z.zone!, 0)} style={{ cursor: "pointer" }}>
-                                <rect x={z.x} y={z.y} width={z.w} height={z.h} fill={z.fill} fillOpacity={z.op} />
-                                <rect x={z.x + z.w - 44} y={z.y + z.h / 2 - 3} width="20" height="6" fill="#6B6B7B" />
-                                <rect x={z.x + z.w - 37} y={z.y + z.h / 2 - 10} width="6" height="20" fill="#6B6B7B" />
-                              </g>
-                            : <rect key={z.key} x={z.x} y={z.y} width={z.w} height={z.h} fill={z.fill} fillOpacity={z.op} />
-                        ))}
-                        {L.zoneCurbs.map((c) => (
-                          <rect key={c.key} x={c.x} y={c.y} width={c.w} height={c.h} fill={c.fill} fillOpacity={c.op} />
-                        ))}
-
-                        <rect x="32" y="32" width="1376" height="56" fill="#6B3335" />
-                        <rect x="32" y="32" width="1376" height="8" fill="#5E2C2F" />
-                        <rect x="32" y="80" width="1376" height="8" fill="#B4AC9A" />
-                        <rect x="120" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="360" y="44" width="112" height="28" fill="#22D3EE" fillOpacity="0.2" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="600" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="840" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="1080" y="44" width="112" height="28" fill="#FBBF24" fillOpacity="0.18" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="1272" y="44" width="112" height="28" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
-
-                        <rect x="408" y="96" width="8" height="120" fill="#CFC8B7" />
-                        <rect x="408" y="280" width="8" height="120" fill="#CFC8B7" />
-                        <rect x="768" y="96" width="8" height="176" fill="#CFC8B7" />
-                        <rect x="768" y="336" width="8" height="524" fill="#CFC8B7" />
-                        <rect x="32" y="400" width="280" height="8" fill="#CFC8B7" />
-                        <rect x="392" y="400" width="384" height="8" fill="#CFC8B7" />
-                        <rect x="776" y="400" width="200" height="8" fill="#CFC8B7" />
-                        <rect x="1056" y="400" width="352" height="8" fill="#CFC8B7" />
-
-                        <rect x="600" y="852" width="176" height="16" fill="#B4AC9A" />
-                        <rect x="608" y="856" width="80" height="12" fill="#22D3EE" fillOpacity="0.35" />
-                        <rect x="696" y="856" width="72" height="12" fill="#12101A" />
-
-                        <rect x="264" y="196" width="140" height="88" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="276" y="208" width="88" height="12" fill="#E879F9" style={{ animation: "domScan 2.4s ease-in-out infinite" }} />
-                        <rect x="276" y="228" width="24" height="12" fill="#818CF8" />
-                        <rect x="308" y="228" width="24" height="12" fill="#22D3EE" />
-                        <rect x="340" y="228" width="24" height="12" fill="#4ADE80" />
-                        <rect x="276" y="248" width="108" height="8" fill="#3A3038" />
-                        <use href="#plant" x="60" y="196" />
-
-                        <rect x="1136" y="150" width="248" height="152" fill="#12101A" stroke="#CFC8B7" strokeWidth="4" />
-                        <rect x="1148" y="162" width="224" height="20" fill="#1B1922" />
-                        <rect x="1156" y="168" width="8" height="8" fill="#4ADE80" />
-                        <rect x="1172" y="168" width="8" height="8" fill="#3A3038" />
-                        <rect x="1188" y="168" width="8" height="8" fill="#3A3038" />
-                        <rect x="1148" y="194" width="120" height="24" fill="#4ADE80" fillOpacity="0.85" />
-                        <rect x="1148" y="228" width="176" height="10" fill="#3A3038" />
-                        <rect x="1148" y="246" width="136" height="10" fill="#3A3038" />
-                        <rect x="1148" y="266" width="88" height="12" fill="#4ADE80" style={{ animation: "domScan 1.8s ease-in-out infinite" }} />
-                        <use href="#plant" x="728" y="188" />
-
-                        <rect x="1320" y="548" width="72" height="12" fill="#4A4252" />
-                        <rect x="1320" y="560" width="72" height="180" fill="#2A2328" stroke="#3A3441" strokeWidth="2" />
-                        <rect x="1332" y="576" width="48" height="8" fill="#22D3EE" fillOpacity="0.5" />
-                        <rect x="1332" y="594" width="48" height="8" fill="#3A3038" />
-                        <rect x="1332" y="612" width="48" height="8" fill="#3A3038" />
-                        <rect x="1332" y="630" width="48" height="8" fill="#3A3038" />
-                        <rect x="1332" y="648" width="48" height="8" fill="#22D3EE" fillOpacity="0.35" />
-                        <rect x="1332" y="666" width="48" height="8" fill="#3A3038" />
-                        <rect x="1320" y="740" width="80" height="4" fill="#1A171F" />
-
-                        {L.freeDesks.map((d) => (
-                          <g key={d.key} onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
-                            <use href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
-                            {/* a dim "+" marks the desk as placeable */}
-                            <rect x={d.x + 44} y={d.y - 66} width="24" height="6" fill="#6B6B7B" opacity="0.7" />
-                            <rect x={d.x + 53} y={d.y - 75} width="6" height="24" fill="#6B6B7B" opacity="0.7" />
-                          </g>
-                        ))}
-
-                        {L.placed.map((a) => (
-                          <g key={a.key} onClick={() => props.onSelectFig(a.id)} style={{ cursor: "pointer" }}>
-                            <use href="#desk" x={a.deskX} y={a.deskY} style={{ color: a.color }} />
-                            <use href="#agBody" x={a.agX} y={a.agY} style={{ color: a.color }} opacity={a.opacity} />
-                            <use href="#armL" x={a.agX} y={a.agY} style={{ color: a.color, ...(a.armL || {}) }} opacity={a.opacity} />
-                            <use href="#armR" x={a.agX} y={a.agY} style={{ color: a.color, ...(a.armR || {}) }} opacity={a.opacity} />
-                            {a.isThinking && <use href="#busy" x={a.cueX} y={a.cueY} style={{ color: a.color }} />}
-                            {a.isAwaiting && <use href="#await" x={a.cueX} y={a.cueYBig} />}
-                            {a.isSpeaking && <use href="#speak" x={a.cueX} y={a.cueYBig} />}
-                            {a.selected && <rect x={a.ringX} y={a.ringY} width="80" height="112" fill="none" stroke={a.color} strokeWidth="4" />}
-                          </g>
-                        ))}
-                      </svg>
-
-                      <div style={{ position: "absolute", inset: 0, containerType: "size", pointerEvents: "none" }}>
-                        {L.zoneLabels.map((z) => (
-                          <div key={z.key} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap" }}>
-                            <span style={{ fontSize: "1.45cqw", fontWeight: 700, letterSpacing: "0.22cqw", color: z.accent }}>{z.name}</span>
-                            <span style={{ fontSize: "1.05cqw", letterSpacing: "0.08cqw", color: z.countColor }}>{z.count}</span>
-                            {z.hint && <span style={{ fontSize: "0.92cqw", letterSpacing: "0.04cqw", color: "#4A4A58" }}>{z.hint}</span>}
-                          </div>
-                        ))}
-                        {L.nameTags.map((n) => (
-                          <div key={n.key} style={{ position: "absolute", left: n.left, top: n.top, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "0.4cqw", background: "#0D0D12E6", border: `0.16cqw solid ${n.border}`, padding: "0.25cqw 0.5cqw", whiteSpace: "nowrap" }}>
-                            <span style={{ width: "0.6cqw", height: "0.6cqw", background: n.stateColor }} />
-                            <span style={{ fontSize: "1cqw", letterSpacing: "0.08cqw", color: "#C9C9D6" }}>{n.name}</span>
-                          </div>
-                        ))}
-                        {/* Coordinated-task plan floating above the coordinator desk (zone 01). */}
-                        {props.plan && (
-                          <div style={{ position: "absolute", left: "2.8%", top: "1.5%", pointerEvents: "auto", zIndex: 4 }}>
-                            <TaskPlanView plan={props.plan} compact />
-                          </div>
-                        )}
-                      </div>
+                      <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
                     </div>
                   </div>
 
@@ -707,7 +610,7 @@ function AttachBar(props: { attachments: { name: string; mime: string }[]; onRem
 // Chat input with the SAME slash-command list the TUI shows (filtered as you type,
 // arrows to select, Enter/Tab to complete) plus @-file autocomplete. A paperclip
 // button (and drag-and-drop onto the row) stages real file uploads.
-function ChatInput(props: { value: string; onChange: (v: string) => void; onSubmit: () => void; commands: CommandItem[]; requestFiles: (t: number, q: string) => Promise<string[]>; tabId: number | null; onAddFiles: (files: File[]) => void; canImage: boolean; canDoc: boolean }) {
+function ChatInput(props: { value: string; onChange: (v: string) => void; onSubmit: () => void; commands: CommandItem[]; requestFiles: (t: number, q: string) => Promise<string[]>; tabId: number | null; onAddFiles: (files: File[]) => void; canImage: boolean; canDoc: boolean; mobile?: boolean }) {
   const { value } = props;
   const ref = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -770,13 +673,20 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFiles(e.dataTransfer.files); }}
-        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: "7px 9px" }}
+        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: props.mobile ? "5px 7px" : "7px 9px", minHeight: props.mobile ? 44 : undefined, boxSizing: "border-box" }}
       >
-        <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>
-        <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder="message this session… (/ commands, @ files, ⎘ to attach)" style={{ flex: 1, minWidth: 0, fontSize: 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
         <input ref={fileRef} type="file" multiple accept={accept} onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
-        <button type="button" title="attach files" onClick={() => fileRef.current?.click()} style={{ fontFamily: MONO, fontSize: 14, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 2px" }}>📎</button>
-        <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
+        {/* On mobile: paperclip left, larger input, SEND right (one-handed). */}
+        {props.mobile
+          ? <button type="button" title="attach files" onClick={() => fileRef.current?.click()} style={{ fontFamily: MONO, fontSize: 18, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", minWidth: 40, minHeight: 40 }}>📎</button>
+          : <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>}
+        <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder={props.mobile ? "message…" : "message this session… (/ commands, @ files, ⎘ to attach)"} style={{ flex: 1, minWidth: 0, fontSize: props.mobile ? 15 : 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
+        {props.mobile
+          ? <button type="button" onClick={props.onSubmit} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, minWidth: 56, minHeight: 40, cursor: "pointer" }}>SEND</button>
+          : (<>
+              <button type="button" title="attach files" onClick={() => fileRef.current?.click()} style={{ fontFamily: MONO, fontSize: 14, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 2px" }}>📎</button>
+              <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
+            </>)}
       </div>
     </div>
   );
@@ -787,7 +697,7 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
 // a fixed height from its flex parent and scrolls internally, so a long task never
 // grows the panel; auto-scroll follows new messages while the user is at the bottom,
 // and a "↓ new message" pill appears when they've scrolled up to read history.
-function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; onToggleDetach: () => void; onHeaderMouseDown?: (e: React.MouseEvent) => void }) {
+function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; onToggleDetach: () => void; onHeaderMouseDown?: (e: React.MouseEvent) => void; mobile?: boolean }) {
   const { model } = p;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -854,7 +764,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                 )}
                 {p.canSaveVault && m.kind === "assistant" && (
                   m.autoSaved
-                    ? <div style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", fontStyle: "italic" }}>⬇ auto-saved to vault</div>
+                    ? <div style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B", fontStyle: "italic" }}>⬇ auto-saved to vault · {m.autoSaved}</div>
                     : p.onSaveMsg && (
                       <div style={{ display: "flex" }}>
                         <button type="button" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))}
@@ -877,10 +787,11 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
       </div>
       <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, flex: "0 0 auto" }}>
         <AttachBar attachments={p.attachments} onRemove={p.onRemoveAttachment} />
-        <ChatInput value={p.draft} onChange={p.onDraft} onSubmit={p.onSend} commands={p.commands} requestFiles={p.requestFiles} tabId={p.activeTabId} onAddFiles={p.onAddFiles} canImage={p.canImage} canDoc={p.canDoc} />
+        <ChatInput value={p.draft} onChange={p.onDraft} onSubmit={p.onSend} commands={p.commands} requestFiles={p.requestFiles} tabId={p.activeTabId} onAddFiles={p.onAddFiles} canImage={p.canImage} canDoc={p.canDoc} mobile={p.mobile} />
+        {/* On mobile SEND lives inside the input row; keep only the context line here. */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <span style={{ fontSize: 9, letterSpacing: 1, color: "#6B6B7B" }}>{model.ctxLine}</span>
-          <button type="button" onClick={p.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>
+          {!p.mobile && <button type="button" onClick={p.onSend} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 16px", cursor: "pointer" }}>SEND</button>}
         </div>
       </div>
     </>

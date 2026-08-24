@@ -4,10 +4,11 @@ import type { ConnectionsData, MemoryData } from "./types";
 import { FilesBody } from "./FileBrowser";
 import { ObsidianBody } from "./ObsidianPanel";
 import { ConnectionsBody } from "./ConnectionsPanel";
+import { WebhooksBody } from "./WebhooksPanel";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-type Tab = "files" | "obsidian" | "connections";
+type Tab = "files" | "obsidian" | "connections" | "webhooks";
 
 // The collapsible left panel: a tab switcher over FILES (the session cwd) and
 // OBSIDIAN (the configured vault, .md only). The OBSIDIAN tab appears only when a
@@ -24,6 +25,7 @@ export function LeftPanel(props: {
   onRefreshConnections: () => void;
   onToggleMcp: (name: string, enabled: boolean) => void;
   onClearMemory: () => void;
+  webhookEpoch: number;
 }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<Tab>("files");
@@ -50,7 +52,8 @@ export function LeftPanel(props: {
     </button>
   );
 
-  const refresh = () => { setBump((n) => n + 1); if (active === "obsidian") props.onRefreshVault(); if (active === "connections") props.onRefreshConnections(); };
+  const refresh = () => { setBump((n) => n + 1); if (active === "obsidian") props.onRefreshVault(); if (active === "connections") props.onRefreshConnections(); if (active === "webhooks") setWebhookBump((n) => n + 1); };
+  const [webhookBump, setWebhookBump] = useState(0);
 
   return (
     <div style={{ flex: "0 0 232px", width: 232, alignSelf: "stretch", minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column" }}>
@@ -59,6 +62,7 @@ export function LeftPanel(props: {
           {tabBtn("files", "FILES", "#22D3EE")}
           {hasVault && tabBtn("obsidian", "OBSIDIAN", "#A78BFA")}
           {tabBtn("connections", "CONNECTIONS", "#EC4899")}
+          {tabBtn("webhooks", "WEBHOOKS", "#4ADE80")}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={refresh} title="refresh" style={{ fontFamily: MONO, fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>↻</button>
@@ -70,8 +74,10 @@ export function LeftPanel(props: {
           <FilesBody tabId={props.tabId} fileEpoch={props.fileEpoch + bump} onAttach={props.onAttach} />
         ) : active === "obsidian" ? (
           <ObsidianBody vault={props.vault} />
-        ) : (
+        ) : active === "connections" ? (
           <ConnectionsBody data={props.connections} memory={props.memory} onToggle={props.onToggleMcp} onClearMemory={props.onClearMemory} />
+        ) : (
+          <WebhooksBody webhookEpoch={props.webhookEpoch + webhookBump} localOrigin={typeof location !== "undefined" ? location.origin : ""} />
         )}
       </div>
     </div>
