@@ -165,7 +165,7 @@ export function reducer(state: State, action: Action): State {
       return { ...state, selected: action.id };
     case "agent.created": {
       if (state.agents[action.tabId]) return state; // snapshot may duplicate
-      const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: 0, tokens: 0, awaitingPermission: false, imageInput: !!action.imageInput, documentInput: !!action.documentInput };
+      const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: 0, tokens: 0, awaitingPermission: false, imageInput: !!action.imageInput, documentInput: !!action.documentInput, contextLimit: action.contextLimit ?? 0 };
       return {
         ...state,
         agents: { ...state.agents, [action.tabId]: agent },

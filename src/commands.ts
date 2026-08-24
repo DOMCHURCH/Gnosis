@@ -41,7 +41,7 @@ export const COMMANDS: CommandDef[] = [
   { name: "/jobs", desc: "list background jobs" },
   { name: "/job", args: "<id>", desc: "show a background job's output" },
   { name: "/kill", args: "<id>", desc: "stop a background job" },
-  { name: "/serve", args: "[stop] [--port <n>] [--public] [--lan]", desc: "start/stop the web view (--public: tunnel, --lan: same-WiFi QR; all with QR codes)" },
+  { name: "/serve", args: "[stop] [--port <n>] [--public]", desc: "start/stop the web view (LOCAL + LAN QR always; --public: tunnel)" },
   { name: "/webhooks", args: "[clear]", desc: "list webhooks captured this session (inspector lives in the WEBHOOKS tab)" },
   { name: "/design", args: "[url|port|off]", desc: "screenshot the dev server, see it, and auto-capture before/after on web edits" },
   { name: "/hooks", desc: "list registered lifecycle hooks" },

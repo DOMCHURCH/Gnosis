@@ -73,3 +73,46 @@ export function groupChat(lines) {
     .filter((g) => g.kind === "tool" || g.isApproval || g.segments.some((s) => s.type === "code" || s.text.trim() !== ""))
     .map((g) => ({ key: g.key, from: g.from, time: g.time, kind: g.kind, isApproval: g.isApproval, permId: g.permId, resolved: g.resolved, tool: g.tool, segments: g.segments.map((s) => ({ type: s.type, lang: s.lang, text: s.text })) }));
 }
+
+// --- chat rail visual hierarchy ---------------------------------------------
+// Every message type gets its own treatment so a long conversation is scannable
+// without reading a word: tool calls sit inset behind a left rule, assistant text
+// is full-width and unboxed, system notes read as dim centred captions, user turns
+// are anchored to the right by a cyan edge, and permission prompts carry an amber
+// wash so they catch the eye while scrolling. Pure so the Node verify covers it.
+export const CHAT_HIERARCHY = {
+  toolRule: "#3A3A4A",
+  toolBg: "#15151C",
+  systemDim: "#6B6B7B",
+  userEdge: "#22D3EE33",
+  approvalTint: "#FBBF2422",
+};
+
+/**
+ * The presentation descriptor for one chat message.
+ *   variant     — which of the five treatments applies
+ *   bg          — the message body background ("transparent" for unboxed kinds)
+ *   borderLeft / borderRight — CSS border shorthands, "" for none
+ *   boxed       — whether the body keeps its 2px outline
+ *   fontSize    — relative size in em (1 = the rail's base size)
+ *   color       — the text colour, or "" to inherit the rail default
+ *   centered    — render as a centred caption rather than a left-aligned message
+ *   wrapTint    — a full-width tint painted behind the whole message ("" for none)
+ *   showMeta    — whether the from/time header row is shown
+ */
+export function messageStyle(kind, isApproval) {
+  if (isApproval) {
+    return { variant: "approval", bg: "#101017", borderLeft: "", borderRight: "", boxed: true, fontSize: 1, color: "", centered: false, wrapTint: CHAT_HIERARCHY.approvalTint, showMeta: true };
+  }
+  if (kind === "tool") {
+    return { variant: "tool", bg: CHAT_HIERARCHY.toolBg, borderLeft: `2px solid ${CHAT_HIERARCHY.toolRule}`, borderRight: "", boxed: false, fontSize: 0.9, color: "", centered: false, wrapTint: "", showMeta: false };
+  }
+  if (kind === "system") {
+    return { variant: "system", bg: "transparent", borderLeft: "", borderRight: "", boxed: false, fontSize: 0.85, color: CHAT_HIERARCHY.systemDim, centered: true, wrapTint: "", showMeta: false };
+  }
+  if (kind === "user") {
+    return { variant: "user", bg: "#101017", borderLeft: "", borderRight: `2px solid ${CHAT_HIERARCHY.userEdge}`, boxed: true, fontSize: 1, color: "", centered: false, wrapTint: "", showMeta: true };
+  }
+  // assistant (and anything unrecognised): full width, no box, no background.
+  return { variant: "assistant", bg: "transparent", borderLeft: "", borderRight: "", boxed: false, fontSize: 1, color: "", centered: false, wrapTint: "", showMeta: true };
+}

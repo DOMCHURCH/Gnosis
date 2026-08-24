@@ -90,11 +90,21 @@ if (info) {
 s.child.kill();
 
 // --- port already in use → clear error, non-zero exit ------------------------
+// The blocker binds 0.0.0.0, matching what `dom serve` itself now binds (LAN is
+// always on). A loopback-only blocker would NOT collide on Windows, so binding the
+// same wildcard address is what actually reproduces the conflict a second `dom
+// serve` on the same port hits.
 const blocker = net.createServer();
-await new Promise((r) => blocker.listen(0, "127.0.0.1", r));
+await new Promise((r) => blocker.listen(0, "0.0.0.0", r));
 const busyPort = blocker.address().port;
 const s2 = spawnServe(["--port", String(busyPort)]);
-const code = await new Promise((res) => s2.child.on("exit", res));
+// Bounded wait: a regression that lets the server start anyway must FAIL here, not
+// hang the whole verify run. Generous, because this is purely a hang guard — real
+// startup is fast, but the full verify run loads the machine.
+const code = await new Promise((res) => {
+  const t = setTimeout(() => { s2.child.kill(); res("timeout"); }, 90000);
+  s2.child.on("exit", (c) => { clearTimeout(t); res(c); });
+});
 ok("serving on a busy port exits non-zero", code === 1);
 ok("...with a clear 'already in use' message naming the port", new RegExp(`port ${busyPort} is already in use`).test(s2.getErr()));
 blocker.close();

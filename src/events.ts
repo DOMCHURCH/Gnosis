@@ -23,13 +23,16 @@ export interface AgentSnapshot {
   imageInput: boolean;
   /** True when the active model accepts document (PDF) input. */
   documentInput: boolean;
+  /** The active model's context window in tokens (0 when unknown) — the denominator
+   * for the web view's context-usage bar. */
+  contextLimit: number;
 }
 
 /** Every event the bus can carry. `unknown` payloads (preview/item/args) are
  * passed straight through and JSON-serialized by the server — the bus does not
  * couple to their concrete shapes. */
 export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean }
+  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number }
   | { type: "agent.closed"; tabId: number; name: string }
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }

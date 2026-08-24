@@ -141,7 +141,7 @@ export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise
   );
 
   bridge.getAgents = () =>
-    controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput() }));
+    controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength() }));
   bridge.getSkills = () => rootEngine.skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope }));
   bridge.onInput = (tabId, text, attachments) => {
     const tab = controller.byId(tabId) ?? controller.active();

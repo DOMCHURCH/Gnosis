@@ -162,7 +162,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // The running web server (persistent line above the status bar). Seeded from the
   // handle `dom serve` started, else null until `/serve` starts one.
   const [serve, setServe] = useState<{ url: string; handle: ServerHandle; publicUrl?: string; lanUrl?: string; tunnel?: { stop(): void } } | null>(
-    serveHandle ? { url: serveHandle.url, handle: serveHandle } : null,
+    serveHandle ? { url: serveHandle.url, handle: serveHandle, lanUrl: serveHandle.lanUrl ? `${serveHandle.lanUrl}/?token=${serveHandle.token}` : undefined } : null,
   );
   const serveRef = useRef(serve);
   serveRef.current = serve;
@@ -1524,7 +1524,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // connects at once already sees wired handlers.
   const wireBridge = (b: AppBridge) => {
     b.getAgents = () =>
-      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput() }));
+      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength() }));
     b.getSkills = () => controller.active().engine.skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope }));
     b.onInput = (tabId, text, attachments) => {
       const tab = controller.byId(tabId) ?? controller.active();
@@ -1571,9 +1571,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
   if (bridge) wireBridge(bridge);
 
-  // `/serve [stop] [--port <n>]`: start/stop the localhost web view over THIS
+  // `/serve [stop] [--port <n>] [--public]`: start/stop the web view over THIS
   // running session (same event bus + engines, not a separate process). Already
   // running → reprint the URL; `stop` → shut down and clear the persistent line.
+  // LOCAL and LAN URLs (+QRs) are always printed — the token, not reachability, is
+  // what gates access.
   const handleServe = async (arg: string) => {
     const toks = arg.split(/\s+/).filter(Boolean);
     if (toks[0] === "stop") {
@@ -1586,7 +1588,6 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       return;
     }
     const wantPublic = toks.includes("--public");
-    const wantLan = toks.includes("--lan");
     const pi = toks.indexOf("--port");
     const port = pi >= 0 && toks[pi + 1] ? Number(toks[pi + 1]) : undefined;
     if (port !== undefined && !Number.isInteger(port)) return sysLog("usage: /serve [stop] [--port <n>]");
@@ -1607,7 +1608,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     let handle: ServerHandle;
     try {
-      handle = await startServer(b, { port, lan: wantLan });
+      handle = await startServer(b, { port });
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "EADDRINUSE") sysLog(`serve: port ${port ?? 7777} is already in use — try /serve --port <n>`);
@@ -1630,6 +1631,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         sysLog(`serve: public tunnel unavailable (${(e as Error).message}) — continuing local-only`);
       }
     }
+    // LAN is always on — no flag. The LAN URL is absent only on a machine with no
+    // non-loopback address at all.
     const lanUrl = handle.lanUrl ? `${handle.lanUrl}/?token=${handle.token}` : undefined;
     setServe({ url: handle.url, handle, publicUrl, tunnel, lanUrl });
     // Print each URL with a scannable QR so a phone doesn't type the token.
@@ -1638,7 +1641,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (lanUrl) links.push({ label: "LAN   ", url: lanUrl });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
     for (const line of (await serveBlock(links)).split("\n")) sysLog(line);
-    sysLog("(127.0.0.1 only · token required · scan or open it · /serve stop to shut down)");
+    sysLog(`(${lanUrl ? "LAN + loopback" : "loopback only (no LAN address)"} · token required · scan or open it · /serve stop to shut down)`);
   };
 
   // Bridge background-job lifecycle to the bus, and let a web answer dismiss the
@@ -1980,8 +1983,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         </Box>
       ) : null}
 
-      {/* Persistent web-view line while `/serve` (or `dom serve`) is running. Shows
-          both the local and (when --public) the public URL. */}
+      {/* Persistent web-view line while `/serve` (or `dom serve`) is running. Always
+          shows local · lan; public is appended when --public opened a tunnel. */}
       {serve ? (
         <Box marginTop={tabbarShown ? 0 : 1} width={inner}>
           <Text color={col(C.cyan)} wrap="truncate">

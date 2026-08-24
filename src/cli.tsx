@@ -28,7 +28,7 @@ usage:
   dom -p "prompt" --save     ...and persist the one-shot turn as a session
   dom --json "prompt"        headless: stream structured JSONL events to stdout, exit
   dom schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
-  dom serve [--port 7777] [--public] [--lan]   TUI + web view (--public: tunnel, --lan: same-WiFi QR)
+  dom serve [--port 7777] [--public]          TUI + web view (LOCAL + LAN QR always; --public: tunnel)
   dom --help | --version
 
 Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
@@ -109,7 +109,7 @@ async function main() {
   if (flags.serve) {
     bridge = createBridge(new EventBus());
     try {
-      server = await startServer(bridge, { port: flags.port, lan: flags.lan });
+      server = await startServer(bridge, { port: flags.port });
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "EADDRINUSE") {
@@ -138,10 +138,12 @@ async function main() {
     // First output, on STDOUT, before the banner/TUI so it's always visible. Each URL
     // is followed by a scannable QR code so a phone doesn't have to type the token.
     const { serveBlock } = await import("./serveprint.js");
+    // LOCAL and LAN are both always printed (LAN needs no flag); the LAN line is
+    // omitted only when the machine genuinely has no non-loopback address.
     const links = [{ label: "LOCAL ", url: server.url }];
     if (server.lanUrl) links.push({ label: "LAN   ", url: `${server.lanUrl}/?token=${server.token}` });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
-    const scope = server.lanUrl ? "LAN + loopback (--lan)" : "127.0.0.1 only";
+    const scope = server.lanUrl ? "LAN + loopback" : "loopback only (no LAN address)";
     process.stdout.write(`dom serve — scan or open:\n${await serveBlock(links)}\n(${scope} · token required · Ctrl+C to stop)\n\n`);
 
     // No terminal attached → run the server headlessly (the browser drives it).

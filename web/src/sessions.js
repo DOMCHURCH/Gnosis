@@ -23,6 +23,23 @@ const VARIANTS = {
   application: ["#4ADE80", "#86E9AC"], subagents: ["#C084FC", "#D6ACFD", "#818CF8", "#C084FC", "#D6ACFD", "#818CF8"],
 };
 
+/** The three agent colour variants. A figure's colour decides its variant, and the
+ * variant gives it one small silhouette/desk difference so two agents of different
+ * colours are still distinguishable when the floor is zoomed out and the name tags
+ * are unreadable: VAR-A gets a monitor glow in its own colour, VAR-B stands a touch
+ * taller, VAR-C works a second monitor. */
+export function variantOf(color) {
+  const c = String(color || "").toUpperCase();
+  if (c === "#22D3EE" || c === "#5BE1F2") return "A"; // cyan
+  if (c === "#4ADE80" || c === "#86E9AC") return "C"; // green
+  return "B";                                        // purple / indigo family
+}
+
+/** Depth geometry shared by every zone box: a lit ceiling strip at the top, light
+ * top/left borders and dark bottom/right ones so the box reads as a room seen from
+ * slightly above rather than a flat rectangle. */
+export const ZONE_DEPTH = { border: 2, ceiling: 3, lightEdge: "#2A2A38", darkEdge: "#1a1a22", ceilingFill: "#3a3a4a", idleOpacity: 0.6 };
+
 const ZONE_HINT = {
   coordinator: "routes work when sub-agents are running",
   planning: "this session in plan mode",
@@ -111,9 +128,24 @@ export function floorFigures(state, tabId) {
 /** Geometry for one seated figure at desk slot `sl` = [x, y]. Shared by real,
  * debug, and manual figures so they line up on the desks identically. */
 function placeFigure(id, color, state, sl, selectedId, manual) {
+  const variant = variantOf(color);
+  const agX = sl[0] + 48, agY = sl[1] - 96;
+  // Working agents grow 10% and pick up a soft cyan glow; VAR-B stands 7% taller.
+  // Both are one transform about the figure's foot line so it never leaves the desk.
+  const s = state === "thinking" ? 1.1 : 1;
+  const sy = s * (variant === "B" ? 1.07 : 1);
+  const cx = agX + 32, by = agY + 96;
   return {
-    key: id, id, color, opacity: state === "idle" ? (manual ? 0.4 : 0.55) : (manual ? 0.72 : 1), manual: !!manual,
-    deskX: sl[0], deskY: sl[1], agX: sl[0] + 48, agY: sl[1] - 96,
+    key: id, id, color, variant,
+    // Idle agents sit at 90% opacity — present, but not competing with the working
+    // ones for attention. Manual (decorative) figures stay dimmer still.
+    opacity: state === "idle" ? (manual ? 0.4 : 0.9) : (manual ? 0.72 : 1),
+    manual: !!manual,
+    figTransform: s === 1 && sy === 1 ? undefined : `translate(${cx} ${by}) scale(${s.toFixed(3)} ${sy.toFixed(3)}) translate(${-cx} ${-by})`,
+    figFilter: state === "thinking" ? "drop-shadow(0 0 6px #22D3EE88)" : undefined,
+    deskGlow: variant === "A",        // VAR-A: monitor glow in the agent's colour
+    deskSecondMonitor: variant === "C", // VAR-C: a second monitor on the desk
+    deskX: sl[0], deskY: sl[1], agX, agY,
     armL: state === "thinking" ? { animation: "domArmA .34s ease-in-out infinite" } : undefined,
     armR: state === "thinking" ? { animation: "domArmB .34s ease-in-out infinite" } : undefined,
     cueX: sl[0] + 128, cueY: sl[1] - 72, cueYBig: sl[1] - 84,
@@ -159,7 +191,7 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
     manualSeated[m.zone].push(m);
   }
 
-  const zonePlates = [], zoneCurbs = [], zoneLabels = [], freeDesks = [], placed = [], nameTags = [];
+  const zonePlates = [], zoneCurbs = [], zoneDepth = [], zoneLabels = [], freeDesks = [], placed = [], nameTags = [];
   ZONES.forEach((zone) => {
     const list = byZone[zone.id];
     const total = all.filter((a) => (ZONE_BY_ID[a.zone] ? a.zone : "coding") === zone.id).length;
@@ -168,12 +200,19 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
     // so a placed manual expands its zone and reveals the remaining free desks.
     const collapsed = occupied === 0;
     const stripH = 76;
-    zonePlates.push({ key: zone.id, zone: zone.id, collapsed, x: zone.x, y: zone.y, w: zone.w, h: collapsed ? stripH : zone.d, fill: zone.color, op: collapsed ? 0.03 : 0.055 });
+    const h = collapsed ? stripH : zone.d;
+    // Idle zones sit at 60% of an active zone's tint (and depth), so the zones that
+    // actually have agents in them pull focus.
+    const dim = collapsed ? ZONE_DEPTH.idleOpacity : 1;
+    zonePlates.push({ key: zone.id, zone: zone.id, collapsed, x: zone.x, y: zone.y, w: zone.w, h, fill: zone.color, op: 0.055 * dim });
+    zoneDepth.push({ key: zone.id, zone: zone.id, collapsed, x: zone.x, y: zone.y, w: zone.w, h, dim });
     zoneCurbs.push({ key: `${zone.id}-l`, x: zone.x, y: zone.y, w: 8, h: collapsed ? stripH : zone.d, fill: zone.color, op: collapsed ? 0.35 : 0.9 });
     zoneCurbs.push({ key: `${zone.id}-b`, x: zone.x, y: zone.y + (collapsed ? stripH - 6 : zone.d - 6), w: zone.w, h: 6, fill: zone.color, op: collapsed ? 0.18 : 0.4 });
     zoneLabels.push({
       key: zone.id, left: pctX(zone.label[0]), top: pctY(zone.label[1]),
-      accent: collapsed ? "#6B6B7B" : zone.color, name: zone.name,
+      // Active zone names read at full brightness, idle ones drop back to the dim
+      // grey — the zone's own colour still identifies it via the curb and plate.
+      accent: collapsed ? "#6B6B7B" : "#C9C9D6", name: zone.name,
       count: collapsed ? `IDLE · 0/${zone.slots.length}` : (total > zone.slots.length ? `${list.length}/${total} · ${total - list.length} off-floor` : `${occupied}/${zone.slots.length}`),
       countColor: total > zone.slots.length ? "#FBBF24" : "#6B6B7B",
       // When empty, one dim line explaining what would put an agent here.
@@ -220,7 +259,55 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
     });
   }
 
-  return { zonePlates, zoneCurbs, zoneLabels, freeDesks, placed, nameTags, roster, offFloor, colorById, takenOverManualIds };
+  return { zonePlates, zoneCurbs, zoneDepth, zoneLabels, freeDesks, placed, nameTags, roster, offFloor, colorById, takenOverManualIds };
+}
+
+// --- minimap ----------------------------------------------------------------
+// A 120x90 scale model of the 1440x900 floor: one labelled square per zone, dim
+// when idle and bright when it holds agents, plus a viewport outline and the
+// scroll maths for click-to-centre. Pure so the Node verify covers the geometry.
+export const MINIMAP_W = 120;
+export const MINIMAP_H = 90;
+
+/** One square per zone, in minimap coordinates, carrying the floor-space centre a
+ * click should scroll to. `active` mirrors the zone plate's collapsed flag. */
+export function minimapModel(layout) {
+  const collapsedBy = {};
+  for (const p of (layout && layout.zonePlates) || []) collapsedBy[p.key] = !!p.collapsed;
+  return ZONES.map((z) => ({
+    key: z.id, zone: z.id,
+    label: z.name.slice(0, 2), // "01".."05"
+    x: (z.x / 1440) * MINIMAP_W, y: (z.y / 900) * MINIMAP_H,
+    w: (z.w / 1440) * MINIMAP_W, h: (z.d / 900) * MINIMAP_H,
+    color: z.color, active: !collapsedBy[z.id],
+    cx: z.x + z.w / 2, cy: z.y + z.d / 2,
+  }));
+}
+
+/** The white viewport outline, in minimap coordinates — null when the whole floor
+ * already fits (nothing is scrolled out of view, so an outline would be noise). */
+export function minimapViewport(scrollLeft, clientWidth, scrollWidth) {
+  if (!scrollWidth || !clientWidth || clientWidth >= scrollWidth - 1) return null;
+  const w = Math.max(6, (clientWidth / scrollWidth) * MINIMAP_W);
+  const x = Math.max(0, Math.min(MINIMAP_W - w, (scrollLeft / scrollWidth) * MINIMAP_W));
+  return { x, y: 0, w, h: MINIMAP_H };
+}
+
+/** The scrollLeft that puts floor-space x `cxFloor` in the middle of the viewport,
+ * clamped to the scrollable range. */
+export function centerScrollLeft(cxFloor, clientWidth, scrollWidth) {
+  const max = Math.max(0, scrollWidth - clientWidth);
+  return Math.max(0, Math.min(max, (cxFloor / 1440) * scrollWidth - clientWidth / 2));
+}
+
+/** The context-usage bar across the top of the floor: cumulative session tokens as
+ * a percentage of the model's context limit. Green under 50%, amber to 75%, red
+ * past it. `known` is false when no limit is available (nothing to show). */
+export function tokenBar(tokens, limit) {
+  if (!limit || limit <= 0) return { pct: 0, color: "#4ADE80", known: false, label: "" };
+  const pct = Math.max(0, Math.min(100, (Number(tokens) || 0) / limit * 100));
+  const color = pct > 75 ? "#F87171" : pct >= 50 ? "#FBBF24" : "#4ADE80";
+  return { pct, color, known: true, label: `${Math.round(pct)}% CTX` };
 }
 
 /** The whole view model: the rail of floors, the active floor's layout + figures,
@@ -254,6 +341,12 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals
   const awaitingAll = order.reduce((n, id) => n + floorFigures(state, id).filter((a) => a.state === "awaiting").length, 0);
   const totalAgents = order.reduce((n, id) => n + floorFigures(state, id).length, 0);
   const idx = order.indexOf(active);
+  // The floor indicators count what is actually SEATED on the floor (real, debug
+  // and manual figures alike), so the header can never say "all clear" while an
+  // amber badge is visible on a desk. `firstAwaiting` is what "N AWAITING" scrolls to.
+  const placedAwaiting = layout.placed.filter((pl) => pl.isAwaiting);
+  const placedWorking = layout.placed.filter((pl) => pl.isThinking || pl.isSpeaking).length;
+  const firstAwaiting = placedAwaiting[0] || null;
 
   return {
     floorTabs,
@@ -274,5 +367,19 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals
     offFloorColor: layout.offFloor.length ? "#FBBF24" : "#6B6B7B",
     ctxLine: `${figs.length} agents · ${state.order.length} sessions`,
     chatHeader: tab ? `CHAT · ${tab.name}` : "CHAT",
+    // --- floor status indicators ---
+    // One dot beside OFFICE FLOOR: green = everyone idle, cyan = someone working,
+    // amber = someone blocked on an approval.
+    floorDot: placedAwaiting.length ? "#FBBF24" : placedWorking ? "#22D3EE" : "#4ADE80",
+    floorDotPulse: !!(placedAwaiting.length || placedWorking),
+    // The agent count, swapped for the amber blocked count whenever anything on
+    // this floor is waiting on the user.
+    floorCount: placedAwaiting.length ? `${placedAwaiting.length} AWAITING` : `${layout.placed.length} AGENTS`,
+    floorCountColor: placedAwaiting.length ? "#FBBF24" : "#6B6B7B",
+    floorAwaitingCount: placedAwaiting.length,
+    firstAwaitingId: firstAwaiting ? firstAwaiting.id : null,
+    firstAwaitingX: firstAwaiting ? firstAwaiting.deskX + 60 : null,
+    // Context usage for the 2px bar across the top of the floor container.
+    tokenBar: tokenBar(tab ? tab.tokens : 0, tab ? tab.contextLimit : 0),
   };
 }

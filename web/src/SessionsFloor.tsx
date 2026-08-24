@@ -8,6 +8,9 @@ import { elapsedLabel } from "./telemetry.js";
 import { TaskPlanView } from "./TaskPlanView";
 import type { TaskPlan } from "./taskplan";
 import { FloorGraphic } from "./FloorGraphic";
+import { FloorMinimap } from "./FloorMinimap";
+import { messageStyle } from "./chatgroups.js";
+import { centerScrollLeft } from "./sessions.js";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: string; }
 export interface SelDetail {
@@ -139,6 +142,23 @@ export function SessionsFloor(props: SessionsProps) {
   const [filesOpen, setFilesOpen] = useState(false);  // narrow/mobile: file browser bottom sheet
   const [jobsOpen, setJobsOpen] = useState(false);    // narrow/mobile: background jobs bottom sheet
 
+  // The horizontally-scrolling wrapper around the floor SVG. The minimap reads its
+  // live scroll geometry (and writes it on click), so it needs the node itself; the
+  // epoch just forces a re-render whenever that geometry changes.
+  const floorScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const [floorEpoch, setFloorEpoch] = useState(0);
+  const bumpFloor = () => setFloorEpoch((n) => n + 1);
+  useEffect(() => { bumpFloor(); }, [zoom]);
+  // "N AWAITING" in the floor header: scroll the first blocked agent into view and
+  // select it, so one click gets from "something is stuck" to the prompt itself.
+  const gotoAwaiting = () => {
+    if (model.firstAwaitingId) props.onSelectFig(model.firstAwaitingId);
+    const node = floorScrollRef.current;
+    if (!node || model.firstAwaitingX == null) return;
+    node.scrollTo({ left: centerScrollLeft(model.firstAwaitingX, node.clientWidth, node.scrollWidth), behavior: "smooth" });
+  };
+
   // Chat panel: docked height (resizable), detach/float, floating rect. Persisted.
   const [chatHeight, setChatHeight] = useState<number | null>(() => lsGet<number | null>(CHAT_H_KEY, null));
   const [detached, setDetached] = useState<boolean>(() => lsGet<boolean>(CHAT_DETACH_KEY, false));
@@ -208,7 +228,16 @@ export function SessionsFloor(props: SessionsProps) {
                 <span style={{ marginLeft: "auto", fontSize: 9, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
               </div>
               <div style={{ position: "relative", background: "#15151C", border: "2px solid #2A2A38", padding: 8 }}>
-                <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+                {/* Context-usage bar across the very top of the floor container. */}
+                {model.tokenBar.known && (
+                  <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, background: "#101017" }}>
+                    <div style={{ width: `${model.tokenBar.pct}%`, height: "100%", background: model.tokenBar.color }} />
+                  </div>
+                )}
+                <div ref={mobileScrollRef} onScroll={bumpFloor} style={{ overflowX: "auto", overflowY: "hidden" }}>
+                  <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+                </div>
+                <FloorMinimap L={L} scrollRef={mobileScrollRef} epoch={floorEpoch} mobile />
               </div>
             </div>
           )}
@@ -317,20 +346,39 @@ export function SessionsFloor(props: SessionsProps) {
               )}
               <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>OFFICE FLOOR · CLICK AN AGENT{narrow ? <button type="button" onClick={() => setFloorOpen(false)} style={{ ...ZBTN, marginLeft: 10, padding: "2px 8px" }}>▴ HIDE</button> : null}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>
+                    {/* Live system state at a glance: green = idle, cyan = working,
+                        amber = blocked on an approval. Replaces the static LIVE tag. */}
+                    <span title={model.sessionState} style={{ width: 8, height: 8, background: model.floorDot, ...(model.floorDotPulse ? { animation: "domTab 1.4s ease-in-out infinite" } : {}) }} />
+                    <span>OFFICE FLOOR · CLICK AN AGENT</span>
+                    {model.floorAwaitingCount > 0
+                      ? <button type="button" onClick={gotoAwaiting} title="scroll to the first agent waiting on you"
+                          style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 2, background: "transparent", color: model.floorCountColor, border: 0, padding: 0, cursor: "pointer" }}>{model.floorCount}</button>
+                      : <span style={{ color: model.floorCountColor }}>{model.floorCount}</span>}
+                    {model.tokenBar.known && <span style={{ color: model.tokenBar.color }}>{model.tokenBar.label}</span>}
+                    {narrow ? <button type="button" onClick={() => setFloorOpen(false)} style={{ ...ZBTN, padding: "2px 8px" }}>▴ HIDE</button> : null}
+                  </span>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))} style={ZBTN}>−</button>
-                    <button type="button" onClick={() => setZoom(1)} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2A2A38" }}>FIT</button>
-                    <button type="button" onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))} style={ZBTN}>+</button>
+                    <button type="button" onClick={() => { setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2))); }} style={ZBTN}>−</button>
+                    <button type="button" onClick={() => { setZoom(1); }} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2A2A38" }}>FIT</button>
+                    <button type="button" onClick={() => { setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2))); }} style={ZBTN}>+</button>
                   </div>
                 </div>
 
                 <div style={{ position: "relative" }}>
-                  <div style={{ overflowX: zoom > 1 ? "auto" : "hidden", overflowY: "hidden" }}>
+                  {/* A 2px context meter across the very top of the floor: cumulative
+                      session tokens against the model's context limit. */}
+                  {model.tokenBar.known && (
+                    <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, zIndex: 2, background: "#101017" }}>
+                      <div style={{ width: `${model.tokenBar.pct}%`, height: "100%", background: model.tokenBar.color }} />
+                    </div>
+                  )}
+                  <div ref={floorScrollRef} onScroll={bumpFloor} style={{ overflowX: zoom > 1 ? "auto" : "hidden", overflowY: "hidden" }}>
                     <div style={{ position: "relative", width: `${zoom * 100}%` }}>
                       <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
                     </div>
                   </div>
+                  <FloorMinimap L={L} scrollRef={floorScrollRef} epoch={floorEpoch} />
 
                   {sel && (
                     <AgentTelemetryPanel
@@ -566,8 +614,11 @@ function ToolLine(props: { tool: ToolPayload }) {
   const t = props.tool;
   const [open, setOpen] = useState(false);
   const dot = t.ok ? "#22D3EE" : "#F87171";
+  // Tool calls read as machinery, not conversation: inset behind a left rule, on
+  // their own tint, a notch smaller than the prose around them.
+  const st = messageStyle("tool", false);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, background: st.bg, borderLeft: st.borderLeft, padding: "5px 8px", fontSize: `${st.fontSize}em` }}>
       <div onClick={() => setOpen((o) => !o)} title="click to expand" style={{ cursor: "pointer", fontFamily: MONO, fontSize: 11, lineHeight: 1.5 }}>
         <div style={{ color: "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <span style={{ color: dot }}>●</span> {t.tool}({t.primary}{t.secondary})
@@ -730,7 +781,6 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
       <div onMouseDown={p.onHeaderMouseDown} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38", flex: "0 0 auto", cursor: p.onHeaderMouseDown ? "move" : "default", userSelect: "none" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 9, letterSpacing: 1, color: "#22D3EE" }}>LIVE</span>
           {p.canDetach && (
             <button type="button" title={p.detached ? "dock (snap back)" : "detach into a floating panel"} onMouseDown={(e) => e.stopPropagation()} onClick={p.onToggleDetach}
               style={{ fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: 0 }}>
@@ -744,14 +794,27 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
           {p.chat.map((m) => {
             if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
             const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
+            // One visual treatment per message type so a long scroll is scannable
+            // without reading a word — see messageStyle in chatgroups.js.
+            const st = messageStyle(m.kind, m.isApproval);
             return (
-              <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
-                  <span style={{ width: 8, height: 8, background: m.color }} />
-                  <span style={{ color: m.color }}>{m.from}</span>
-                  <span style={{ color: "#6B6B7B" }}>{m.time}</span>
-                </div>
-                <div style={{ fontSize: 11, lineHeight: 1.6, color: resolvedColor ?? "#C9C9D6", background: "#101017", border: `2px solid ${m.border}`, padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5, ...(st.wrapTint ? { background: st.wrapTint, padding: 8 } : {}), ...(st.centered ? { alignItems: "center", textAlign: "center" } : {}) }}>
+                {st.showMeta && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
+                    <span style={{ width: 8, height: 8, background: m.color }} />
+                    <span style={{ color: m.color }}>{m.from}</span>
+                    <span style={{ color: "#6B6B7B" }}>{m.time}</span>
+                  </div>
+                )}
+                <div style={{
+                  fontSize: `${11 * st.fontSize}px`, lineHeight: 1.6,
+                  color: resolvedColor ?? (st.color || "#C9C9D6"),
+                  background: st.bg,
+                  ...(st.boxed ? { border: `2px solid ${m.border}`, padding: 8 } : {}),
+                  ...(st.borderLeft ? { borderLeft: st.borderLeft, paddingLeft: 8 } : {}),
+                  ...(st.borderRight ? { borderRight: st.borderRight, paddingRight: 8 } : {}),
+                  display: "flex", flexDirection: "column", gap: 6,
+                }}>
                   {m.segments.map((s, i) => s.type === "code"
                     ? <CodeBlock key={i} lang={s.lang} text={s.text} />
                     : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap", color: resolvedColor ?? undefined }}>{s.text}</div>)}

@@ -4,9 +4,11 @@
 // connected clients; client messages route back through the AppBridge.
 //
 // Security (all enforced here, before anything else runs):
-//   - binds 127.0.0.1 ONLY (never 0.0.0.0)
-//   - rejects any request whose Host header isn't localhost (DNS-rebinding defense)
-//   - a random per-startup token is required on every HTTP request and WS connect
+//   - binds 0.0.0.0 so a phone on the same WiFi can reach it (LAN is always on)
+//   - rejects any request whose Host header isn't loopback or a private LAN IPv4
+//     (DNS-rebinding defense — a public hostname is still refused)
+//   - a random per-startup token is required on every HTTP request and WS connect,
+//     so reachability alone grants nothing: without the token there is no access
 //
 // The WebSocket layer is hand-rolled (RFC 6455 text frames) so dom stays
 // dependency-light — the browser uses the native WebSocket API on the other end.
@@ -81,13 +83,15 @@ async function collectKeys(): Promise<{ name: string; present: boolean; last4: s
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/** Host-header allowlist: loopback names always; private LAN IPv4s only when serving
- * with --lan (so a phone on the same WiFi can reach it). Still blocks DNS rebinding. */
-export function hostOk(hostHeader: string | undefined, allowLan = false): boolean {
+/** Host-header allowlist: loopback names, plus private LAN IPv4s (always — a phone
+ * on the same WiFi reaches the UI by IP). Any other Host is refused, so DNS
+ * rebinding through a public hostname is still blocked. The token gate is the
+ * access control; this is only the rebinding defense. */
+export function hostOk(hostHeader: string | undefined): boolean {
   if (!hostHeader) return false;
   const host = hostHeader.replace(/:\d+$/, "").toLowerCase().replace(/^\[|\]$/g, "");
   if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
-  return allowLan && isPrivateIpv4(host);
+  return isPrivateIpv4(host);
 }
 
 function tokenOk(candidate: string | undefined | null, token: string): boolean {
@@ -456,22 +460,22 @@ export interface ServerHandle {
   token: string;
   port: number;
   clients(): number;
-  /** The LAN URL (base, no token) when serving with --lan, else null. */
+  /** The LAN URL (base, no token); null only when the machine has no LAN address. */
   lanUrl: string | null;
   /** Record the public tunnel URL (base, no token) so /api/serveinfo exposes it. */
   setPublicUrl(url: string | null): void;
   close(): Promise<void>;
 }
 
-export async function startServer(bridge: AppBridge, opts: { port?: number; lan?: boolean } = {}): Promise<ServerHandle> {
+export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
   // The public tunnel URL (base, no token), set by /serve --public via setPublicUrl.
   let publicUrl: string | null = null;
-  // --lan: bind all interfaces + accept private-LAN Hosts so a phone on the same WiFi
-  // can reach the UI. Without it, loopback only (the secure default).
-  const lan = !!opts.lan;
-  const bindHost = lan ? "0.0.0.0" : "127.0.0.1";
-  const lanAddr = lan ? lanIp() : null;
+  // LAN is always on: bind every interface and accept private-LAN Hosts so a phone
+  // on the same WiFi can scan the QR and land straight in the UI. There is no flag
+  // to turn this on or off — the per-startup token is what gates access.
+  const bindHost = "0.0.0.0";
+  const lanAddr = lanIp();
   // Resolved from the binary's own location (not the cwd) so assets are found no
   // matter where `dom serve` was launched.
   const staticDir = WEB_ASSETS_DIR;
@@ -494,7 +498,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number; lan?
   const jobsUnsub = bridgeJobsToBus(bridge.bus);
 
   const server = http.createServer((req, res) => {
-    if (!hostOk(req.headers.host, lan)) {
+    if (!hostOk(req.headers.host)) {
       res.writeHead(403);
       res.end("forbidden host");
       return;
@@ -528,7 +532,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number; lan?
   });
 
   server.on("upgrade", (req, socket) => {
-    if (!hostOk(req.headers.host, lan)) return void socket.destroy();
+    if (!hostOk(req.headers.host)) return void socket.destroy();
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     // Two token-gated channels: /ws (the event mirror) and /pty (the human terminal,
     // whose output never reaches the bus/model). Everything else is rejected.
@@ -564,7 +568,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number; lan?
     const client = { send, socket };
     const sendSnapshot = () => {
       for (const a of bridge.getAgents()) {
-        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput });
+        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput, contextLimit: a.contextLimit });
         if (a.busy) send({ type: "agent.busy", tabId: a.id, busy: true });
       }
     };

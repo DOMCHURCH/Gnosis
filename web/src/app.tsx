@@ -5,7 +5,7 @@ import { StreamDiff } from "./StreamDiff";
 import { DesignPanel } from "./DesignPanel";
 import { KanbanBoard } from "./KanbanBoard";
 import type { KanbanColumn } from "./kanban";
-import { QrPopover } from "./QrPopover";
+import { QrPopover, type QrCode } from "./QrPopover";
 import { WebhooksBody } from "./WebhooksPanel";
 import { classifyNote, noteSlug } from "./notesort.js";
 import { tokenizedUrl, token } from "./api";
@@ -275,9 +275,19 @@ export function App() {
   const publicTokenUrl = publicBase ? `${publicBase.replace(/\/$/, "")}/?token=${token()}` : null;
   const lanTokenUrl = serveInfo?.lan ? `${serveInfo.lan.replace(/\/$/, "")}/?token=${token()}` : null;
   const [serveMenu, setServeMenu] = useState(false);
-  const [qr, setQr] = useState<{ title: string; url: string } | null>(null);
+  const [qr, setQr] = useState<{ title: string; codes: QrCode[] } | null>(null);
+  // Every reachable URL, in one list. LOCAL and LAN are both always available (LAN
+  // needs no flag — the token is the gate); PUBLIC appears only with a live tunnel.
+  const allCodes: QrCode[] = [
+    { title: "LOCAL · this machine", url: localTokenUrl, color: "#22D3EE" },
+    ...(lanTokenUrl ? [{ title: "LAN · same WiFi", url: lanTokenUrl, color: "#FBBF24" }] : []),
+    ...(publicTokenUrl ? [{ title: "PUBLIC · tunnel", url: publicTokenUrl, color: "#4ADE80" }] : []),
+  ];
   const chip = (label: string, active: boolean, onClick: () => void, leftEdge: boolean) => (
     <button type="button" onClick={onClick} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: active ? "#1D1D27" : "#101017", color: active ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: leftEdge ? "2px solid #2A2A38" : 0 }}>{label}</button>
+  );
+  const qrItem = (label: string, color: string, codes: QrCode[], title: string, last: boolean) => (
+    <button type="button" onClick={() => { setQr({ title, codes }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color, border: 0, borderBottom: last ? 0 : "1px solid #2A2A38" }}>{label}</button>
   );
 
   const viewToggle = (
@@ -288,15 +298,14 @@ export function App() {
         {chip("◆ SERVE", serveMenu, () => setServeMenu((o) => !o), false)}
       </div>
       {serveMenu && (
-        <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", minWidth: 120 }}>
-          <button type="button" onClick={() => { setQr({ title: "LOCAL URL", url: localTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#22D3EE", border: 0, borderBottom: (lanTokenUrl || publicTokenUrl) ? "1px solid #2A2A38" : 0 }}>LOCAL · QR</button>
-          {lanTokenUrl && <button type="button" onClick={() => { setQr({ title: "LAN URL (same WiFi)", url: lanTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#FBBF24", border: 0, borderBottom: publicTokenUrl ? "1px solid #2A2A38" : 0 }}>LAN · QR</button>}
-          {publicTokenUrl && <button type="button" onClick={() => { setQr({ title: "PUBLIC URL", url: publicTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#4ADE80", border: 0 }}>PUBLIC · QR</button>}
+        <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", minWidth: 132 }}>
+          {qrItem("ALL · QR", "#C9C9D6", allCodes, "SERVE URLS", false)}
+          {allCodes.map((c, i) => qrItem(`${c.title.split(" · ")[0]} · QR`, c.color, [c], c.title.toUpperCase(), i === allCodes.length - 1))}
         </div>
       )}
     </div>
   );
-  const qrPopover = qr ? <QrPopover title={qr.title} url={qr.url} onClose={() => setQr(null)} /> : null;
+  const qrPopover = qr ? <QrPopover title={qr.title} codes={qr.codes} onClose={() => setQr(null)} /> : null;
 
   if (view === "kanban") {
     return (

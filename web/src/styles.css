@@ -114,6 +114,10 @@ button:hover { filter: brightness(1.12); }
 @keyframes domBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.1; } }
 @keyframes domBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes domScan { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+/* The only new motion on the floor: the amber badge over an agent that is blocked
+   waiting for the user. Fast and shallow so it reads as "act on me" without the
+   hard on/off flicker the old blink had. */
+@keyframes domAmberPulse { from { opacity: 0.6; } to { opacity: 1; } }
 @keyframes domCaret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 
 /* --- responsive: under 900px the office collapses to the sidebar+chat layout --- */

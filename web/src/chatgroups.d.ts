@@ -34,3 +34,21 @@ export function groupChat(lines: RawLine[]): ChatGroup[];
 
 /** Mark the pending approval `id` resolved and rewrite its text to the outcome. */
 export function resolveApproval(lines: RawLine[], id: string, answer: string): RawLine[];
+
+export interface MessageStyle {
+  variant: "tool" | "assistant" | "system" | "user" | "approval";
+  bg: string;
+  borderLeft: string;
+  borderRight: string;
+  boxed: boolean;
+  /** Relative font size in em (1 = the chat rail's base size). */
+  fontSize: number;
+  color: string;
+  centered: boolean;
+  /** Full-width tint painted behind the whole message ("" for none). */
+  wrapTint: string;
+  showMeta: boolean;
+}
+
+export const CHAT_HIERARCHY: { toolRule: string; toolBg: string; systemDim: string; userEdge: string; approvalTint: string };
+export function messageStyle(kind: string, isApproval?: boolean): MessageStyle;

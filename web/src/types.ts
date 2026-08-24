@@ -16,6 +16,8 @@ export interface Agent {
   imageInput: boolean;
   /** True when the active model accepts document (PDF) input. */
   documentInput: boolean;
+  /** The active model's context window in tokens (0 when unknown). */
+  contextLimit: number;
 }
 
 /** A file attachment sent alongside a message (base64 bytes + declared MIME). */
@@ -65,7 +67,7 @@ export interface PermissionRequest {
 }
 
 export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean }
+  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number }
   | { type: "agent.closed"; tabId: number; name: string }
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }
