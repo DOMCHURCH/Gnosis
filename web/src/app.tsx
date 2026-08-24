@@ -3,6 +3,8 @@ import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { StreamDiff } from "./StreamDiff";
 import { DesignPanel } from "./DesignPanel";
+import { KanbanBoard } from "./KanbanBoard";
+import type { KanbanColumn } from "./kanban";
 import { OverlayModal } from "./OverlayModal";
 import { LeftPanel } from "./LeftPanel";
 import { VaultSaveModal } from "./VaultSaveModal";
@@ -47,6 +49,11 @@ function fileToBase64(file: File): Promise<string> {
 export function App() {
   const { state, send, select, requestFiles, saveVault } = useDomSocket();
   const [selFig, setSelFig] = useState<string | null>(null);
+  // Top-level view: the office FLOOR (default) or the KANBAN board.
+  const [view, setView] = useState<"floor" | "kanban">("floor");
+  // Client-only kanban column overrides (ACTIVE/PARKED); REVIEW is derived from plan
+  // mode and DONE closes the session, so neither is stored here.
+  const [kanbanOverrides, setKanbanOverrides] = useState<Record<number, string>>({});
   const [draft, setDraft] = useState("");
   const [steer, setSteer] = useState("");
   // Files staged for the next message (base64 content blocks). Cleared on send.
@@ -233,8 +240,49 @@ export function App() {
   };
   const removeAttachment = (i: number) => setAttachments((a) => a.filter((_, k) => k !== i));
 
+  // Kanban: move a session between columns. REVIEW ⇒ read-only plan mode; DONE ⇒
+  // close after confirm; ACTIVE/PARKED are UI-only (and leave plan mode if set).
+  const moveKanban = (tabId: number, column: KanbanColumn) => {
+    if (column === "done") {
+      if (window.confirm(`Close session "${state.agents[tabId]?.name ?? tabId}"? This ends it.`)) send({ type: "agent.close", tabId });
+      return;
+    }
+    if (column === "review") {
+      send({ type: "command", tabId, command: "/mode plan" });
+      setKanbanOverrides((o) => ({ ...o, [tabId]: "review" }));
+      return;
+    }
+    if (state.agents[tabId]?.mode === "plan") send({ type: "command", tabId, command: "/mode ask" });
+    setKanbanOverrides((o) => ({ ...o, [tabId]: column }));
+  };
+  const openFromKanban = (tabId: number) => { select(tabId); setSelFig(null); setView("floor"); };
+
+  const viewToggle = (
+    <div style={{ position: "fixed", top: 10, right: 14, zIndex: 70, display: "flex", gap: 0, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+      {(["floor", "kanban"] as const).map((v) => (
+        <button key={v} type="button" onClick={() => setView(v)}
+          style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: view === v ? "#1D1D27" : "#101017", color: view === v ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: v === "kanban" ? 0 : "2px solid #2A2A38" }}>
+          {v.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view === "kanban") {
+    return (
+      <>
+        {viewToggle}
+        <KanbanBoard state={state} overrides={kanbanOverrides} onMove={moveKanban} onOpen={openFromKanban} />
+        {state.overlay && (
+          <OverlayModal key={state.overlay.id} overlay={state.overlay} onSelect={(value) => send({ type: "overlay.select", id: state.overlay!.id, value })} onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })} />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
+      {viewToggle}
       <SessionsFloor
         model={model}
         chat={chat}
