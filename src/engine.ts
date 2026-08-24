@@ -12,6 +12,8 @@ import { gitHead, gitDiff, gitDiffHead } from "./gitinfo.js";
 import { redactSecrets } from "./redact.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 import { recordSession } from "./sessionmemory.js";
+import { isWebFile } from "./design.js";
+import { captureScreenshot } from "./screenshot.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
 export function limitPhrase(detail: string): string {
@@ -248,6 +250,9 @@ export class Engine {
   /** True for a spawned sub-agent engine. Sub-agents get no `coordinate` runner,
    * which enforces "sub-agents cannot spawn further (coordinated) sub-agents". */
   isSubAgent = false;
+  /** Design mode (`/design`): the dev-server URL to screenshot, plus the last shot
+   * taken (the "before" for the next auto before/after). null when off. */
+  designMode: { url: string; lastShot: string | null } | null = null;
   /** Images attached to the NEXT user turn (an @image in TUI input). Consumed and
    * cleared when run() pushes the user message. */
   private nextUserImages: ImagePart[] = [];
@@ -343,6 +348,11 @@ export class Engine {
   /** Attach images to the next user turn (an @image reference typed in the TUI). */
   setNextUserImages(images: ImagePart[]): void {
     this.nextUserImages = images;
+  }
+  /** Append one image to the next user turn (used by /design to inject a screenshot
+   * as a vision block the model sees before it edits). */
+  addNextUserImage(image: ImagePart): void {
+    this.nextUserImages.push(image);
   }
   /** Attach documents to the next user turn (a web upload). */
   setNextUserFiles(files: FilePart[]): void {
@@ -1458,9 +1468,27 @@ export class Engine {
       if (this.autoCommit) {
         await autoCommitFile(abs, tool.name).catch(() => {});
       }
+      // Design mode: after an edit to a web file, auto-screenshot the dev server and
+      // emit a before/after pair for the diff viewer. Best-effort — never blocks or
+      // fails the edit.
+      if (this.designMode && isWebFile(String(args.path ?? ""))) {
+        await this.captureDesignShot(String(args.path ?? "")).catch(() => {});
+      }
     }
     await this.postHook(tool.name, args, result, cb);
     return result;
+  }
+
+  /** Screenshot the design-mode dev server and emit a before/after pair. The prior
+   * shot becomes "before"; the new one is stored as the next "before". Best-effort. */
+  private async captureDesignShot(relPath: string): Promise<void> {
+    const dm = this.designMode;
+    if (!dm) return;
+    const shot = await captureScreenshot(dm.url);
+    if (!shot.ok || !shot.data) return;
+    const after = `data:${shot.mime};base64,${shot.data}`;
+    this.bus?.emit({ type: "design.shot", tabId: this.agentId, path: relPath, before: dm.lastShot, after });
+    dm.lastShot = after;
   }
 
   /** `!command` — run bash directly, bypassing the model but not the gate. */

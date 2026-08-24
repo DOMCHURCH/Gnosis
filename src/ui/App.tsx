@@ -39,6 +39,8 @@ import { notify } from "../notify.js";
 import { createWorktree, listWorktrees, mergeWorktree, removeWorktree, slug as worktreeSlug } from "../worktree.js";
 import { readMemory, appendMemory, clearMemory, countEntries, memoryPath } from "../memory.js";
 import { buildLearnedContext, learnedStats, clearSessionMemory } from "../sessionmemory.js";
+import { resolveDesignUrl } from "../design.js";
+import { captureScreenshot } from "../screenshot.js";
 import { addSchedule, removeSchedule, loadSchedules, nextRunAt } from "../schedule.js";
 import { EventBus, createBridge, type AppBridge } from "../events.js";
 import { startServer, type ServerHandle } from "../server.js";
@@ -1103,6 +1105,33 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     armOverlay("file", "insert file path (fuzzy, repo-map ranked)", items, null, (v) => setInput(prefix + v + " "));
   };
 
+  // /design [url|port|off] — screenshot the running dev server, attach it to the
+  // next turn as a vision block, and turn on design mode so edits to web files
+  // auto-capture before/after. The URL comes from the arg, or a single port-bound
+  // background job, or an error asking for one.
+  const handleDesign = async (arg: string) => {
+    const tab = controller.active();
+    const engine = tab.engine;
+    if (arg.trim().toLowerCase() === "off") {
+      engine.designMode = null;
+      sysLog("design: off.");
+      return;
+    }
+    const ports = jobs.list().filter((j) => j.port != null).map((j) => j.port as number);
+    const res = resolveDesignUrl(arg, ports);
+    if (res.error || !res.url) { sysLog(`design: ${res.error}`); return; }
+    const url = res.url;
+    sysLog(`design: capturing ${url}…`);
+    const shot = await captureScreenshot(url);
+    if (!shot.ok || !shot.data || !shot.mime) { sysLog(`design: ${shot.error}`); return; }
+    const dataUrl = `data:${shot.mime};base64,${shot.data}`;
+    engine.designMode = { url, lastShot: dataUrl };
+    engine.addNextUserImage({ source: `design:${url}`, mime: shot.mime, data: shot.data });
+    if (!engine.supportsImageInput()) sysLog("design: note — the active model has no vision input, so it can't see the screenshot; switch to a vision model.");
+    sysLog(`design: on for ${url}. Screenshot attached to your next message; edits to web files will auto-capture before/after.`);
+    bridge?.bus.emit({ type: "design.shot", tabId: tab.id, path: "", before: null, after: dataUrl });
+  };
+
   const handleCommand = (value: string) => {
     const parts = value.slice(1).split(/\s+/);
     const cmd = (parts[0] ?? "").toLowerCase();
@@ -1386,6 +1415,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         break;
       case "serve":
         void handleServe(arg);
+        break;
+      case "design":
+        void handleDesign(arg);
         break;
       case "jobs":
         listJobs();

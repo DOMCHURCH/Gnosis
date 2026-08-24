@@ -60,6 +60,8 @@ export interface State {
   /** The active/last coordinated-task plan per tab (task.plan + subagent.start/end),
    * null when the tab has never run one. Drives the task execution plan view. */
   plans: Record<number, TaskPlan | null>;
+  /** Latest design-mode before/after screenshot pair per tab (design.shot). */
+  designShots: Record<number, { path: string; before: string | null; after: string } | null>;
   /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
    * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
   streamEdits: Record<number, StreamEdit | null>;
@@ -103,7 +105,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, streamEdits: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, streamEdits: {} };
 
 /** Fold a tabId-bearing event into that tab's telemetry record. */
 function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
@@ -264,6 +266,8 @@ export function reducer(state: State, action: Action): State {
     }
     case "task.plan":
       return { ...state, plans: { ...state.plans, [action.tabId]: planFromEvent(action) } };
+    case "design.shot":
+      return { ...state, designShots: { ...state.designShots, [action.tabId]: { path: action.path, before: action.before, after: action.after } } };
     case "subagent.start":
       return withItem(
         { ...state, subagents: [...state.subagents, { parentId: action.tabId, description: action.description, key: `${action.tabId}:${action.description}:${state.subagents.length}` }], plans: { ...state.plans, [action.tabId]: foldPlan(state.plans[action.tabId] ?? null, action, Date.now()) } },

@@ -64,6 +64,8 @@ export interface SessionsProps {
   goalBar?: ReactNode;
   /** Live streaming-edit diff viewer for the active tab (null when none). */
   streamPanel?: ReactNode;
+  /** Design-mode before/after screenshots for the active tab (null when none). */
+  designPanel?: ReactNode;
   /** Optional collapsible panel rendered at the far left (the File Browser). */
   leftPanel?: ReactNode;
   /** Optional collapsible panel rendered at the far right (the Background jobs panel). */
@@ -467,6 +469,8 @@ export function SessionsFloor(props: SessionsProps) {
             {props.goalBar}
 
             {props.plan && <TaskPlanView plan={props.plan} />}
+
+            {props.designPanel}
 
             {props.streamPanel}
 

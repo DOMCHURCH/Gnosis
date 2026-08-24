@@ -42,6 +42,7 @@ export const COMMANDS: CommandDef[] = [
   { name: "/job", args: "<id>", desc: "show a background job's output" },
   { name: "/kill", args: "<id>", desc: "stop a background job" },
   { name: "/serve", args: "[stop] [--port <n>]", desc: "start/stop the localhost web view over this session" },
+  { name: "/design", args: "[url|port|off]", desc: "screenshot the dev server, see it, and auto-capture before/after on web edits" },
   { name: "/hooks", desc: "list registered lifecycle hooks" },
   { name: "/init", args: "[--force]", desc: "scan the repo and write an AGENTS.md" },
   { name: "/map", desc: "print the repo map and its token count" },

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDomSocket } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { StreamDiff } from "./StreamDiff";
+import { DesignPanel } from "./DesignPanel";
 import { OverlayModal } from "./OverlayModal";
 import { LeftPanel } from "./LeftPanel";
 import { VaultSaveModal } from "./VaultSaveModal";
@@ -77,6 +78,11 @@ export function App() {
 
   const activeId = state.selected != null && state.agents[state.selected] ? state.selected : state.order[0] ?? null;
   const model = sessionsModel(state, activeId, selFig, debugRef.current.byFloor, manuals);
+
+  // Design-mode before/after panel: dismissable per shot (a new capture reappears).
+  const [dismissedShot, setDismissedShot] = useState<string | null>(null);
+  const activeShot = activeId != null ? state.designShots[activeId] ?? null : null;
+  const showShot = activeShot && activeShot.after !== dismissedShot ? activeShot : null;
 
   // A real/debug figure claimed a manual desk → drop the manual silently.
   const takenOver = model.layout.takenOverManualIds;
@@ -267,6 +273,7 @@ export function App() {
           />
         }
         plan={activeId != null ? state.plans[activeId] ?? null : null}
+        designPanel={showShot ? <DesignPanel shot={showShot} onClose={() => setDismissedShot(showShot.after)} /> : null}
         streamPanel={
           activeId != null && state.streamEdits[activeId]
             ? <StreamDiff edit={state.streamEdits[activeId]!} onUndo={() => send({ type: "command", tabId: activeId, command: "/undo" })} />

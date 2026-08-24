@@ -80,6 +80,7 @@ export type DomEvent =
   | { type: "subagent.start"; tabId: number; description: string }
   | { type: "subagent.end"; tabId: number; description: string; result: string; ok: boolean }
   | { type: "task.plan"; tabId: number; planId: string; subtasks: { index: number; description: string }[] }
+  | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
   | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[] }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }

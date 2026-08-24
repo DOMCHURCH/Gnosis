@@ -49,6 +49,10 @@ export type DomEvent =
   // A coordinated task() announced its plan: one row per subtask, tracked live via
   // the subagent.start/end events that follow (matched by description).
   | { type: "task.plan"; tabId: number; planId: string; subtasks: { index: number; description: string }[] }
+  // Design mode: a screenshot of the running dev server. `before` is the prior shot
+  // (null for the first), `after` the current one — both base64 PNG data URLs. `path`
+  // is the web file whose edit triggered the auto-shot ("" for the initial /design).
+  | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
   | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
