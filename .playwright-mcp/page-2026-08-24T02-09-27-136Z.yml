@@ -1,0 +1,1346 @@
+- generic [ref=f16e2]:
+  - navigation "Shortcuts menu" [ref=f16e3]:
+    - heading "Skip to" [level=2] [ref=f16e4]
+    - list "Skip to" [ref=f16e5]:
+      - listitem [ref=f16e6]:
+        - link "main content" [ref=f16e7] [cursor=pointer]:
+          - /url: "#skippedLink"
+          - text: Main content
+      - listitem [ref=f16e8]:
+        - link "About this item" [ref=f16e9] [cursor=pointer]:
+          - /url: "#featurebullets_feature_div"
+      - listitem [ref=f16e10]:
+        - link "Buying options" [ref=f16e11] [cursor=pointer]:
+          - /url: "#buybox"
+      - listitem [ref=f16e12]:
+        - link "Reviews" [ref=f16e13] [cursor=pointer]:
+          - /url: "#customerReviews"
+    - separator [ref=f16e14]
+    - heading "Keyboard shortcuts" [level=2] [ref=f16e15]
+    - list "Keyboard shortcuts" [ref=f16e16]:
+      - listitem [ref=f16e17]:
+        - link "Search, alt, forward slash" [ref=f16e18] [cursor=pointer]:
+          - /url: javascript:void(0)
+          - generic [ref=f16e19]:
+            - generic [ref=f16e20]: Search
+            - generic [ref=f16e21]:
+              - generic [ref=f16e22]: alt
+              - generic [ref=f16e23]: +
+              - generic [ref=f16e24]: /
+      - listitem [ref=f16e25]:
+        - link "Cart, shift, alt, c" [ref=f16e26] [cursor=pointer]:
+          - /url: javascript:void(0)
+          - generic [ref=f16e27]:
+            - generic [ref=f16e28]: Cart
+            - generic [ref=f16e29]:
+              - generic [ref=f16e30]: shift
+              - generic [ref=f16e31]: +
+              - generic [ref=f16e32]: alt
+              - generic [ref=f16e33]: +
+              - generic [ref=f16e34]: C
+      - listitem [ref=f16e35]:
+        - link "Home, shift, alt, h" [ref=f16e36] [cursor=pointer]:
+          - /url: javascript:void(0)
+          - generic [ref=f16e37]:
+            - generic [ref=f16e38]: Home
+            - generic [ref=f16e39]:
+              - generic [ref=f16e40]: shift
+              - generic [ref=f16e41]: +
+              - generic [ref=f16e42]: alt
+              - generic [ref=f16e43]: +
+              - generic [ref=f16e44]: H
+      - listitem [ref=f16e45]:
+        - link "Your orders, shift, alt, o" [ref=f16e46] [cursor=pointer]:
+          - /url: javascript:void(0)
+          - generic [ref=f16e47]:
+            - generic [ref=f16e48]: Orders
+            - generic [ref=f16e49]:
+              - generic [ref=f16e50]: shift
+              - generic [ref=f16e51]: +
+              - generic [ref=f16e52]: alt
+              - generic [ref=f16e53]: +
+              - generic [ref=f16e54]: O
+      - listitem [ref=f16e55]:
+        - button "Show/hide shortcuts, shift, alt, z" [ref=f16e56] [cursor=pointer]:
+          - generic [ref=f16e57]:
+            - generic [ref=f16e58]: Show/Hide shortcuts
+            - generic [ref=f16e59]:
+              - generic [ref=f16e60]: shift
+              - generic [ref=f16e61]: +
+              - generic [ref=f16e62]: alt
+              - generic [ref=f16e63]: +
+              - generic [ref=f16e64]: Z
+    - generic [ref=f16e67]:
+      - generic [ref=f16e68] [cursor=pointer]
+      - generic [ref=f16e70]: To move between items, use your keyboard's up or down arrows.
+  - banner [ref=f16e71]:
+    - navigation "Primary" [ref=f16e72]:
+      - generic [ref=f16e73]:
+        - generic [ref=f16e74]:
+          - link "Amazon" [ref=f16e76] [cursor=pointer]:
+            - /url: /ref=nav_logo
+          - button "Deliver to Canada" [ref=f16e79] [cursor=pointer]:
+            - generic [ref=f16e81]:
+              - generic [ref=f16e82]: Deliver to
+              - generic [ref=f16e83]: Canada
+        - search [ref=f16e86]:
+          - generic [ref=f16e89]:
+            - generic [ref=f16e90]: All
+            - combobox "Select the department you want to search in" [ref=f16e93] [cursor=pointer]:
+              - option "All Departments" [selected]
+              - option "Arts & Crafts"
+              - option "Automotive"
+              - option "Baby"
+              - option "Beauty & Personal Care"
+              - option "Books"
+              - option "Boys' Fashion"
+              - option "Computers"
+              - option "Deals"
+              - option "Digital Music"
+              - option "Electronics"
+              - option "Girls' Fashion"
+              - option "Health & Household"
+              - option "Home & Kitchen"
+              - option "Industrial & Scientific"
+              - option "Kindle Store"
+              - option "Luggage"
+              - option "Men's Fashion"
+              - option "Movies & TV"
+              - option "Music, CDs & Vinyl"
+              - option "Pet Supplies"
+              - option "Prime Video"
+              - option "Software"
+              - option "Sports & Outdoors"
+              - option "Tools & Home Improvement"
+              - option "Toys & Games"
+              - option "Video Games"
+              - option "Women's Fashion"
+          - searchbox "Search Amazon" [ref=f16e96]
+          - generic [ref=f16e97]:
+            - generic "Go" [ref=f16e99] [cursor=pointer]:
+              - button "Go" [ref=f16e100]
+            - button [ref=f16e102]: Agent Search
+        - generic [ref=f16e104]:
+          - generic [ref=f16e105]:
+            - link "Choose a language for shopping in Amazon United States. The current selection is English (EN)." [ref=f16e106] [cursor=pointer]:
+              - /url: /customer-preferences/edit?ie=UTF8&preferencesReturnUrl=%2F&ref_=topnav_lang_ais
+              - generic [ref=f16e109]:
+                - img "United States" [ref=f16e110]
+                - generic [ref=f16e111]: EN
+            - button "Expand to Change Language or Country" [ref=f16e112] [cursor=pointer]
+          - generic [ref=f16e113]:
+            - link "Hello, sign in Account & Lists" [ref=f16e114] [cursor=pointer]:
+              - /url: https://www.amazon.com/ap/signin?openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fdp%2FB0CX23V2ZK%3Fref_%3Dnav_ya_signin&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=usflex&openid.mode=checkid_setup&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0
+              - generic [ref=f16e115]: Hello, sign in
+              - generic [ref=f16e117]: Account & Lists
+            - button "Expand Account and Lists" [ref=f16e118] [cursor=pointer]
+          - link "Returns & Orders" [ref=f16e119] [cursor=pointer]:
+            - /url: /gp/css/order-history?ref_=nav_orders_first
+            - generic [ref=f16e120]: Returns
+            - generic [ref=f16e121]: "& Orders"
+          - link "1 item in cart" [ref=f16e122] [cursor=pointer]:
+            - /url: /gp/cart/view.html?ref_=nav_cart
+            - generic [ref=f16e123]: "1"
+            - generic [ref=f16e126]: Cart
+      - alertdialog "International Shopping Transition Alert" [ref=f16e128]:
+        - generic [ref=f16e129]:
+          - generic [ref=f16e133]:
+            - text: We're showing you items that ship to
+            - strong [ref=f16e134]: Canada
+            - text: . To see items that ship to a different country, change your delivery address.
+          - generic [ref=f16e135]:
+            - generic [ref=f16e137] [cursor=pointer]:
+              - button "Submit" [ref=f16e138]
+              - generic [ref=f16e139]: Dismiss
+            - generic [ref=f16e141] [cursor=pointer]:
+              - button "Submit" [ref=f16e142]
+              - generic [ref=f16e143]: Change Address
+      - generic [ref=f16e144]:
+        - button "Open All Categories Menu" [ref=f16e146] [cursor=pointer]:
+          - generic [ref=f16e148]: All
+        - list [ref=f16e152]:
+          - listitem [ref=f16e153]:
+            - link "Today's Deals" [ref=f16e155] [cursor=pointer]:
+              - /url: /gp/goldbox?ref_=nav_cs_gb
+          - listitem [ref=f16e156]:
+            - link "Customer Service" [ref=f16e158] [cursor=pointer]:
+              - /url: /gp/help/customer/display.html?nodeId=508510&ref_=nav_cs_customerservice
+          - listitem [ref=f16e159]:
+            - link "Prime Video" [ref=f16e161] [cursor=pointer]:
+              - /url: /Amazon-Video/b/?ie=UTF8&node=2858778011&ref_=nav_cs_prime_video
+          - listitem [ref=f16e162]:
+            - link "Gift Cards" [ref=f16e164] [cursor=pointer]:
+              - /url: /gift-cards/b/?ie=UTF8&node=2238192011&ref_=nav_cs_gc
+          - listitem [ref=f16e165]:
+            - link "Sell" [ref=f16e167] [cursor=pointer]:
+              - /url: /b/?_encoding=UTF8&ld=AZUSSOA-sell&node=12766669011&ref_=nav_cs_sell
+          - listitem [ref=f16e168]:
+            - link "Registry" [ref=f16e170] [cursor=pointer]:
+              - /url: /gp/browse.html?node=16115931011&ref_=nav_cs_registry
+          - link "Click to call our Disability Customer Support line, or reach us directly at 1-888-283-1678" [ref=f16e171] [cursor=pointer]:
+            - /url: /gp/help/customer/accessibility
+            - text: Disability Customer Support
+      - dialog [ref=f16e174]
+  - main [ref=f16e177]:
+    - list [ref=f16e184]:
+      - listitem [ref=f16e185]:
+        - link [ref=f16e187] [cursor=pointer]:
+          - /url: /dp/B0GR6BVYS5/ref=fs_a_mbt2_us0
+          - paragraph [ref=f16e188]: MacBook Neo
+      - listitem [ref=f16e189]:
+        - link [ref=f16e191] [cursor=pointer]:
+          - /url: /dp/B0GR1JKMBV/ref=fs_a_mbt2_us1
+          - paragraph [ref=f16e192]: MacBook Pro 16.2" (M5)
+      - listitem [ref=f16e193]:
+        - link [ref=f16e195] [cursor=pointer]:
+          - /url: /dp/B0FWD623D1/ref=fs_a_mbt2_us2
+          - paragraph [ref=f16e196]: MacBook Pro 14.2" (M5)
+      - listitem [ref=f16e197]:
+        - link [ref=f16e199] [cursor=pointer]:
+          - /url: /dp/B0GR1DVSQP/ref=fs_a_mbt2_us3
+          - paragraph [ref=f16e200]: MacBook Air 15.3" (M5)
+      - listitem [ref=f16e201]:
+        - link [ref=f16e203] [cursor=pointer]:
+          - /url: /dp/B0GR1493ZV/ref=fs_a_mbt2_us4
+          - paragraph [ref=f16e204]: MacBook Air 13.6" (M5)
+      - listitem [ref=f16e205]:
+        - link [ref=f16e207] [cursor=pointer]:
+          - /url: /stores/page/2085BB19-3EF8-4EDA-A032-E0E0DEC32542/ref=fs_a_mbt2_us5
+          - paragraph [ref=f16e208]: Mac accessories
+      - listitem [ref=f16e209]:
+        - link [ref=f16e211] [cursor=pointer]:
+          - /url: /stores/page/C20A2F07-D5C7-48FD-888A-CD36D8605F18/ref=fs_a_mdt2_us6
+          - paragraph [ref=f16e212]: AppleCare+
+    - generic [ref=f16e221]:
+      - generic [ref=f16e222]:
+        - text: Currently unavailable. We don't know when or if this item will be back in stock.
+        - generic [ref=f16e229] [cursor=pointer]:
+          - button "See Similar Items" [ref=f16e230]
+          - generic [ref=f16e231]: See Similar Items
+        - button "Deliver to Canada" [ref=f16e233] [cursor=pointer]
+      - separator [ref=f16e240]
+      - link "Add to List" [ref=f16e245] [cursor=pointer]:
+        - /url: https://www.amazon.com/ap/signin?openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Faw%2Fd%2FB0CX23V2ZK&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.assoc_handle=usflex&openid.mode=checkid_setup&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&
+    - generic [ref=f16e249]:
+      - button [ref=f16e250]:
+        - button "Share" [ref=f16e251] [cursor=pointer]
+      - generic [ref=f16e254]:
+        - radiogroup "Image thumbnails" [ref=f16e256]:
+          - listitem [ref=f16e257]:
+            - radio [ref=f16e262] [cursor=pointer]
+          - listitem [ref=f16e264]:
+            - radio [ref=f16e269] [cursor=pointer]
+          - listitem [ref=f16e271]:
+            - radio [ref=f16e276] [cursor=pointer]
+          - listitem [ref=f16e278]:
+            - radio [ref=f16e283] [cursor=pointer]
+          - listitem [ref=f16e285]:
+            - radio [ref=f16e290] [cursor=pointer]
+          - listitem [ref=f16e292]:
+            - radio [ref=f16e297] [cursor=pointer]
+          - listitem [ref=f16e299]:
+            - radio [ref=f16e304] [cursor=pointer]
+        - generic [ref=f16e306]:
+          - generic [ref=f16e308]:
+            - list
+            - list [ref=f16e309]:
+              - listitem [ref=f16e310] [cursor=pointer]:
+                - button [ref=f16e313]:
+                  - 'img "Apple 2024 MacBook Air 13-inch Laptop with M3 chip: Built for Apple Intelligence, 13.6-inch Liquid Retina Display, 8GB Unified Memory, 256GB SSD Storage, Backlit Keyboard, Touch ID; Midnight" [ref=f16e314]'
+          - link "Click to see full view" [ref=f16e318] [cursor=pointer]:
+            - /url: "#"
+    - generic [ref=f16e319]:
+      - 'heading "Apple 2024 MacBook Air 13-inch Laptop with M3 chip: Built for Apple Intelligence, 13.6-inch Liquid Retina Display, 8GB Unified Memory, 256GB SSD Storage, Backlit Keyboard, Touch ID; Midnight" [level=1] [ref=f16e322]'
+      - link "Visit the Apple Store" [ref=f16e325] [cursor=pointer]:
+        - /url: /stores/Apple/page/77D9E1F7-0337-4282-9DB6-B6B8FB2DC98D?lp_asin=B0CX23V2ZK&ref_=ast_bln
+      - generic [ref=f16e327]:
+        - generic "4.8 out of 5 stars" [ref=f16e329]:
+          - button "4.8 out of 5 stars" [ref=f16e331] [cursor=pointer]: "4.8"
+        - link "1,083 Reviews" [ref=f16e336] [cursor=pointer]:
+          - /url: "#averageCustomerReviewsAnchor"
+          - text: (1,083)
+      - button "1 sustainability feature" [ref=f16e340] [cursor=pointer]
+      - separator [ref=f16e341]
+      - generic [ref=f16e343]:
+        - generic [ref=f16e345]: Currently unavailable.
+        - text: We don't know when or if this item will be back in stock.
+      - generic [ref=f16e348]:
+        - list [ref=f16e351]:
+          - rowgroup [ref=f16e352]:
+            - listitem [ref=f16e353]: Brand Apple
+            - listitem [ref=f16e354]: Model Name MacBook Air
+            - listitem [ref=f16e355]: Screen Size 13.6 inches
+            - listitem [ref=f16e356]: Color Midnight
+            - listitem [ref=f16e357]: Hard Disk Size 256 GB
+            - listitem [ref=f16e358]: CPU Model Apple M3
+            - listitem [ref=f16e359]: Ram Memory Installed Size 8 GB
+            - listitem [ref=f16e360]: Operating System Mac OS
+            - listitem [ref=f16e361]: Special Feature Fingerprint Reader
+            - listitem [ref=f16e362]: Graphics Card Description Integrated
+        - button "See more" [ref=f16e365] [cursor=pointer]
+      - generic [ref=f16e368]:
+        - separator [ref=f16e369]
+        - heading "About this item" [level=1] [ref=f16e370]
+        - list [ref=f16e371]:
+          - listitem [ref=f16e372]: LEAN. MEAN. M3 MACHINE — With a powerful 8-core CPU and 10-core GPU, the blazing-fast MacBook Air with M3 chip is a superportable laptop that sails through work and play.
+          - listitem [ref=f16e373]: BUILT FOR APPLE INTELLIGENCE—Apple Intelligence is the personal intelligence system that helps you write, express yourself, and get things done effortlessly. With groundbreaking privacy protections, it gives you peace of mind that no one else can access your data—not even Apple.*
+          - listitem [ref=f16e374]: PORTABLE DESIGN — Lightweight and under half an inch thin, so you can take MacBook Air anywhere you go.
+          - listitem [ref=f16e375]: UP TO 18 HOURS OF BATTERY LIFE — Amazing, all-day battery life so you can leave the power adapter at home.
+          - listitem [ref=f16e376]: A BRILLIANT DISPLAY — The 13.6-inch Liquid Retina display supports 1 billion colors.
+          - listitem [ref=f16e377]: LOOK SHARP, SOUND GREAT — Everything looks and sounds amazing with a 1080p FaceTime HD camera, three mics, and four speakers with Spatial Audio.
+          - listitem [ref=f16e378]: APPS FLY WITH APPLE SILICON — All your favorites, from Microsoft 365 to Adobe Creative Cloud, run lightning fast in macOS.
+        - button "Show more" [ref=f16e380] [cursor=pointer]
+      - link "Report an issue with this product or seller" [ref=f16e386] [cursor=pointer]:
+        - /url: javascript:void(0)
+    - generic [ref=f16e390]:
+      - separator [ref=f16e391]
+      - generic [ref=f16e392]:
+        - generic [ref=f16e393]:
+          - heading "Sustainability features" [level=2] [ref=f16e396]
+          - paragraph [ref=f16e398]: This product has sustainability features recognized by trusted certifications.
+        - generic [ref=f16e401]:
+          - generic [ref=f16e402]: Energy efficiency
+          - paragraph [ref=f16e404]: Conserves energy compared to similar products.
+          - generic [ref=f16e405]: As certified by
+          - button "EPEAT" [ref=f16e408] [cursor=pointer]
+        - link "Climate Pledge Friendly Discover more products with sustainability features. Learn more" [ref=f16e412] [cursor=pointer]:
+          - /url: /climatepledgefriendly
+          - generic [ref=f16e413]:
+            - heading [level=3] [ref=f16e414]:
+              - img "Climate Pledge Friendly" [ref=f16e415]
+            - generic [ref=f16e416]:
+              - generic [ref=f16e417]: Discover more products with sustainability features.
+              - text: Learn more
+    - generic [ref=f16e419]:
+      - separator [ref=f16e420]
+      - generic [ref=f16e421]:
+        - 'heading "Top Brand: Apple" [level=2] [ref=f16e422]'
+        - generic [ref=f16e423]:
+          - generic [ref=f16e426]:
+            - generic [ref=f16e427]: Highly Rated
+            - generic [ref=f16e428]: 100K+ customers rate items from this brand highly
+          - generic [ref=f16e431]:
+            - generic [ref=f16e432]: Trending
+            - generic [ref=f16e433]: 100K+ orders for this brand in past 3 months
+          - generic [ref=f16e436]:
+            - generic [ref=f16e437]: Low Returns
+            - generic [ref=f16e438]: Customers usually keep items from this brand
+    - generic [ref=f16e440]:
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e446]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e452]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e458]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e464]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e470]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e476]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e482]
+      - img "MaxBook Air 13-inch with M1 chip." [ref=f16e488]
+      - img "MaxBook Air 13-inch with M3 chip." [ref=f16e494]
+      - img "image 1" [ref=f16e500]
+    - generic:
+      - navigation:
+        - navigation "Navigate within the product detail page":
+          - navigation "Back to top jump link":
+            - generic: Top
+          - navigation "About this item widget jump link":
+            - generic: About this item
+          - navigation "Product information widget jump link":
+            - generic: Product information
+          - navigation "Customer reviews widget jump link":
+            - generic: Reviews
+        - navigation "Back to top Image jump link":
+          - 'img "Apple 2024 MacBook Air 13-inch Laptop with M3 chip: Built for Apple Intelligence, 13.6-inch Liquid Retina Display, 8GB Unified Memory, 256GB SSD Storage, Backlit Keyboard, Touch ID; Midnight"'
+        - navigation "Back to top title jump link":
+          - generic: "Apple 2024 MacBook Air 13-inch Laptop with M3 chip: Built for Apple Intelligence, 13.6-inch Liquid Retina Display, 8GB Unified Memory, 256GB SSD Storage, Backlit Keyboard, Touch ID; Midnight"
+    - generic [ref=f16e502]:
+      - heading "Compare Apple MacBook products" [level=2] [ref=f16e504]
+      - table [ref=f16e506]:
+        - rowgroup [ref=f16e507]:
+          - row [ref=f16e508]:
+            - cell [ref=f16e509]
+            - cell [ref=f16e510]:
+              - link [ref=f16e513] [cursor=pointer]:
+                - /url: /dp/B0CX23V2ZK?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CX23V2ZK
+                - img "Apple MacBook Air with Apple M3 Chip (13.6-inch)" [ref=f16e514]
+            - cell [ref=f16e515]:
+              - link [ref=f16e518] [cursor=pointer]:
+                - /url: /dp/B0B3C2R8MP?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0B3C2R8MP
+                - img "Apple MacBook Air 13-inch with M2 Chip" [ref=f16e519]
+            - cell [ref=f16e520]:
+              - link [ref=f16e523] [cursor=pointer]:
+                - /url: /dp/B0CX23GFMJ?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CX23GFMJ
+                - img "Apple MacBook Air with Apple M3 Chip (15.3-inch)" [ref=f16e524]
+            - cell [ref=f16e525]:
+              - link [ref=f16e528] [cursor=pointer]:
+                - /url: /dp/B0CM5JV268?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CM5JV268
+                - img "Apple MacBook Pro with Apple M3 Chip (14-inch)" [ref=f16e529]
+            - cell [ref=f16e530]:
+              - link [ref=f16e533] [cursor=pointer]:
+                - /url: /dp/B0CM5JV26D?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CM5JV26D
+                - img "Apple MacBook Pro with Apple M3 Pro Chip or Apple M3 Max Chip (14-inch)" [ref=f16e534]
+          - row [ref=f16e535]:
+            - columnheader "DEVICE" [ref=f16e536]
+            - columnheader [ref=f16e538]:
+              - link "Apple MacBook Air with Apple M3 Chip (13.6-inch)" [ref=f16e540] [cursor=pointer]:
+                - /url: /dp/B0CX23V2ZK?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CX23V2ZK
+            - columnheader [ref=f16e541]:
+              - link "Apple MacBook Air 13-inch with M2 Chip" [ref=f16e543] [cursor=pointer]:
+                - /url: /dp/B0B3C2R8MP?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0B3C2R8MP
+            - columnheader [ref=f16e544]:
+              - link "Apple MacBook Air with Apple M3 Chip (15.3-inch)" [ref=f16e546] [cursor=pointer]:
+                - /url: /dp/B0CX23GFMJ?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CX23GFMJ
+            - columnheader [ref=f16e547]:
+              - link "Apple MacBook Pro with Apple M3 Chip (14-inch)" [ref=f16e549] [cursor=pointer]:
+                - /url: /dp/B0CM5JV268?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CM5JV268
+            - columnheader [ref=f16e550]:
+              - link "Apple MacBook Pro with Apple M3 Pro Chip or Apple M3 Max Chip (14-inch)" [ref=f16e552] [cursor=pointer]:
+                - /url: /dp/B0CM5JV26D?ref=amzdv_ucc_dp_lod_B0CX23V2ZK_B0CM5JV26D
+          - row [ref=f16e553]:
+            - rowheader "PRICE" [ref=f16e554]
+            - cell "-" [ref=f16e556]
+            - cell "-" [ref=f16e559]
+            - cell "-" [ref=f16e562]
+            - cell "-" [ref=f16e565]
+            - cell "-" [ref=f16e568]
+          - row [ref=f16e571]:
+            - rowheader "RATINGS" [ref=f16e572]
+            - cell "4.8 4.8 out of 5 stars (1,083)" [ref=f16e574]:
+              - generic [ref=f16e576]:
+                - text: "4.8"
+                - generic [ref=f16e577]: 4.8 out of 5 stars
+                - link "(1,083)" [ref=f16e579] [cursor=pointer]:
+                  - /url: /product-reviews/B0CX23V2ZK?ref=amzdv_ucc_dp_rvw_B0CX23V2ZK_B0CX23V2ZK
+            - cell "4.8 4.8 out of 5 stars (768)" [ref=f16e580]:
+              - generic [ref=f16e582]:
+                - text: "4.8"
+                - generic [ref=f16e583]: 4.8 out of 5 stars
+                - link "(768)" [ref=f16e585] [cursor=pointer]:
+                  - /url: /product-reviews/B0B3C2R8MP?ref=amzdv_ucc_dp_rvw_B0CX23V2ZK_B0B3C2R8MP
+            - cell "4.7 4.7 out of 5 stars (527)" [ref=f16e586]:
+              - generic [ref=f16e588]:
+                - text: "4.7"
+                - generic [ref=f16e589]: 4.7 out of 5 stars
+                - link "(527)" [ref=f16e591] [cursor=pointer]:
+                  - /url: /product-reviews/B0CX23GFMJ?ref=amzdv_ucc_dp_rvw_B0CX23V2ZK_B0CX23GFMJ
+            - cell "4.7 4.7 out of 5 stars (593)" [ref=f16e592]:
+              - generic [ref=f16e594]:
+                - text: "4.7"
+                - generic [ref=f16e595]: 4.7 out of 5 stars
+                - link "(593)" [ref=f16e597] [cursor=pointer]:
+                  - /url: /product-reviews/B0CM5JV268?ref=amzdv_ucc_dp_rvw_B0CX23V2ZK_B0CM5JV268
+            - cell "4.7 4.7 out of 5 stars (750)" [ref=f16e598]:
+              - generic [ref=f16e600]:
+                - text: "4.7"
+                - generic [ref=f16e601]: 4.7 out of 5 stars
+                - link "(750)" [ref=f16e603] [cursor=pointer]:
+                  - /url: /product-reviews/B0CM5JV26D?ref=amzdv_ucc_dp_rvw_B0CX23V2ZK_B0CM5JV26D
+          - row [ref=f16e604]:
+            - rowheader "DISPLAY" [ref=f16e605]
+            - cell "13.6-inch Liquid Retina display" [ref=f16e607]
+            - cell "13.3-inch Retina display" [ref=f16e609]
+            - cell "15.3-inch Liquid Retina display" [ref=f16e611]
+            - cell "14.2-inch Liquid Retina XDR display" [ref=f16e613]
+            - cell "14.2-inch Liquid Retina XDR display" [ref=f16e615]
+          - row [ref=f16e617]:
+            - rowheader "PROCESSOR" [ref=f16e618]
+            - cell "Apple M3 Chip" [ref=f16e620]
+            - cell "Apple M2 Chip" [ref=f16e622]
+            - cell "Apple M3 Chip" [ref=f16e624]
+            - cell "Apple M3 Chip" [ref=f16e626]
+            - cell "Apple M3 Pro or M3 Max chip" [ref=f16e628]
+          - row [ref=f16e630]:
+            - rowheader "CPU" [ref=f16e631]
+            - cell "8-core CPU" [ref=f16e633]
+            - cell "8-core CPU" [ref=f16e635]
+            - cell "8-core CPU" [ref=f16e637]
+            - cell "8-core CPU" [ref=f16e639]
+            - cell "Up to 16-core CPU" [ref=f16e641]
+          - row [ref=f16e643]:
+            - rowheader "GPU" [ref=f16e644]
+            - cell "Up to 10-core GPU" [ref=f16e646]
+            - cell "Up to 10-core GPU" [ref=f16e648]
+            - cell "10-core GPU" [ref=f16e650]
+            - cell "10-core GPU" [ref=f16e652]
+            - cell "Up to 40-core GPU" [ref=f16e654]
+          - row [ref=f16e656]:
+            - rowheader "MEMORY" [ref=f16e657]
+            - cell "Up to 24GB unified memory" [ref=f16e659]
+            - cell "Up to 24GB unified memory" [ref=f16e661]
+            - cell "Up to 24GB unified memory" [ref=f16e663]
+            - cell "Up to 24GB unified memory" [ref=f16e665]
+            - cell "Up to 128GB unified memory" [ref=f16e667]
+          - row [ref=f16e669]:
+            - rowheader "BATTERY" [ref=f16e670]
+            - cell "Up to 18 hours battery life" [ref=f16e672]
+            - cell "Up to 18 hours battery life" [ref=f16e674]
+            - cell "Up to 18 hours battery life" [ref=f16e676]
+            - cell "Up to 22 hours battery life" [ref=f16e678]
+            - cell "Up to 18 hours battery life" [ref=f16e680]
+          - row [ref=f16e682]:
+            - rowheader "TOUCH BAR AND TOUCH ID" [ref=f16e683]
+            - cell "Touch ID" [ref=f16e685]
+            - cell "Touch ID" [ref=f16e687]
+            - cell "Touch ID" [ref=f16e689]
+            - cell "Touch ID" [ref=f16e691]
+            - cell "Touch ID" [ref=f16e693]
+          - row [ref=f16e695]:
+            - rowheader "STORAGE" [ref=f16e696]
+            - cell "Up to 2TB storage" [ref=f16e698]
+            - cell "Up to 2TB storage" [ref=f16e700]
+            - cell "Up to 2TB storage" [ref=f16e702]
+            - cell "Up to 2TB storage" [ref=f16e704]
+            - cell "Up to 8TB storage" [ref=f16e706]
+          - row [ref=f16e708]:
+            - rowheader "LAUNCH YEAR" [ref=f16e709]
+            - cell "2024" [ref=f16e711]
+            - cell "2022" [ref=f16e713]
+            - cell "2024" [ref=f16e715]
+            - cell "2023" [ref=f16e717]
+            - cell "2023" [ref=f16e719]
+    - generic [ref=f16e722]:
+      - heading "Technical Details" [level=2] [ref=f16e727]
+      - heading "Apple MacBook Air with Apple M3 Chip (13.6-inch)" [level=3] [ref=f16e732]
+      - generic [ref=f16e734]:
+        - table [ref=f16e737]:
+          - rowgroup [ref=f16e738]:
+            - row [ref=f16e739]:
+              - cell [ref=f16e740]:
+                - paragraph [ref=f16e741]:
+                  - strong [ref=f16e742]: Finish
+              - cell [ref=f16e743]:
+                - list [ref=f16e744]:
+                  - listitem [ref=f16e745]: Silver
+                  - listitem [ref=f16e746]: Starlight
+                  - listitem [ref=f16e747]: Space Gray
+                  - listitem [ref=f16e748]: Midnight
+            - row [ref=f16e749]:
+              - cell [ref=f16e750]:
+                - paragraph [ref=f16e751]:
+                  - strong [ref=f16e752]: Chip
+              - cell [ref=f16e753]:
+                - list [ref=f16e754]:
+                  - listitem [ref=f16e755]: Apple M3 Chip
+                  - listitem [ref=f16e756]: 8-core CPU with 4 performance cores and 4 efficiency cores
+                  - listitem [ref=f16e757]: 8-core, 10-core GPU
+                  - listitem [ref=f16e758]: Hardware-accelerated ray tracing
+                  - listitem [ref=f16e759]: 16-core Neural Engine
+                  - listitem [ref=f16e760]: 100GB/s memory bandwidth
+            - row [ref=f16e761]:
+              - cell [ref=f16e762]:
+                - paragraph [ref=f16e763]:
+                  - strong [ref=f16e764]: Display
+              - cell [ref=f16e765]:
+                - list [ref=f16e766]:
+                  - listitem [ref=f16e767]: Liquid Retina XDR display
+                  - listitem [ref=f16e768]: 13.6-inch (diagonal) LED-backlit display with IPS technology; 2560-by-1664 native resolution at 224 pixels per inch
+            - row [ref=f16e769]:
+              - cell [ref=f16e770]:
+                - paragraph [ref=f16e771]:
+                  - strong [ref=f16e772]: Memory
+              - cell [ref=f16e773]:
+                - list [ref=f16e774]:
+                  - listitem [ref=f16e775]: 8GB or 16GB unified memory
+            - row [ref=f16e776]:
+              - cell [ref=f16e777]:
+                - paragraph [ref=f16e778]:
+                  - strong [ref=f16e779]: Storage
+              - cell [ref=f16e780]:
+                - list [ref=f16e781]:
+                  - listitem [ref=f16e782]: 256GB SSD or 512 GB
+            - row [ref=f16e783]:
+              - cell [ref=f16e784]:
+                - paragraph [ref=f16e785]:
+                  - strong [ref=f16e786]: Battery and Power
+              - cell [ref=f16e787]:
+                - list [ref=f16e788]:
+                  - listitem [ref=f16e789]: Up to 18 hours Apple TV app movie playback
+                  - listitem [ref=f16e790]: Up to 15 hours wireless web
+                  - listitem [ref=f16e791]: 52.6-watt‑hour lithium‑polymer battery
+                  - listitem [ref=f16e792]: 30W USB-C Power Adapter (included with M3 with 8-core GPU)
+                  - listitem [ref=f16e793]: 35W Dual USB-C Port Compact Power Adapter (included with M3 with 10-core GPU and 512GB storage)
+                  - listitem [ref=f16e794]: USB-C to MagSafe 3 Cable
+                  - listitem [ref=f16e795]: Fast-charge capable with 70W USB-C Power Adapter
+            - row [ref=f16e796]:
+              - cell [ref=f16e797]:
+                - paragraph [ref=f16e798]:
+                  - strong [ref=f16e799]: Charging and Expansion
+              - cell [ref=f16e800]:
+                - list [ref=f16e801]:
+                  - listitem [ref=f16e802]: MagSafe 3 charging port
+                  - listitem [ref=f16e803]: 3.5 mm headphone jack
+                  - listitem [ref=f16e804]:
+                    - text: "Two Thunderbolt / USB 4 ports with support for:"
+                    - list [ref=f16e805]:
+                      - listitem [ref=f16e806]: Charging
+                      - listitem [ref=f16e807]: DisplayPort
+                      - listitem [ref=f16e808]: Thunderbolt 3 (up to 40Gb/s)
+                      - listitem [ref=f16e809]: USB 4 (up to 40Gb/s)
+            - row [ref=f16e810]:
+              - cell [ref=f16e811]:
+                - paragraph [ref=f16e812]:
+                  - strong [ref=f16e813]: Display Support
+              - cell [ref=f16e814]:
+                - list [ref=f16e815]:
+                  - listitem [ref=f16e816]: "Simultaneously supports full native resolution on the built-in display at 1 billion colors and:"
+                  - listitem [ref=f16e817]: One external display with up to 6K resolution at 60Hz
+                  - listitem [ref=f16e818]: Close the MacBook Air lid to use a second external display with up to 5K resolution at 60Hz
+        - table [ref=f16e821]:
+          - rowgroup [ref=f16e822]:
+            - row [ref=f16e823]:
+              - cell [ref=f16e824]:
+                - paragraph [ref=f16e825]:
+                  - strong [ref=f16e826]: Keyboard and Trackpad
+              - cell [ref=f16e827]:
+                - list [ref=f16e828]:
+                  - listitem [ref=f16e829]: "Backlit Magic Keyboard with:"
+                  - listitem [ref=f16e830]: 78 (U.S.) or 79 (ISO) keys including 12 full-height function keys and 4 arrow keys in an inverted-T arrangement
+                  - listitem [ref=f16e831]: Touch ID
+                  - listitem [ref=f16e832]: Ambient light sensor
+                  - listitem [ref=f16e833]: Force Touch trackpad for precise cursor control and pressure-sensing capabilities; enables Force clicks, accelerators, pressure-sensitive drawing, and Multi-Touch gestures
+            - row [ref=f16e834]:
+              - cell [ref=f16e835]:
+                - paragraph [ref=f16e836]:
+                  - strong [ref=f16e837]: Audio
+              - cell [ref=f16e838]:
+                - list [ref=f16e839]:
+                  - listitem [ref=f16e840]: Four-speaker sound system
+                  - listitem [ref=f16e841]: Support for Spatial Audio when playing music or video with Dolby Atmos on built-in speakers
+                  - listitem [ref=f16e842]: Spatial Audio with dynamic head tracking when using AirPods (3rd generation), AirPods Pro, and AirPods Max
+                  - listitem [ref=f16e843]: Three-mic array with directional beamforming
+                  - listitem [ref=f16e844]: Voice Isolation and Wide Spectrum microphone modes
+                  - listitem [ref=f16e845]: Enhanced voice clarity in audio and video calls
+                  - listitem [ref=f16e846]: 3.5 mm headphone jack with advanced support for high-impedance headphones
+            - row [ref=f16e847]:
+              - cell [ref=f16e848]:
+                - paragraph [ref=f16e849]:
+                  - strong [ref=f16e850]: Wireless
+              - cell [ref=f16e851]:
+                - list [ref=f16e852]:
+                  - listitem [ref=f16e853]: Wi-Fi 6 (802.11ax)
+                  - listitem [ref=f16e854]: Bluetooth 5.3
+            - row [ref=f16e855]:
+              - cell [ref=f16e856]:
+                - paragraph [ref=f16e857]:
+                  - strong [ref=f16e858]: Camera
+              - cell [ref=f16e859]:
+                - list [ref=f16e860]:
+                  - listitem [ref=f16e861]: 1080p FaceTime HD camera
+                  - listitem [ref=f16e862]: Advanced image signal processor with computational video
+            - row [ref=f16e863]:
+              - cell [ref=f16e864]:
+                - paragraph [ref=f16e865]:
+                  - strong [ref=f16e866]: Size and Weight
+              - cell [ref=f16e867]:
+                - list [ref=f16e868]:
+                  - listitem [ref=f16e869]: "Height: 0.44 inch (1.13 cm)"
+                  - listitem [ref=f16e870]: "Width: 11.97 inches (30.41 cm)"
+                  - listitem [ref=f16e871]: "Depth: 8.46 inches (21.5 cm)"
+                  - listitem [ref=f16e872]: "Weight: 2.7 pounds (1.24 kg)"
+            - row [ref=f16e873]:
+              - cell [ref=f16e874]:
+                - paragraph [ref=f16e875]:
+                  - strong [ref=f16e876]: In the Box
+              - cell [ref=f16e877]:
+                - list [ref=f16e878]:
+                  - listitem [ref=f16e879]: 13-inch MacBook Air
+                  - listitem [ref=f16e880]: 30W USB-C Power Adapter (M3 with 8-core GPU) or 35W Dual USB-C Port Compact Power Adapter (M3 with 10-core GPU and 512GB storage)
+                  - listitem [ref=f16e881]: USB-C to MagSafe 3 Cable (2 m)
+    - generic [ref=f16e882]:
+      - separator [ref=f16e883]
+      - generic [ref=f16e885]:
+        - heading "Product information" [level=2] [ref=f16e886]
+        - generic [ref=f16e889]:
+          - generic [ref=f16e892]:
+            - heading "Technical Details" [level=1] [ref=f16e895]
+            - table [ref=f16e899]:
+              - rowgroup [ref=f16e900]:
+                - row [ref=f16e901]:
+                  - rowheader "Product Dimensions" [ref=f16e902]
+                  - cell "‎11.97 x 8.46 x 0.44 inches" [ref=f16e903]
+                - row [ref=f16e904]:
+                  - rowheader "Item Weight" [ref=f16e905]
+                  - cell "‎2.7 pounds" [ref=f16e906]
+                - row [ref=f16e907]:
+                  - rowheader "Manufacturer" [ref=f16e908]
+                  - cell "‎Apple" [ref=f16e909]
+                - row [ref=f16e910]:
+                  - rowheader "ASIN" [ref=f16e911]
+                  - cell "‎B0CX23V2ZK" [ref=f16e912]
+                - row [ref=f16e913]:
+                  - rowheader "Item model number" [ref=f16e914]
+                  - cell "‎MRXV3LL/A" [ref=f16e915]
+                - row [ref=f16e916]:
+                  - rowheader "Batteries" [ref=f16e917]
+                  - cell "‎1 Lithium Polymer batteries required. (included)" [ref=f16e918]
+                - row [ref=f16e919]:
+                  - rowheader "Date First Available" [ref=f16e920]
+                  - cell "‎March 4, 2024" [ref=f16e921]
+          - generic [ref=f16e924]:
+            - heading "Additional Information" [level=1] [ref=f16e925]
+            - generic:
+              - table
+    - generic [ref=f16e927]:
+      - separator [ref=f16e928]
+      - heading "What's in the box" [level=2] [ref=f16e929]
+      - generic [ref=f16e930]:
+        - listitem [ref=f16e931]: 13-inch MacBook Air with M3 chip
+        - listitem [ref=f16e932]: USB-C to MagSafe 3 Cable (2m)
+        - listitem [ref=f16e933]: AC Adapter
+    - generic "Top reviews" [ref=f16e936]:
+      - separator [ref=f16e937]
+      - generic [ref=f16e939]:
+        - generic [ref=f16e940]:
+          - generic [ref=f16e945]:
+            - heading "Customer reviews" [level=2] [ref=f16e947]
+            - generic [ref=f16e949]:
+              - generic [ref=f16e951]:
+                - generic [ref=f16e952]: 4.8 out of 5 stars
+                - generic [ref=f16e955]: 4.8 out of 5
+              - generic [ref=f16e958]: 1,083 global ratings
+            - list [ref=f16e963]:
+              - listitem [ref=f16e964]:
+                - link "90 percent of reviews have 5 stars" [ref=f16e967] [cursor=pointer]:
+                  - /url: /portal/customer-reviews/B0CX23V2ZK/ref=acr_dp_hist_5?ie=UTF8&filterByStar=five_star&reviewerType=all_reviews#reviews-filter-bar
+                  - generic [ref=f16e968]: 5 star
+                  - progressbar [ref=f16e970]
+                  - generic [ref=f16e971]: 90%
+              - listitem [ref=f16e972]:
+                - link "6 percent of reviews have 4 stars" [ref=f16e975] [cursor=pointer]:
+                  - /url: /portal/customer-reviews/B0CX23V2ZK/ref=acr_dp_hist_4?ie=UTF8&filterByStar=four_star&reviewerType=all_reviews#reviews-filter-bar
+                  - generic [ref=f16e976]: 4 star
+                  - progressbar [ref=f16e978]
+                  - generic [ref=f16e979]: 6%
+              - listitem [ref=f16e980]:
+                - link "1 percent of reviews have 3 stars" [ref=f16e983] [cursor=pointer]:
+                  - /url: /portal/customer-reviews/B0CX23V2ZK/ref=acr_dp_hist_3?ie=UTF8&filterByStar=three_star&reviewerType=all_reviews#reviews-filter-bar
+                  - generic [ref=f16e984]: 3 star
+                  - progressbar [ref=f16e986]
+                  - generic [ref=f16e987]: 1%
+              - listitem [ref=f16e988]:
+                - link "1 percent of reviews have 2 stars" [ref=f16e991] [cursor=pointer]:
+                  - /url: /portal/customer-reviews/B0CX23V2ZK/ref=acr_dp_hist_2?ie=UTF8&filterByStar=two_star&reviewerType=all_reviews#reviews-filter-bar
+                  - generic [ref=f16e992]: 2 star
+                  - progressbar [ref=f16e994]
+                  - generic [ref=f16e995]: 1%
+              - listitem [ref=f16e996]:
+                - link "2 percent of reviews have 1 stars" [ref=f16e999] [cursor=pointer]:
+                  - /url: /portal/customer-reviews/B0CX23V2ZK/ref=acr_dp_hist_1?ie=UTF8&filterByStar=one_star&reviewerType=all_reviews#reviews-filter-bar
+                  - generic [ref=f16e1000]: 1 star
+                  - progressbar [ref=f16e1002]
+                  - generic [ref=f16e1003]: 2%
+            - button "How customer reviews and ratings work" [ref=f16e1008] [cursor=pointer]
+          - separator [ref=f16e1010]
+          - separator [ref=f16e1011]
+        - generic [ref=f16e1015]:
+          - generic [ref=f16e1019]:
+            - heading "Customers say" [level=3] [ref=f16e1020]
+            - generic [ref=f16e1021]: Customers find this MacBook Air to be the best machine on the market, praising its phenomenal display with impeccable resolution and crystal-clear video calls. The laptop is extremely fast, very light, and has outstanding battery life, with one customer noting they can get a full day's work done on a single charge. They appreciate its sleek appearance, color, and consider it worth the money.
+            - generic [ref=f16e1023]:
+              - generic [ref=f16e1024]:
+                - generic [ref=f16e1025]: AI Generated from the text of customer reviews
+                - generic [ref=f16e1027]: Generated from the text of customer reviews
+              - heading "Select to learn more" [level=4] [ref=f16e1028]
+              - tablist "Select to learn more" [ref=f16e1029]:
+                - generic [ref=f16e1030]:
+                  - tab "Positive aspect, performance, 132 mentions" [ref=f16e1034]:
+                    - button "Performance(132)" [ref=f16e1035] [cursor=pointer]
+                  - tab "Positive aspect, value for money, 44 mentions" [ref=f16e1044]:
+                    - button "Value for money(44)" [ref=f16e1045] [cursor=pointer]
+                  - tab "Positive aspect, speed, 35 mentions" [ref=f16e1054]:
+                    - button "Speed(35)" [ref=f16e1055] [cursor=pointer]
+                  - tab "Positive aspect, weight, 27 mentions" [ref=f16e1064]:
+                    - button "Weight(27)" [ref=f16e1065] [cursor=pointer]
+                  - tab "Positive aspect, battery life, 26 mentions" [ref=f16e1074]:
+                    - button "Battery life(26)" [ref=f16e1075] [cursor=pointer]
+                  - tab "Positive aspect, appearance, 25 mentions" [ref=f16e1084]:
+                    - button "Appearance(25)" [ref=f16e1085] [cursor=pointer]
+                  - tab "Positive aspect, screen quality, 15 mentions" [ref=f16e1094]:
+                    - button "Screen quality(15)" [ref=f16e1095] [cursor=pointer]
+                  - tab "Positive aspect, color, 13 mentions" [ref=f16e1104]:
+                    - button "Color(13)" [ref=f16e1105] [cursor=pointer]
+          - generic [ref=f16e1112]:
+            - group [ref=f16e1115]:
+              - generic [ref=f16e1116]:
+                - heading "Reviews with images" [level=3] [ref=f16e1118]
+                - link "See all photos" [ref=f16e1121] [cursor=pointer]:
+                  - /url: javascript:void(0)
+              - group [ref=f16e1125]:
+                - list [ref=f16e1126]:
+                  - listitem [ref=f16e1127]:
+                    - button [ref=f16e1129] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1130]
+                  - listitem [ref=f16e1132]:
+                    - button [ref=f16e1134] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1135]
+                  - listitem [ref=f16e1137]:
+                    - button [ref=f16e1139] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1140]
+                  - listitem [ref=f16e1142]:
+                    - button [ref=f16e1144] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1145]
+                  - listitem [ref=f16e1147]:
+                    - button [ref=f16e1149] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1150]
+                  - listitem [ref=f16e1152]:
+                    - button [ref=f16e1154] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1155]
+                  - listitem [ref=f16e1157]:
+                    - button [ref=f16e1159] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1160]
+                  - listitem [ref=f16e1162]:
+                    - button [ref=f16e1164] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1165]
+                  - listitem [ref=f16e1167]:
+                    - button [ref=f16e1169] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1170]
+                  - listitem [ref=f16e1172]:
+                    - button [ref=f16e1174] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1175]
+                  - listitem [ref=f16e1177]:
+                    - button [ref=f16e1179] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1180]
+                  - listitem [ref=f16e1182]:
+                    - button [ref=f16e1184] [cursor=pointer]:
+                      - img "Customer Image, click to open customer review" [ref=f16e1185]
+            - separator [ref=f16e1187]
+          - generic [ref=f16e1192]:
+            - generic [ref=f16e1193]:
+              - heading "Top reviews from the United States" [level=3] [ref=f16e1194]
+              - list [ref=f16e1195]:
+                - listitem [ref=f16e1196]:
+                  - generic [ref=f16e1199]:
+                    - link "Joe" [ref=f16e1201] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AHWYHRGSAWSY54TUWHEV3DW3ZDWA?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1207]: 5 out of 5 stars
+                    - link [ref=f16e1210] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/R11XW5NNNGNWS6/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "Perfection in every way" [level=5] [ref=f16e1211]
+                    - generic [ref=f16e1212]: Reviewed in the United States on July 28, 2024
+                    - link "Verified Purchase" [ref=f16e1216] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - generic [ref=f16e1225]:
+                      - paragraph [ref=f16e1226]: First off, the size for the 13 inch air Mac is a big enough size for a screen. I was expecting it to be smaller, but was pleasantly surprised.
+                      - paragraph
+                      - paragraph [ref=f16e1227]: The quality of the screen and resolution and whatnots are impeccable. This runs like a dream. Unless you’re just setting it up and then it takes a bit to get going due to all the information you’re logging back in with if you’re an Apple user.
+                      - paragraph
+                      - paragraph [ref=f16e1228]: The appearance of this thing is beautiful. I don’t know if I’ve ever seen a nicer looking laptop than this one. It’s really sleek looking. Very slim too. Also very very very light, so careful when handling it.
+                      - paragraph
+                      - paragraph [ref=f16e1229]: The keyboard is practically silent when you’re typing on it.
+                      - paragraph
+                      - paragraph [ref=f16e1230]: The speed on it after setting it up blew me away and I’m so happy I made this purchase. It feels so easy to use when you’re on it.
+                      - paragraph
+                      - paragraph [ref=f16e1231]: Highly recommend this laptop to any Apple user that was the M3 chip, a newer laptop upgrade and something to do what you need to off of it. It’s amazing.
+                    - generic [ref=f16e1232]: 81 people found this helpful
+                    - generic [ref=f16e1234]:
+                      - generic [ref=f16e1238] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1239]
+                        - generic [ref=f16e1240]: Helpful
+                      - button "Report Review" [ref=f16e1244] [cursor=pointer]: Report
+                - listitem [ref=f16e1245]:
+                  - generic [ref=f16e1248]:
+                    - link "matthew Sturdevant" [ref=f16e1250] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AHLFVZ62LOY6YRR5X23ZDO3BT7ZA?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1256]: 5 out of 5 stars
+                    - link [ref=f16e1259] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/R2D6ZQ0YVPZDBS/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "For anyone wondering if the base model is enough, let me assure you - it absolutely is!" [level=5] [ref=f16e1260]
+                    - generic [ref=f16e1261]: Reviewed in the United States on July 10, 2024
+                    - link "Verified Purchase" [ref=f16e1265] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - generic [ref=f16e1268]:
+                      - generic [ref=f16e1274]:
+                        - paragraph [ref=f16e1275]: I recently purchased the 2024 MacBook Air M3 (base model) and it has completely blown me away. For anyone wondering if the base model is enough, let me assure you - it absolutely is!
+                        - paragraph
+                        - paragraph [ref=f16e1276]: "Here's what I love:"
+                        - paragraph
+                        - paragraph [ref=f16e1277]: "Powerhouse Performance: The M3 chip is incredibly powerful. I haven't experienced any lag, even with multiple demanding applications open. This thing chews through everyday tasks and even handles some light photo and video editing without breaking a sweat."
+                        - paragraph [ref=f16e1278]: "Featherlight Design: This laptop is unbelievably light. I can barely feel it in my bag, making it perfect for commuting or travel."
+                        - paragraph [ref=f16e1279]: "Battery Life for Days: The battery life is nothing short of phenomenal. I easily get a full day's work done on a single charge, and then some!"
+                        - paragraph [ref=f16e1280]: "Stunning Display: The bezels are practically non-existent, giving you maximum screen real estate. And what a screen it is! The colors are vibrant, the text is sharp, and it's a joy to work on."
+                        - paragraph [ref=f16e1281]: "Incredible Value: You get so much for your money with this laptop. It's the perfect balance of performance, portability, and price."
+                        - paragraph [ref=f16e1282]: "Overall:"
+                        - paragraph
+                        - paragraph [ref=f16e1283]: This MacBook Air is a triumph. Apple has knocked it out of the park with the M3 chip and refined design. If you're looking for a powerful, portable, and long-lasting laptop, look no further than the 2024 MacBook Air M3. You won't be disappointed!
+                      - button "Read more" [ref=f16e1287] [cursor=pointer]
+                    - generic [ref=f16e1290]: 301 people found this helpful
+                    - generic [ref=f16e1292]:
+                      - generic [ref=f16e1296] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1297]
+                        - generic [ref=f16e1298]: Helpful
+                      - button "Report Review" [ref=f16e1302] [cursor=pointer]: Report
+                - listitem [ref=f16e1303]:
+                  - generic [ref=f16e1306]:
+                    - link "buyer" [ref=f16e1308] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AH554OV3PUJ2YSJQORTWZSNH67TQ?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1314]: 5 out of 5 stars
+                    - link [ref=f16e1317] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/R15V52MLSOGIFV/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "Totally capable and worth the buy" [level=5] [ref=f16e1318]
+                    - generic [ref=f16e1319]: Reviewed in the United States on August 6, 2024
+                    - link "Verified Purchase" [ref=f16e1323] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - generic [ref=f16e1326]:
+                      - generic [ref=f16e1332]:
+                        - paragraph [ref=f16e1333]: I recently bought this machine for two purposes. The deal was I'd use this for my freelance work for a month while my 2019 Macbook Pro was being fixed and then my niece gets it for college. So it's really a gift, but I got to use it for a few weeks.
+                        - paragraph
+                        - paragraph [ref=f16e1334]: My biggest grip is that the ports are all on one side, the side that makes plugging things in on my desk awkward. My Macbook Pro has two ports on each side, and I always end up using the right side ports for charging and for the dongle.
+                        - paragraph
+                        - paragraph [ref=f16e1335]: But I almost never use it as a LAPtop. It's really a desktop machine that I take from desk to desk with rare appearances not plugged into an external monitor and other devices. It is more portable than my Pro but not enough for it to make a big difference. On a small popup desk in a university auditorium and bouncing around campus, this is probably more noticeable, I just don't have the experience to comment.
+                        - paragraph
+                        - paragraph [ref=f16e1336]: I only use one external monitor but for power users using two monitors the new M3 chip probably makes a big difference. I don't even know if my 2019 Pro with an Intel chip can do this, I've never tried. But I think power users requiring multiple monitors are aiming for the Pro.
+                        - paragraph
+                        - paragraph [ref=f16e1337]: Running high-ish intensity apps like IntelliJ with multiple apps in the background, I have to concede that this machine is a little slower than my 2019 Pro. But I think that's largely to do with the fact that my main machine has more RAM. With solid state memory being the norm these days it doesn't matter much, and really even high intensity tasks that make my pro's fan start up only take maybe a second or two more on this machine.
+                        - paragraph
+                        - paragraph [ref=f16e1338]: I'm not an Apple preacher. I still haven't decided whether I like macOS more than Windows. But Apple hardware seems to be better than any PC hardware in this price range. PC laptops seem to degrade faster, mostly the battery. PC laptop batteries go from 18 hours to 2 hours over the course of 5 years. My Pro battery went from 18 or so to 4 over 5 years. And these days you can't change a PC battery with this form factor either.
+                        - paragraph
+                        - paragraph [ref=f16e1339]: The Pro screen is definitely better, but again I'm using an external monitor 99% of the time, so it doesn't matter much for me.
+                        - paragraph
+                        - paragraph [ref=f16e1340]: If you're running high intensity apps you should go for the Pro still, but the difference isn't really that huge. If you're doing things that don't involve high intensity calculations this is probably the best machine on the market especially for the money.
+                        - paragraph
+                        - paragraph [ref=f16e1341]: If you're trying to decide between this and a PC of similar price and reputation, this is probably the first time I'd say Apple is offering a better product for the money. This machine is cheaper than it should be. So it's really a decision between macOS and Windows. Mac has the better command line out of the box but similar Windows tools can be installed just as easily. For gaming, Windows wins, but this isn't a gaming device. The best benefit to macOS for my work is that my employer won't give administrative privs to Windows users, but for macOS they haven't removed that yet, so I can actually do my job without having to ask permission to install an ad blocker in Chrome. Huge plus.
+                      - button "Read more" [ref=f16e1345] [cursor=pointer]
+                    - generic [ref=f16e1348]: 33 people found this helpful
+                    - generic [ref=f16e1350]:
+                      - generic [ref=f16e1354] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1355]
+                        - generic [ref=f16e1356]: Helpful
+                      - button "Report Review" [ref=f16e1360] [cursor=pointer]: Report
+                - listitem [ref=f16e1361]:
+                  - generic [ref=f16e1364]:
+                    - link "Lawrence" [ref=f16e1366] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AE7NL7R4RAABTGOQY6WIBKLFIY3A?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1372]: 5 out of 5 stars
+                    - link [ref=f16e1375] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/R27S6VDRY5KJN0/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "Feels great, AWESOME and chill! (coming from a PC person)" [level=5] [ref=f16e1376]
+                    - generic [ref=f16e1377]: Reviewed in the United States on August 18, 2024
+                    - link "Verified Purchase" [ref=f16e1381] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - generic [ref=f16e1384]:
+                      - generic [ref=f16e1390]:
+                        - paragraph [ref=f16e1391]: First off, I'm a gaming PC person. I do digital art as my main career, but wanted a laptop that could help me focus on studies and art. I got an HP Pavillion Aero 13, but it was too distracting. Chromebooks didn't quite cut it... I've used Windows all my life but decided to venture out to try something new to spice up my lifestyle.
+                        - paragraph
+                        - paragraph [ref=f16e1392]: This is my first time ever ordering a Macintosh product. It came on sale at $849.99 USD from $1,099.99 and saw that it was THIS year's release. I was in disbelief of how big the discount was. I have only been exposed to the Apple ecosystem for around two years now (through only the iPhone and AirPods) and must tell you that this laptop feels GREAT. Even with the 8GB of RAM, everything is going smooth sails, multitasking is a natural and no program has ever felt slow up to this point. Plus, iPhone weaves extremely nice and smooth with productivity.
+                        - paragraph
+                        - paragraph [ref=f16e1393]: The laptop is SUPER cool, and I have never felt a laptop this chill EVER. It got warm when installing Adobe products but it cooled off shortly after. Running games and art apps was a breeze! Discord, Word and Photoshop were running just as good as my other computers. My only complaint is all my portable hard drives are not compatible since they use NTFS... but since this was intended to largely complete college projects, I doubt it'll be an issue.
+                        - paragraph
+                        - paragraph [ref=f16e1394]: I recommend this laptop if you want a taste of Apple's computers without spending much. I like having that hybrid world of experiencing both Windows/Android and Mac OS/iOS at my fingertips, so that's another reason why I ordered this. I don't regret it one bit and I almost want to hug this mini thing!
+                      - button "Read more" [ref=f16e1398] [cursor=pointer]
+                    - generic [ref=f16e1401]: 59 people found this helpful
+                    - generic [ref=f16e1403]:
+                      - generic [ref=f16e1407] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1408]
+                        - generic [ref=f16e1409]: Helpful
+                      - button "Report Review" [ref=f16e1413] [cursor=pointer]: Report
+                - listitem [ref=f16e1414]:
+                  - generic [ref=f16e1417]:
+                    - link "Yaritza" [ref=f16e1419] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AEYCJGY3CEF3Y3LFTUUG4BH5BBJQ?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1425]: 5 out of 5 stars
+                    - link [ref=f16e1428] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/R3PIRFN5TXGCJ6/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "Work good!" [level=5] [ref=f16e1429]
+                    - generic [ref=f16e1430]: Reviewed in the United States on July 5, 2026
+                    - link "Verified Purchase" [ref=f16e1434] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - paragraph [ref=f16e1444]: Excelent
+                    - generic [ref=f16e1446]:
+                      - generic [ref=f16e1450] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1451]
+                        - generic [ref=f16e1452]: Helpful
+                      - button "Report Review" [ref=f16e1456] [cursor=pointer]: Report
+                - listitem [ref=f16e1457]:
+                  - generic [ref=f16e1460]:
+                    - link "Adam M." [ref=f16e1462] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AGJEFH3IDZOT2XC2A2OZ6SCTBFXQ?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1468]: 5 out of 5 stars
+                    - link [ref=f16e1471] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/RWGI6FERURT2M/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "First ever MacBook for School" [level=5] [ref=f16e1472]
+                    - generic [ref=f16e1473]: Reviewed in the United States on July 7, 2024
+                    - link "Verified Purchase" [ref=f16e1477] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - generic [ref=f16e1486]:
+                      - paragraph [ref=f16e1487]: My first ever MacBook. Have always been a windows guy but thought I’d give it a try. Overall it’s been about two months of using and I love it so far. Have had multiple people comment how nice my laptop looks.
+                      - paragraph
+                      - paragraph [ref=f16e1488]: Been using this for school. Decided to finish my senior year online. Truthfully I was a little worried about the 8gb of RAM as most laptops I’ve had have had 16. That being said, I’ve had no issues with it and it has run multiple tabs and windows well seamlessly flowing between them. Have loved working on this for school. Not much storage on the laptop, but really hadn’t been an issue as I use iCloud and OneDrive for school work.
+                      - paragraph
+                      - paragraph [ref=f16e1489]: Biggest thing I love is the battery life. It last so long compared to all my other laptops I’ve owned and I don’t feel tethered to my charger at all.
+                      - paragraph
+                      - paragraph [ref=f16e1490]: Overall, if you’re budget allows, I think this is great laptop for school and work. Wouldn’t recommend for gaming or anything like that, but for just about everything else it seems great. And again, for anyone else wondering like I was , the 8gb model has been more tan enough for my school work so far.
+                    - generic [ref=f16e1491]: 11 people found this helpful
+                    - generic [ref=f16e1493]:
+                      - generic [ref=f16e1497] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1498]
+                        - generic [ref=f16e1499]: Helpful
+                      - button "Report Review" [ref=f16e1503] [cursor=pointer]: Report
+                - listitem [ref=f16e1504]:
+                  - generic [ref=f16e1507]:
+                    - link "Stephen" [ref=f16e1509] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AG5FQOBFTMODNU2FKUUEYTM6CWYA?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1515]: 5 out of 5 stars
+                    - link [ref=f16e1518] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/R33UBP78675CS2/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "great product" [level=5] [ref=f16e1519]
+                    - generic [ref=f16e1520]: Reviewed in the United States on July 13, 2024
+                    - link "Verified Purchase" [ref=f16e1524] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - paragraph [ref=f16e1534]: great product use everyday came exactly as advertised, very sleek smooth outside and love the color this laptop stays charged longer then any I have ever seen and makes no sound what's so ever. definitely worth the money if you are looking for a Mac I extremely recommend the M3. the light weight and thinness make this laptop very mobile so its not annoying to lug around if its in your bag you barely even notice!!
+                    - generic [ref=f16e1535]: 3 people found this helpful
+                    - generic [ref=f16e1537]:
+                      - generic [ref=f16e1541] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1542]
+                        - generic [ref=f16e1543]: Helpful
+                      - button "Report Review" [ref=f16e1547] [cursor=pointer]: Report
+                - listitem [ref=f16e1548]:
+                  - generic [ref=f16e1551]:
+                    - link "Mehr" [ref=f16e1553] [cursor=pointer]:
+                      - /url: /gp/profile/amzn1.account.AH4NZVLPJTFUDCH6XHT2YZPOJAIA?ref=cm_cr_dp_d_bdcrb_top
+                    - generic [ref=f16e1559]: 4 out of 5 stars
+                    - link [ref=f16e1562] [cursor=pointer]:
+                      - /url: /portal/customer-reviews/srp/-/RLUWHVKD7RGB2/ref=cm_cr_dp_d_rvw_ttl?_encoding=UTF8&ie=UTF8
+                      - heading "Love it" [level=5] [ref=f16e1563]
+                    - generic [ref=f16e1564]: Reviewed in the United States on July 31, 2024
+                    - link "Verified Purchase" [ref=f16e1568] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - paragraph [ref=f16e1578]: I use this for college. The battery life is absolutely amazing. I still need to figure out how to navigate through it but i definitely recommend. It came brand new, it works fast, it has some weight to it like a couple of pounds but it’s nice and thin. The sound quality is amazing too like a normal computer would have. It is amazing but i think any MacBook would be good. I didn’t like the price of it but other than that, it’s wonderful. I got it on sale during July 4th, I recommend waiting a bit for it to go on sale again!
+                    - generic [ref=f16e1579]: 5 people found this helpful
+                    - generic [ref=f16e1581]:
+                      - generic [ref=f16e1585] [cursor=pointer]:
+                        - button "Helpful" [ref=f16e1586]
+                        - generic [ref=f16e1587]: Helpful
+                      - button "Report Review" [ref=f16e1591] [cursor=pointer]: Report
+            - link "See more reviews" [ref=f16e1593] [cursor=pointer]:
+              - /url: /portal/customer-reviews/B0CX23V2ZK/ref=cm_cr_dp_d_show_all_top?_encoding=UTF8&ie=UTF8&reviewerType=all_reviews
+            - generic [ref=f16e1595]:
+              - heading "Top reviews from other countries" [level=3] [ref=f16e1596]
+              - list [ref=f16e1597]:
+                - listitem [ref=f16e1598]:
+                  - generic [ref=f16e1601]:
+                    - generic [ref=f16e1602]: Martello
+                    - generic [ref=f16e1609]: 5 out of 5 stars
+                    - heading "Great and reliable option." [level=5] [ref=f16e1612]
+                    - generic [ref=f16e1613]: Reviewed in Canada on November 14, 2025
+                    - link "Verified Purchase" [ref=f16e1617] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - generic [ref=f16e1626]:
+                      - paragraph [ref=f16e1627]: I purchased this MacBook a few months after its release which was in the beginning of 2024, and it has held up impressively since.
+                      - paragraph
+                      - paragraph [ref=f16e1628]: Its interface is simple and easy to navigate through with tons of easy shortcuts. It runs incredibly smoothly and responds quickly to inputs without any delay or lag, even with multiple apps and third-party programs open. The battery life is impressive, and for me lasts many days before needing a charge. Since updating to macOS 26, it still operates well with no trouble whatsoever.
+                      - paragraph
+                      - paragraph [ref=f16e1629]: If you’re searching for a reliable and responsive laptop, I must recommend getting a MacBook, coming from someone who’s only ever used countless Windows Laptops that never lasted more than a few years without overheating to death just by opening YouTube.
+                    - generic [ref=f16e1631]:
+                      - button [ref=f16e1632] [cursor=pointer]:
+                        - img "Great and reliable option." [ref=f16e1633]
+                      - button [ref=f16e1634] [cursor=pointer]:
+                        - img "Great and reliable option." [ref=f16e1635]
+                    - button "Report Review" [ref=f16e1639] [cursor=pointer]: Report
+                - listitem [ref=f16e1640]:
+                  - generic [ref=f16e1643]:
+                    - generic [ref=f16e1644]: Amazon Customer
+                    - generic [ref=f16e1651]: 5 out of 5 stars
+                    - heading "M3 Rules!" [level=5] [ref=f16e1654]
+                    - generic [ref=f16e1655]: Reviewed in Canada on October 29, 2024
+                    - link "Verified Purchase" [ref=f16e1659] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - paragraph [ref=f16e1669]: This laptop kind of replaces a 13 year old MacBook Pro, even though it still has plenty of life left. The new OS is lightning fast and the unit itself is extremely portable. Very pleased with this purchase, especially on sale. Would highly recommend.
+                    - button "Report Review" [ref=f16e1673] [cursor=pointer]: Report
+                - listitem [ref=f16e1674]:
+                  - generic [ref=f16e1677]:
+                    - generic [ref=f16e1678]: SR
+                    - generic [ref=f16e1685]: 5 out of 5 stars
+                    - heading "Love it" [level=5] [ref=f16e1688]
+                    - generic [ref=f16e1689]: Reviewed in Canada on June 20, 2024
+                    - link "Verified Purchase" [ref=f16e1693] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - paragraph [ref=f16e1703]: Great little laptop that I can bring whenever I travel. Light weight and super fast. I use mostly to write documents and watch movies and shows.
+                    - button "Report Review" [ref=f16e1707] [cursor=pointer]: Report
+                - listitem [ref=f16e1708]:
+                  - generic [ref=f16e1711]:
+                    - generic [ref=f16e1712]: Victor Mokgakala
+                    - generic [ref=f16e1719]: 4 out of 5 stars
+                    - heading "Macro air" [level=5] [ref=f16e1722]
+                    - generic [ref=f16e1723]: Reviewed in Canada on October 13, 2024
+                    - link "Verified Purchase" [ref=f16e1727] [cursor=pointer]:
+                      - /url: /gp/help/customer/display.html/ref=cm_cr_dp_d_rvw_avp?ie=UTF8&nodeId=G8UYX7LALQC8V9KA
+                    - paragraph [ref=f16e1737]: It was hard to set up, it's my first apple laptop, so I just getting use to it. It looks slick though
+                    - button "Report Review" [ref=f16e1741] [cursor=pointer]: Report
+            - link "See more reviews" [ref=f16e1743] [cursor=pointer]:
+              - /url: /portal/customer-reviews/B0CX23V2ZK/ref=cm_cr_dp_d_show_all_top?_encoding=UTF8&ie=UTF8&reviewerType=all_reviews
+  - complementary "Your recently viewed items and featured recommendations"
+  - generic [ref=f16e1745]:
+    - button "Back to top" [ref=f16e1746] [cursor=pointer]
+    - generic [ref=f16e1748]:
+      - generic [ref=f16e1749]:
+        - heading "Get to Know Us" [level=6] [ref=f16e1750]
+        - list [ref=f16e1751]:
+          - listitem [ref=f16e1752]:
+            - link "Careers" [ref=f16e1753] [cursor=pointer]:
+              - /url: https://www.amazon.jobs
+          - listitem [ref=f16e1754]:
+            - link "Blog" [ref=f16e1755] [cursor=pointer]:
+              - /url: https://blog.aboutamazon.com/?utm_source=gateway&utm_medium=footer
+          - listitem [ref=f16e1756]:
+            - link "About Amazon" [ref=f16e1757] [cursor=pointer]:
+              - /url: https://www.aboutamazon.com/?utm_source=gateway&utm_medium=footer
+          - listitem [ref=f16e1758]:
+            - link "Investor Relations" [ref=f16e1759] [cursor=pointer]:
+              - /url: https://www.amazon.com/ir
+          - listitem [ref=f16e1760]:
+            - link "Amazon Devices" [ref=f16e1761] [cursor=pointer]:
+              - /url: /gp/browse.html?node=2102313011&ref_=footer_devices
+          - listitem [ref=f16e1762]:
+            - link "Amazon Science" [ref=f16e1763] [cursor=pointer]:
+              - /url: https://www.amazon.science
+      - generic [ref=f16e1765]:
+        - heading "Make Money with Us" [level=6] [ref=f16e1766]
+        - list [ref=f16e1767]:
+          - listitem [ref=f16e1768]:
+            - link "Sell products on Amazon" [ref=f16e1769] [cursor=pointer]:
+              - /url: https://services.amazon.com/sell.html?ld=AZFSSOA&ref_=footer_soa
+          - listitem [ref=f16e1770]:
+            - link "Sell on Amazon Business" [ref=f16e1771] [cursor=pointer]:
+              - /url: https://services.amazon.com/amazon-business.html?ld=usb2bunifooter&ref_=footer_b2b
+          - listitem [ref=f16e1772]:
+            - link "Sell apps on Amazon" [ref=f16e1773] [cursor=pointer]:
+              - /url: https://developer.amazon.com
+          - listitem [ref=f16e1774]:
+            - link "Become an Affiliate" [ref=f16e1775] [cursor=pointer]:
+              - /url: https://affiliate-program.amazon.com/
+          - listitem [ref=f16e1776]:
+            - link "Advertise Your Products" [ref=f16e1777] [cursor=pointer]:
+              - /url: https://advertising.amazon.com/?ref=ext_amzn_ftr
+          - listitem [ref=f16e1778]:
+            - link "Self-Publish with Us" [ref=f16e1779] [cursor=pointer]:
+              - /url: /gp/seller-account/mm-summary-page.html?ld=AZFooterSelfPublish&topic=200260520&ref_=footer_publishing
+          - listitem [ref=f16e1780]:
+            - link "Host an Amazon Hub" [ref=f16e1781] [cursor=pointer]:
+              - /url: https://go.thehub-amazon.com/amazon-hub-locker
+          - listitem [ref=f16e1782]:
+            - text: ›
+            - link "See More Make Money with Us" [ref=f16e1783] [cursor=pointer]:
+              - /url: /b/?node=18190131011&ld=AZUSSOA-seemore&ref_=footer_seemore
+      - generic [ref=f16e1785]:
+        - heading "Amazon Payment Products" [level=6] [ref=f16e1786]
+        - list [ref=f16e1787]:
+          - listitem [ref=f16e1788]:
+            - link "Amazon Business Card" [ref=f16e1789] [cursor=pointer]:
+              - /url: /dp/B07984JN3L?plattr=ACOMFO&ie=UTF-8
+          - listitem [ref=f16e1790]:
+            - link "Shop with Points" [ref=f16e1791] [cursor=pointer]:
+              - /url: /gp/browse.html?node=16218619011&ref_=footer_swp
+          - listitem [ref=f16e1792]:
+            - link "Reload Your Balance" [ref=f16e1793] [cursor=pointer]:
+              - /url: /dp/B0CHTVMXZJ?th=1?ref_=footer_reload_us
+          - listitem [ref=f16e1794]:
+            - link "Amazon Currency Converter" [ref=f16e1795] [cursor=pointer]:
+              - /url: /gp/browse.html?node=388305011&ref_=footer_tfx
+      - generic [ref=f16e1797]:
+        - heading "Let Us Help You" [level=6] [ref=f16e1798]
+        - list [ref=f16e1799]:
+          - listitem [ref=f16e1800]:
+            - link "Your Account" [ref=f16e1801] [cursor=pointer]:
+              - /url: https://www.amazon.com/gp/css/homepage.html?ref_=footer_ya
+          - listitem [ref=f16e1802]:
+            - link "Your Orders" [ref=f16e1803] [cursor=pointer]:
+              - /url: https://www.amazon.com/gp/css/order-history?ref_=footer_yo
+          - listitem [ref=f16e1804]:
+            - link "Shipping Rates & Policies" [ref=f16e1805] [cursor=pointer]:
+              - /url: /gp/help/customer/display.html?nodeId=468520&ref_=footer_shiprates
+          - listitem [ref=f16e1806]:
+            - link "Returns & Replacements" [ref=f16e1807] [cursor=pointer]:
+              - /url: /gp/css/returns/homepage.html?ref_=footer_hy_f_4
+          - listitem [ref=f16e1808]:
+            - link "Manage Your Content and Devices" [ref=f16e1809] [cursor=pointer]:
+              - /url: /gp/digital/fiona/manage?ref_=footer_myk
+          - listitem [ref=f16e1810]:
+            - link "Help" [ref=f16e1811] [cursor=pointer]:
+              - /url: /gp/help/customer/display.html?nodeId=508510&ref_=footer_gw_m_b_he
+    - generic [ref=f16e1813]:
+      - link "Amazon US Home" [ref=f16e1816] [cursor=pointer]:
+        - /url: /?ref_=footer_logo
+      - generic [ref=f16e1819]:
+        - generic [ref=f16e1820]:
+          - link "Choose a language for shopping. Current selection is English." [ref=f16e1821] [cursor=pointer]:
+            - /url: /customer-preferences/edit?ie=UTF8&preferencesReturnUrl=%2F&ref_=footer_lang
+            - generic [ref=f16e1823]: English
+          - button "Expand to Change Language or Country" [ref=f16e1824] [cursor=pointer]
+        - link "CA$ CAD - Canadian Dollar" [ref=f16e1825] [cursor=pointer]:
+          - /url: /customer-preferences/edit?ie=UTF8&ref_=footer_cop&preferencesReturnUrl=%2Fdp%2FB0CX23V2ZK
+          - generic [ref=f16e1826]: CA$
+          - generic [ref=f16e1827]: CAD - Canadian Dollar
+        - button "Choose a country/region for shopping. The current selection is United States." [ref=f16e1828] [cursor=pointer]:
+          - generic [ref=f16e1830]: United States
+    - navigation "More on Amazon" [ref=f16e1831]:
+      - generic "More on Amazon" [ref=f16e1832]:
+        - list [ref=f16e1833]:
+          - listitem [ref=f16e1834]:
+            - link [ref=f16e1835] [cursor=pointer]:
+              - /url: https://music.amazon.com?ref=dm_aff_amz_com
+              - heading "Amazon Music" [level=5] [ref=f16e1836]
+              - generic [ref=f16e1837]: Stream millionsof songs
+          - listitem [ref=f16e1838]
+          - listitem [ref=f16e1839]:
+            - link [ref=f16e1840] [cursor=pointer]:
+              - /url: https://advertising.amazon.com/?ref=footer_advtsing_amzn_com
+              - heading "Amazon Ads" [level=5] [ref=f16e1841]
+              - generic [ref=f16e1842]: Reach customerswherever theyspend their time
+          - listitem [ref=f16e1843]
+          - listitem [ref=f16e1844]:
+            - link [ref=f16e1845] [cursor=pointer]:
+              - /url: https://www.6pm.com
+              - heading "6pm" [level=5] [ref=f16e1846]
+              - generic [ref=f16e1847]: Score dealson fashion brands
+          - listitem [ref=f16e1848]
+          - listitem [ref=f16e1849]:
+            - link [ref=f16e1850] [cursor=pointer]:
+              - /url: https://www.abebooks.com
+              - heading "AbeBooks" [level=5] [ref=f16e1851]
+              - generic [ref=f16e1852]: Books, art& collectibles
+          - listitem [ref=f16e1853]
+          - listitem [ref=f16e1854]:
+            - link [ref=f16e1855] [cursor=pointer]:
+              - /url: https://www.acx.com/
+              - heading "ACX" [level=5] [ref=f16e1856]
+              - generic [ref=f16e1857]: Audiobook PublishingMade Easy
+          - listitem [ref=f16e1858]
+          - listitem [ref=f16e1859]:
+            - link "Sell on Amazon Start a Selling Account" [ref=f16e1860] [cursor=pointer]:
+              - /url: https://sell.amazon.com/?ld=AZUSSOA-footer-aff&ref_=footer_sell
+              - heading "Sell on Amazon" [level=5] [ref=f16e1861]
+              - generic [ref=f16e1862]: Start a Selling Account
+          - listitem [ref=f16e1863]
+          - listitem [ref=f16e1864]:
+            - link [ref=f16e1865] [cursor=pointer]:
+              - /url: https://www.veeqo.com/?utm_source=amazon&utm_medium=website&utm_campaign=footer
+              - heading "Veeqo" [level=5] [ref=f16e1866]
+              - generic [ref=f16e1867]: Shipping SoftwareInventory Management
+        - list [ref=f16e1868]:
+          - listitem [ref=f16e1869]:
+            - link [ref=f16e1870] [cursor=pointer]:
+              - /url: /business?ref_=footer_retail_b2b
+              - heading "Amazon Business" [level=5] [ref=f16e1871]
+              - generic [ref=f16e1872]: Everything ForYour Business
+          - listitem [ref=f16e1873]
+          - listitem [ref=f16e1874]:
+            - link [ref=f16e1875] [cursor=pointer]:
+              - /url: /gp/browse.html?node=20338496011&ref_=footer_amazonglobal
+              - heading "AmazonGlobal" [level=5] [ref=f16e1876]
+              - generic [ref=f16e1877]: Ship OrdersInternationally
+          - listitem [ref=f16e1878]
+          - listitem [ref=f16e1879]:
+            - link [ref=f16e1880] [cursor=pointer]:
+              - /url: https://aws.amazon.com/what-is-cloud-computing/?sc_channel=EL&sc_campaign=amazonfooter
+              - heading "Amazon Web Services" [level=5] [ref=f16e1881]
+              - generic [ref=f16e1882]: Scalable CloudComputing Services
+          - listitem [ref=f16e1883]
+          - listitem [ref=f16e1884]:
+            - link [ref=f16e1885] [cursor=pointer]:
+              - /url: https://www.audible.com
+              - heading "Audible" [level=5] [ref=f16e1886]
+              - generic [ref=f16e1887]: Listen to Books & OriginalAudio Performances
+          - listitem [ref=f16e1888]
+          - listitem [ref=f16e1889]:
+            - link [ref=f16e1890] [cursor=pointer]:
+              - /url: https://www.boxofficemojo.com/?ref_=amzn_nav_ftr
+              - heading "Box Office Mojo" [level=5] [ref=f16e1891]
+              - generic [ref=f16e1892]: Find MovieBox Office Data
+          - listitem [ref=f16e1893]
+          - listitem [ref=f16e1894]:
+            - link [ref=f16e1895] [cursor=pointer]:
+              - /url: https://www.goodreads.com
+              - heading "Goodreads" [level=5] [ref=f16e1896]
+              - generic [ref=f16e1897]: Book reviews& recommendations
+          - listitem [ref=f16e1898]
+          - listitem [ref=f16e1899]:
+            - link [ref=f16e1900] [cursor=pointer]:
+              - /url: https://www.imdb.com
+              - heading "IMDb" [level=5] [ref=f16e1901]
+              - generic [ref=f16e1902]: Movies, TV& Celebrities
+        - list [ref=f16e1903]:
+          - listitem [ref=f16e1904]:
+            - link [ref=f16e1905] [cursor=pointer]:
+              - /url: https://pro.imdb.com?ref_=amzn_nav_ftr
+              - heading "IMDbPro" [level=5] [ref=f16e1906]
+              - generic [ref=f16e1907]: Get Info EntertainmentProfessionals Need
+          - listitem [ref=f16e1908]
+          - listitem [ref=f16e1909]:
+            - link [ref=f16e1910] [cursor=pointer]:
+              - /url: https://kdp.amazon.com
+              - heading "Kindle Direct Publishing" [level=5] [ref=f16e1911]
+              - generic [ref=f16e1912]: Indie Digital & Print PublishingMade Easy
+          - listitem [ref=f16e1913]
+          - listitem [ref=f16e1914]:
+            - link [ref=f16e1915] [cursor=pointer]:
+              - /url: https://videodirect.amazon.com/home/landing
+              - heading "Prime Video Direct" [level=5] [ref=f16e1916]
+              - generic [ref=f16e1917]: Video DistributionMade Easy
+          - listitem [ref=f16e1918]
+          - listitem [ref=f16e1919]:
+            - link [ref=f16e1920] [cursor=pointer]:
+              - /url: https://www.shopbop.com
+              - heading "Shopbop" [level=5] [ref=f16e1921]
+              - generic [ref=f16e1922]: DesignerFashion Brands
+          - listitem [ref=f16e1923]
+          - listitem [ref=f16e1924]:
+            - link [ref=f16e1925] [cursor=pointer]:
+              - /url: https://www.woot.com/
+              - heading "Woot!" [level=5] [ref=f16e1926]
+              - generic [ref=f16e1927]: Deals and Shenanigans
+          - listitem [ref=f16e1928]
+          - listitem [ref=f16e1929]:
+            - link [ref=f16e1930] [cursor=pointer]:
+              - /url: https://www.zappos.com
+              - heading "Zappos" [level=5] [ref=f16e1931]
+              - generic [ref=f16e1932]: Shoes &Clothing
+          - listitem [ref=f16e1933]
+          - listitem [ref=f16e1934]:
+            - link [ref=f16e1935] [cursor=pointer]:
+              - /url: https://ring.com
+              - heading "Ring" [level=5] [ref=f16e1936]
+              - generic [ref=f16e1937]: Smart HomeSecurity Systems
+        - list [ref=f16e1938]:
+          - listitem [ref=f16e1939]
+          - listitem [ref=f16e1940]
+          - listitem [ref=f16e1941]:
+            - link [ref=f16e1942] [cursor=pointer]:
+              - /url: https://eero.com/
+              - heading "eero WiFi" [level=5] [ref=f16e1943]
+              - generic [ref=f16e1944]: Stream 4K Videoin Every Room
+          - listitem [ref=f16e1945]
+          - listitem [ref=f16e1946]:
+            - link [ref=f16e1947] [cursor=pointer]:
+              - /url: https://blinkforhome.com/?ref=nav_footer
+              - heading "Blink" [level=5] [ref=f16e1948]
+              - generic [ref=f16e1949]: Smart Securityfor Every Home
+          - listitem [ref=f16e1950]
+          - listitem [ref=f16e1951]:
+            - link [ref=f16e1952] [cursor=pointer]:
+              - /url: https://shop.ring.com/pages/neighbors-app
+              - heading "Neighbors App" [level=5] [ref=f16e1953]
+              - generic [ref=f16e1954]: Real-Time Crime& Safety Alerts
+          - listitem [ref=f16e1955]
+          - listitem [ref=f16e1956]:
+            - link "PillPack Pharmacy Simplified" [ref=f16e1957] [cursor=pointer]:
+              - /url: https://www.pillpack.com
+              - heading "PillPack" [level=5] [ref=f16e1958]
+              - generic [ref=f16e1959]: Pharmacy Simplified
+          - listitem [ref=f16e1960]
+          - listitem [ref=f16e1961]
+          - listitem [ref=f16e1962]
+          - listitem [ref=f16e1963]
+    - generic [ref=f16e1964]:
+      - list [ref=f16e1965]:
+        - listitem [ref=f16e1966]:
+          - link "Conditions of Use" [ref=f16e1967] [cursor=pointer]:
+            - /url: /gp/help/customer/display.html?nodeId=508088&ref_=footer_cou
+        - listitem [ref=f16e1968]:
+          - link "Privacy Notice" [ref=f16e1969] [cursor=pointer]:
+            - /url: /gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ&ref_=footer_privacy
+        - listitem [ref=f16e1970]:
+          - link "Consumer Health Data Privacy Disclosure" [ref=f16e1971] [cursor=pointer]:
+            - /url: /gp/help/customer/display.html?ie=UTF8&nodeId=TnACMrGVghHocjL8KB&ref_=footer_consumer_health_data_privacy
+        - listitem [ref=f16e1972]:
+          - link "Your Ads Privacy Choices" [ref=f16e1973] [cursor=pointer]:
+            - /url: /privacyprefs?ref_=footer_iba
+        - listitem [ref=f16e1974]
+      - generic [ref=f16e1976]: © 1996-2026, Amazon.com, Inc. or its affiliates

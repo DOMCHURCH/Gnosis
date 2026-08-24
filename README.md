@@ -12,7 +12,7 @@
 ```
 
 [![CI](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/dom-agent)](https://www.npmjs.com/package/dom-agent)
+[![npm](https://img.shields.io/npm/v/@dominquechurch/dom-agent)](https://www.npmjs.com/package/@dominquechurch%2Fdom-agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
 
@@ -52,7 +52,7 @@ Also in the box: 15 built-in tools (`read`, `write`, `edit`, `glob`, `grep`, `ba
 ## Install
 
 ```sh
-npm install -g dom-agent
+npm install -g @dominquechurch/dom-agent
 echo "OPENROUTER_API_KEY=sk-or-..." >> ~/.dom/.env
 dom
 ```

@@ -1,5 +1,5 @@
 {
-  "name": "dom-agent",
+  "name": "@dominquechurch/dom-agent",
   "version": "0.1.0",
   "description": "dom — a terminal coding agent. OpenRouter-only, runtime model switching, Windows-first.",
   "keywords": [
