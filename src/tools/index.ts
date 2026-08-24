@@ -73,7 +73,7 @@ export interface SubAgentResult {
   capped: string | null;
 }
 /** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
-export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal) => Promise<SubAgentResult>;
+export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal, tools?: string[]) => Promise<SubAgentResult>;
 
 /** One coordinated sub-agent's scoped objective. */
 export interface SubTask {
@@ -86,7 +86,7 @@ export interface CoordinatedResult extends SubAgentResult {
 }
 /** Spawns every subtask as a parallel read-only sub-agent (tight caps) and returns
  * each one's summary in the same order. Refused inside a sub-agent (no recursion). */
-export type CoordinateRunner = (subtasks: SubTask[], signal?: AbortSignal) => Promise<CoordinatedResult[]>;
+export type CoordinateRunner = (subtasks: SubTask[], signal?: AbortSignal, tools?: string[]) => Promise<CoordinatedResult[]>;
 
 /** Result of an oracle consultation: the answer plus accounting. */
 export interface OracleResult {

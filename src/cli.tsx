@@ -28,7 +28,7 @@ usage:
   dom -p "prompt" --save     ...and persist the one-shot turn as a session
   dom --json "prompt"        headless: stream structured JSONL events to stdout, exit
   dom schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
-  dom serve [--port 7777] [--public]   TUI + a localhost web view (--public: Cloudflare Tunnel)
+  dom serve [--port 7777] [--public] [--lan]   TUI + web view (--public: tunnel, --lan: same-WiFi QR)
   dom --help | --version
 
 Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
@@ -109,7 +109,7 @@ async function main() {
   if (flags.serve) {
     bridge = createBridge(new EventBus());
     try {
-      server = await startServer(bridge, { port: flags.port });
+      server = await startServer(bridge, { port: flags.port, lan: flags.lan });
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "EADDRINUSE") {
@@ -139,8 +139,10 @@ async function main() {
     // is followed by a scannable QR code so a phone doesn't have to type the token.
     const { serveBlock } = await import("./serveprint.js");
     const links = [{ label: "LOCAL ", url: server.url }];
+    if (server.lanUrl) links.push({ label: "LAN   ", url: `${server.lanUrl}/?token=${server.token}` });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
-    process.stdout.write(`dom serve — scan or open:\n${await serveBlock(links)}\n(127.0.0.1 only · token required · Ctrl+C to stop)\n\n`);
+    const scope = server.lanUrl ? "LAN + loopback (--lan)" : "127.0.0.1 only";
+    process.stdout.write(`dom serve — scan or open:\n${await serveBlock(links)}\n(${scope} · token required · Ctrl+C to stop)\n\n`);
 
     // No terminal attached → run the server headlessly (the browser drives it).
     if (!process.stdin.isTTY || !process.stdout.isTTY) {

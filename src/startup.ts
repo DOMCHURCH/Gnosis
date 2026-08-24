@@ -45,6 +45,8 @@ export interface Flags {
   port?: number;
   /** `--public`: also open a Cloudflare Tunnel so `dom serve` is reachable anywhere. */
   public?: boolean;
+  /** `--lan`: bind all interfaces + show a LAN URL/QR for phones on the same WiFi. */
+  lan?: boolean;
 }
 
 export function parseArgs(argv: string[]): Flags {
@@ -80,6 +82,9 @@ export function parseArgs(argv: string[]): Flags {
         break;
       case "--public":
         flags.public = true;
+        break;
+      case "--lan":
+        flags.lan = true;
         break;
       case "-c":
       case "--continue":

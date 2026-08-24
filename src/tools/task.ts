@@ -22,7 +22,7 @@ export async function runTask(args: TaskArgs, signal?: AbortSignal, ctx?: ToolCo
       return { output: "task: coordinated sub-tasks can only be launched by the top-level agent, not from within a sub-agent.", isError: true };
     }
     try {
-      const results = await coordinate(subtasks, signal);
+      const results = await coordinate(subtasks, signal, args.tools);
       const totalTools = results.reduce((n, r) => n + r.tools, 0);
       const totalTokens = results.reduce((n, r) => n + r.tokens, 0);
       const header = `${results.length} sub-agents · ${totalTools} tool${totalTools === 1 ? "" : "s"} · ${totalTokens} tokens`;
@@ -40,7 +40,7 @@ export async function runTask(args: TaskArgs, signal?: AbortSignal, ctx?: ToolCo
   if (!run) return { output: "the task tool is not available here", isError: true };
   if (!args.prompt) return { output: "task: provide `prompt` for a single sub-agent, or `subtasks` for a coordinated task.", isError: true };
   try {
-    const res = await run(args.description, args.prompt, signal);
+    const res = await run(args.description, args.prompt, signal, args.tools);
     const meta =
       `${res.tools} tool${res.tools === 1 ? "" : "s"} · ${res.tokens} tokens` +
       (res.capped ? ` (truncated: hit the ${res.capped} cap)` : "");

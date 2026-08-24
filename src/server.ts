@@ -19,6 +19,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { WEB_ASSETS_DIR } from "./install.js";
 import { buildTree, readFileInRoot } from "./filetree.js";
+import { buildIgnorer } from "./tools/ignore.js";
 import { buildVaultTree, vaultRoot } from "./vault.js";
 import { jobs, bridgeJobsToBus } from "./jobs.js";
 import { spawnPty, killAllPtys } from "./pty.js";
@@ -27,6 +28,7 @@ import type { PermissionAnswer } from "./permissions.js";
 import { mcp } from "./mcp/manager.js";
 import { panelSummary, clearSessionMemory } from "./sessionmemory.js";
 import { webhooks } from "./webhooks.js";
+import { lanIp, isPrivateIpv4 } from "./netip.js";
 import { loadEnv, loadConfig } from "./config.js";
 
 /** Read a request body to a string, capped at maxBytes (excess is drained, not stored). */
@@ -79,11 +81,13 @@ async function collectKeys(): Promise<{ name: string; present: boolean; last4: s
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/** Host-header allowlist: only loopback names are accepted (blocks DNS rebinding). */
-export function hostOk(hostHeader: string | undefined): boolean {
+/** Host-header allowlist: loopback names always; private LAN IPv4s only when serving
+ * with --lan (so a phone on the same WiFi can reach it). Still blocks DNS rebinding. */
+export function hostOk(hostHeader: string | undefined, allowLan = false): boolean {
   if (!hostHeader) return false;
   const host = hostHeader.replace(/:\d+$/, "").toLowerCase().replace(/^\[|\]$/g, "");
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return true;
+  return allowLan && isPrivateIpv4(host);
 }
 
 function tokenOk(candidate: string | undefined | null, token: string): boolean {
@@ -202,11 +206,11 @@ function cwdForTab(bridge: AppBridge, tabId: number): string | null {
  * The cwd comes from the live agent, and file reads are guarded to stay inside it
  * (readFileInRoot). Returns true if it handled the request.
  */
-async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge, res: http.ServerResponse, getPublicUrl: () => string | null): Promise<boolean> {
+async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge, res: http.ServerResponse, getPublicUrl: () => string | null, getLanUrl: () => string | null): Promise<boolean> {
   // Serve info: the public tunnel URL (if `/serve --public` is up), so the WEBHOOKS
   // tab can show the URL external services actually need to reach.
   if (url.pathname === "/api/serveinfo") {
-    sendJson(res, 200, { public: getPublicUrl() });
+    sendJson(res, 200, { public: getPublicUrl(), lan: getLanUrl() });
     return true;
   }
   // Webhook inspector: the whole ring buffer, plus the public URL for the generator.
@@ -234,7 +238,8 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
     const tabId = Number(url.searchParams.get("tabId"));
     const cwd = cwdForTab(bridge, tabId);
     if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
-    sendJson(res, 200, await buildTree(cwd));
+    // Hide temp/noise files (.gitignore/.domignore + auto-excludes) from the browser.
+    sendJson(res, 200, await buildTree(cwd, { ignore: buildIgnorer(cwd, false) }));
     return true;
   }
   if (url.pathname === "/api/file") {
@@ -451,15 +456,22 @@ export interface ServerHandle {
   token: string;
   port: number;
   clients(): number;
+  /** The LAN URL (base, no token) when serving with --lan, else null. */
+  lanUrl: string | null;
   /** Record the public tunnel URL (base, no token) so /api/serveinfo exposes it. */
   setPublicUrl(url: string | null): void;
   close(): Promise<void>;
 }
 
-export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
+export async function startServer(bridge: AppBridge, opts: { port?: number; lan?: boolean } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
   // The public tunnel URL (base, no token), set by /serve --public via setPublicUrl.
   let publicUrl: string | null = null;
+  // --lan: bind all interfaces + accept private-LAN Hosts so a phone on the same WiFi
+  // can reach the UI. Without it, loopback only (the secure default).
+  const lan = !!opts.lan;
+  const bindHost = lan ? "0.0.0.0" : "127.0.0.1";
+  const lanAddr = lan ? lanIp() : null;
   // Resolved from the binary's own location (not the cwd) so assets are found no
   // matter where `dom serve` was launched.
   const staticDir = WEB_ASSETS_DIR;
@@ -482,7 +494,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   const jobsUnsub = bridgeJobsToBus(bridge.bus);
 
   const server = http.createServer((req, res) => {
-    if (!hostOk(req.headers.host)) {
+    if (!hostOk(req.headers.host, lan)) {
       res.writeHead(403);
       res.end("forbidden host");
       return;
@@ -507,7 +519,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       return;
     }
     if (url.pathname.startsWith("/api/")) {
-      void handleApi(req, url, bridge, res, () => publicUrl).then((handled) => {
+      void handleApi(req, url, bridge, res, () => publicUrl, () => (lanAddr ? `http://${lanAddr}:${port}` : null)).then((handled) => {
         if (!handled) { res.writeHead(404); res.end("not found"); }
       }).catch(() => { res.writeHead(500); res.end("error"); });
       return;
@@ -516,7 +528,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   });
 
   server.on("upgrade", (req, socket) => {
-    if (!hostOk(req.headers.host)) return void socket.destroy();
+    if (!hostOk(req.headers.host, lan)) return void socket.destroy();
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     // Two token-gated channels: /ws (the event mirror) and /pty (the human terminal,
     // whose output never reaches the bus/model). Everything else is rejected.
@@ -614,7 +626,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 7777, "127.0.0.1", () => resolve());
+    server.listen(opts.port ?? 7777, bindHost, () => resolve());
   });
   const port = (server.address() as net.AddressInfo).port;
 
@@ -623,6 +635,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     token,
     port,
     clients: () => clients.size,
+    lanUrl: lanAddr ? `http://${lanAddr}:${port}` : null,
     setPublicUrl: (u) => { publicUrl = u; },
     close: () =>
       new Promise<void>((resolve) => {

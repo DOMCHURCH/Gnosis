@@ -161,7 +161,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   bridgeRef.current = bridge;
   // The running web server (persistent line above the status bar). Seeded from the
   // handle `dom serve` started, else null until `/serve` starts one.
-  const [serve, setServe] = useState<{ url: string; handle: ServerHandle; publicUrl?: string; tunnel?: { stop(): void } } | null>(
+  const [serve, setServe] = useState<{ url: string; handle: ServerHandle; publicUrl?: string; lanUrl?: string; tunnel?: { stop(): void } } | null>(
     serveHandle ? { url: serveHandle.url, handle: serveHandle } : null,
   );
   const serveRef = useRef(serve);
@@ -1586,6 +1586,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       return;
     }
     const wantPublic = toks.includes("--public");
+    const wantLan = toks.includes("--lan");
     const pi = toks.indexOf("--port");
     const port = pi >= 0 && toks[pi + 1] ? Number(toks[pi + 1]) : undefined;
     if (port !== undefined && !Number.isInteger(port)) return sysLog("usage: /serve [stop] [--port <n>]");
@@ -1606,7 +1607,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
     let handle: ServerHandle;
     try {
-      handle = await startServer(b, { port });
+      handle = await startServer(b, { port, lan: wantLan });
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "EADDRINUSE") sysLog(`serve: port ${port ?? 7777} is already in use — try /serve --port <n>`);
@@ -1629,10 +1630,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         sysLog(`serve: public tunnel unavailable (${(e as Error).message}) — continuing local-only`);
       }
     }
-    setServe({ url: handle.url, handle, publicUrl, tunnel });
+    const lanUrl = handle.lanUrl ? `${handle.lanUrl}/?token=${handle.token}` : undefined;
+    setServe({ url: handle.url, handle, publicUrl, tunnel, lanUrl });
     // Print each URL with a scannable QR so a phone doesn't type the token.
     const { serveBlock } = await import("../serveprint.js");
     const links = [{ label: "LOCAL ", url: handle.url }];
+    if (lanUrl) links.push({ label: "LAN   ", url: lanUrl });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
     for (const line of (await serveBlock(links)).split("\n")) sysLog(line);
     sysLog("(127.0.0.1 only · token required · scan or open it · /serve stop to shut down)");
@@ -1982,7 +1985,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       {serve ? (
         <Box marginTop={tabbarShown ? 0 : 1} width={inner}>
           <Text color={col(C.cyan)} wrap="truncate">
-            {g.diamond} serve  <Text color={col(C.value)}>{serve.url}</Text>
+            {g.diamond} serve  local <Text color={col(C.value)}>{serve.url}</Text>
+            {serve.lanUrl ? <Text color={col(C.dim)}>{"  ·  lan "}<Text color={col(C.value)}>{serve.lanUrl}</Text></Text> : null}
             {serve.publicUrl ? <Text color={col(C.dim)}>{"  ·  public "}<Text color={col(C.value)}>{serve.publicUrl}</Text></Text> : null}
           </Text>
         </Box>

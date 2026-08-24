@@ -134,6 +134,15 @@ export const taskSchema = z.object({
       "Set true together with `subtasks` to run a COORDINATED task: every subtask spawns its own read-only " +
         "sub-agent in parallel and you (the coordinator) synthesize their summaries into one answer.",
     ),
+  tools: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Extra tools to grant this sub-agent beyond the read-only default (read/glob/grep/http). Allowed: " +
+        "\"web_search\", \"http\", and any \"mcp__playwright__*\" or \"mcp__context7__*\" tool. Pass this when the " +
+        "sub-agent needs to search the web or drive a browser, e.g. tools: [\"web_search\"]. write/edit/bash/" +
+        "send_message/list_tabs/task are never granted.",
+    ),
   subtasks: z
     .array(
       z.object({

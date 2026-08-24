@@ -68,8 +68,8 @@ function compile(line: string): Rule | null {
   return { re, negate, dirOnly };
 }
 
-function loadGitignore(root: string): Rule[] {
-  const file = path.join(root, ".gitignore");
+function loadRules(root: string, filename: string): Rule[] {
+  const file = path.join(root, filename);
   if (!existsSync(file)) return [];
   try {
     return readFileSync(file, "utf8")
@@ -81,6 +81,16 @@ function loadGitignore(root: string): Rule[] {
   }
 }
 
+// Auto-hidden noise, always excluded (unless include_ignored): dom/Playwright/design
+// screenshots, files named after a scraped website, and the Playwright MCP scratch
+// dir. These are hidden from the file browser + glob, never deleted.
+const AUTO_IGNORE_PATTERNS = [
+  "*.png", "*.jpg", "*.jpeg",
+  "amazon-*", "apple-*", "google-*", "github-*", "stripe-*",
+  ".playwright-mcp/",
+];
+const AUTO_IGNORE_RULES: Rule[] = AUTO_IGNORE_PATTERNS.map(compile).filter((r): r is Rule => r !== null);
+
 export interface Ignorer {
   ignoreDir(name: string, rel: string): boolean;
   ignoreFile(rel: string): boolean;
@@ -91,7 +101,9 @@ const ALLOW_ALL: Ignorer = { ignoreDir: () => false, ignoreFile: () => false };
 /** `rel` is the path relative to `root`, using forward slashes. */
 export function buildIgnorer(root: string, includeIgnored: boolean): Ignorer {
   if (includeIgnored) return ALLOW_ALL;
-  const rules = loadGitignore(root);
+  // Auto-excludes first, then .gitignore, then .domignore (same gitignore syntax) —
+  // later rules (incl. ! negations) win, so .domignore can re-include if needed.
+  const rules = [...AUTO_IGNORE_RULES, ...loadRules(root, ".gitignore"), ...loadRules(root, ".domignore")];
 
   const matched = (rel: string, isDir: boolean): boolean => {
     let ignored = false;

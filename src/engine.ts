@@ -62,6 +62,16 @@ const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_ta
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
+// Tools that are NEVER available to a sub-agent, whatever the caller passes.
+const SUBAGENT_HARD_BLOCK = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task"]);
+/** Filter a caller-supplied tools[] grant to what a sub-agent may actually run:
+ * web_search, http, or a Playwright/Context7 MCP tool — never a hard-blocked one. */
+export function grantableSubagentTools(tools?: string[]): string[] {
+  if (!tools) return [];
+  return tools.filter(
+    (t) => typeof t === "string" && !SUBAGENT_HARD_BLOCK.has(t) && (t === "web_search" || t === "http" || /^mcp__(playwright|context7)__/.test(t)),
+  );
+}
 
 /** Pull the first JSON object out of a model reply (tolerates ``` fences / prose). */
 function extractJsonObject(text: string): string {
@@ -899,10 +909,10 @@ export class Engine {
       cwd: this.cwd,
       roots: this.roots,
       tab: this.toolContext?.tab,
-      subagent: (d, p, sig) => this.runSubAgent(d, p, sig),
+      subagent: (d, p, sig, tools) => this.runSubAgent(d, p, sig, { tools }),
       // Only the top-level agent can coordinate; a sub-agent gets no runner, so a
       // sub-agent that reaches for coordinated subtasks is refused by the task tool.
-      coordinate: this.isSubAgent ? undefined : (subtasks, sig) => this.runCoordinatedTask(subtasks, sig),
+      coordinate: this.isSubAgent ? undefined : (subtasks, sig, tools) => this.runCoordinatedTask(subtasks, sig, tools),
       setTodos: (items) => {
         this.todos = items;
       },
@@ -925,7 +935,7 @@ export class Engine {
     description: string,
     prompt: string,
     signal?: AbortSignal,
-    opts?: { maxIter?: number; tokenBudget?: number },
+    opts?: { maxIter?: number; tokenBudget?: number; tools?: string[] },
   ): Promise<SubAgentResult> {
     if (this.overBudget()) return { text: "Refused: the session budget ceiling has been reached — not spawning a sub-agent.", tools: 0, tokens: 0, capped: "budget" };
     this.bus?.emit({ type: "subagent.start", tabId: this.agentId, description });
@@ -939,7 +949,9 @@ export class Engine {
       skills: this.skills,
       autoCommit: false,
     });
-    sub.toolAllowList = SUBAGENT_TOOLS;
+    // Read-only default, plus any caller-granted tools (web_search / MCP browse),
+    // with the hard-block set always excluded.
+    sub.toolAllowList = [...new Set([...SUBAGENT_TOOLS, ...grantableSubagentTools(opts?.tools)])];
     sub.maxIterations = opts?.maxIter ?? SUBAGENT_MAX_ITER;
     sub.tokenBudget = opts?.tokenBudget ?? SUBAGENT_TOKEN_BUDGET;
     sub.interactive = false;
@@ -995,6 +1007,7 @@ export class Engine {
   async runCoordinatedTask(
     subtasks: { description: string; prompt: string }[],
     signal?: AbortSignal,
+    tools?: string[],
   ): Promise<CoordinatedResult[]> {
     // Announce the plan so the web renders one live row per subtask (tracked via the
     // subagent.start/end events each sub-agent emits below).
@@ -1009,6 +1022,7 @@ export class Engine {
         const res = await this.runSubAgent(t.description, t.prompt, signal, {
           maxIter: COORD_SUBAGENT_MAX_ITER,
           tokenBudget: COORD_SUBAGENT_TOKEN_BUDGET,
+          tools,
         });
         return { ...res, description: t.description };
       }),

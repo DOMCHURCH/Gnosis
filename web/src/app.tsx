@@ -268,11 +268,12 @@ export function App() {
   // Serve status + QR. The LOCAL url is this page's own tokenized URL; PUBLIC (when
   // /serve --public is up) comes from the bus (serve.public), falling back to
   // /api/serveinfo for clients that connected before the tunnel came up.
-  const [serveInfo, setServeInfo] = useState<{ public: string | null } | null>(null);
-  useEffect(() => { void apiGet<{ public: string | null }>("/api/serveinfo").then(setServeInfo); }, [state.publicUrl]);
+  const [serveInfo, setServeInfo] = useState<{ public: string | null; lan?: string | null } | null>(null);
+  useEffect(() => { void apiGet<{ public: string | null; lan?: string | null }>("/api/serveinfo").then(setServeInfo); }, [state.publicUrl]);
   const publicBase = state.publicUrl ?? serveInfo?.public ?? null;
   const localTokenUrl = typeof location !== "undefined" ? tokenizedUrl(location.origin) : "";
   const publicTokenUrl = publicBase ? `${publicBase.replace(/\/$/, "")}/?token=${token()}` : null;
+  const lanTokenUrl = serveInfo?.lan ? `${serveInfo.lan.replace(/\/$/, "")}/?token=${token()}` : null;
   const [serveMenu, setServeMenu] = useState(false);
   const [qr, setQr] = useState<{ title: string; url: string } | null>(null);
   const chip = (label: string, active: boolean, onClick: () => void, leftEdge: boolean) => (
@@ -288,7 +289,8 @@ export function App() {
       </div>
       {serveMenu && (
         <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", minWidth: 120 }}>
-          <button type="button" onClick={() => { setQr({ title: "LOCAL URL", url: localTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#22D3EE", border: 0, borderBottom: publicTokenUrl ? "1px solid #2A2A38" : 0 }}>LOCAL · QR</button>
+          <button type="button" onClick={() => { setQr({ title: "LOCAL URL", url: localTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#22D3EE", border: 0, borderBottom: (lanTokenUrl || publicTokenUrl) ? "1px solid #2A2A38" : 0 }}>LOCAL · QR</button>
+          {lanTokenUrl && <button type="button" onClick={() => { setQr({ title: "LAN URL (same WiFi)", url: lanTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#FBBF24", border: 0, borderBottom: publicTokenUrl ? "1px solid #2A2A38" : 0 }}>LAN · QR</button>}
           {publicTokenUrl && <button type="button" onClick={() => { setQr({ title: "PUBLIC URL", url: publicTokenUrl }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color: "#4ADE80", border: 0 }}>PUBLIC · QR</button>}
         </div>
       )}

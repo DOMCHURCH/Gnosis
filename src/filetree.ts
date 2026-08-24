@@ -5,6 +5,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import type { Ignorer } from "./tools/ignore.js";
 
 /** Directories never shown in the browser (build output, VCS, deps, dom state). */
 export const EXCLUDED_DIRS = new Set([".git", "node_modules", "dist", ".dom"]);
@@ -32,6 +33,9 @@ interface WalkOpts {
   /** Keep a file only when this returns true (by file name). When set, directories
    * with no matching descendants are pruned. Default: keep every file. */
   includeFile: (name: string) => boolean;
+  /** Optional ignore matcher (.gitignore/.domignore + auto-excludes) — hides temp
+   * files from the browser without deleting them. Absent → nothing extra hidden. */
+  ignore?: Ignorer;
 }
 
 const DEFAULTS: WalkOpts = { maxEntries: 4000, maxDepth: 12, includeFile: () => true };
@@ -66,6 +70,8 @@ export async function buildTree(root: string, opts: Partial<WalkOpts> = {}): Pro
       if (isDir && EXCLUDED_DIRS.has(name)) continue;
       if (name.startsWith(".") && EXCLUDED_DIRS.has(name)) continue;
       const childRel = rel ? `${rel}/${name}` : name;
+      // .gitignore/.domignore + auto-excludes — hidden, never deleted.
+      if (o.ignore && (isDir ? o.ignore.ignoreDir(name, childRel) : o.ignore.ignoreFile(childRel))) continue;
       state.count++;
       if (isDir) {
         const children = await walk(path.join(abs, name), childRel, depth + 1);
