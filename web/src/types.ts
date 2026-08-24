@@ -78,7 +78,8 @@ export type DomEvent =
   | { type: "edit.line"; tabId: number; index: number; text: string; changed: boolean; chars: number }
   | { type: "edit.commit"; tabId: number; path: string; ok: boolean; summary: string }
   | { type: "subagent.start"; tabId: number; description: string }
-  | { type: "subagent.end"; tabId: number; description: string; result: string }
+  | { type: "subagent.end"; tabId: number; description: string; result: string; ok: boolean }
+  | { type: "task.plan"; tabId: number; planId: string; subtasks: { index: number; description: string }[] }
   | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[] }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }

@@ -270,6 +270,8 @@ export class Engine {
   private pendingImages: ImagePart[] = [];
   /** Monotonic id for permission requests emitted to the bus (web view). */
   private permSeq = 0;
+  /** Monotonic id for coordinated-task plans emitted to the bus (web view). */
+  private planSeq = 0;
 
   constructor(deps: EngineDeps) {
     this.apiKey = deps.apiKey;
@@ -957,7 +959,10 @@ export class Engine {
     this.cost.usd += sub.cost.usd;
     this.cost.subAgentUsd = (this.cost.subAgentUsd ?? 0) + sub.cost.usd;
     (this.cost.subAgents ??= []).push({ label: description, usd: sub.cost.usd });
-    this.bus?.emit({ type: "subagent.end", tabId: this.agentId, description, result: text.slice(0, 500) });
+    // "ok" is false when the sub-agent hit a cap or produced no real summary — the
+    // plan view renders those as failed rather than done.
+    const okResult = !sub.capped && text !== "(sub-agent produced no summary)";
+    this.bus?.emit({ type: "subagent.end", tabId: this.agentId, description, result: text.slice(0, 500), ok: okResult });
     return { text, tools, tokens, capped: sub.capped };
   }
 
@@ -974,6 +979,14 @@ export class Engine {
     subtasks: { description: string; prompt: string }[],
     signal?: AbortSignal,
   ): Promise<CoordinatedResult[]> {
+    // Announce the plan so the web renders one live row per subtask (tracked via the
+    // subagent.start/end events each sub-agent emits below).
+    this.bus?.emit({
+      type: "task.plan",
+      tabId: this.agentId,
+      planId: `${this.agentId}:${this.planSeq++}`,
+      subtasks: subtasks.map((t, i) => ({ index: i + 1, description: t.description })),
+    });
     return Promise.all(
       subtasks.map(async (t) => {
         const res = await this.runSubAgent(t.description, t.prompt, signal, {

@@ -5,6 +5,8 @@ import type { CommandItem } from "./store";
 import type { ChatSegment, ToolPayload } from "./chatgroups";
 import { DiffView, FileView } from "./DiffView";
 import { elapsedLabel } from "./telemetry.js";
+import { TaskPlanView } from "./TaskPlanView";
+import type { TaskPlan } from "./taskplan";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: boolean; }
 export interface SelDetail {
@@ -55,6 +57,9 @@ export interface SessionsProps {
   canSaveVault?: boolean;
   /** Save an assistant message's text to the vault (opens the filename/tags modal). */
   onSaveMsg?: (content: string) => void;
+  /** The active coordinated-task plan for the active tab (null when none). Rendered
+   * both above the chat rail and floating over the coordinator desk on the floor. */
+  plan?: TaskPlan | null;
   /** The goal bar, rendered directly above the chat rail. */
   goalBar?: ReactNode;
   /** Live streaming-edit diff viewer for the active tab (null when none). */
@@ -411,6 +416,12 @@ export function SessionsFloor(props: SessionsProps) {
                             <span style={{ fontSize: "1cqw", letterSpacing: "0.08cqw", color: "#C9C9D6" }}>{n.name}</span>
                           </div>
                         ))}
+                        {/* Coordinated-task plan floating above the coordinator desk (zone 01). */}
+                        {props.plan && (
+                          <div style={{ position: "absolute", left: "2.8%", top: "1.5%", pointerEvents: "auto", zIndex: 4 }}>
+                            <TaskPlanView plan={props.plan} compact />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -453,6 +464,8 @@ export function SessionsFloor(props: SessionsProps) {
             </div>
 
             {props.goalBar}
+
+            {props.plan && <TaskPlanView plan={props.plan} />}
 
             {props.streamPanel}
 

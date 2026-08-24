@@ -3,6 +3,8 @@ import type { Agent, ClientMessage, DomEvent, GoalReview, GoalState, MessageLink
 import { resolveApproval } from "./chatgroups.js";
 import { foldTelemetry } from "./telemetry.js";
 import type { Telemetry } from "./telemetry";
+import { planFromEvent, foldPlan } from "./taskplan.js";
+import type { TaskPlan } from "./taskplan";
 
 export interface State {
   connected: boolean;
@@ -55,6 +57,9 @@ export interface State {
   /** Per-tab telemetry (tool counts, tokens, turns, elapsed) folded from the event
    * stream — drives the agent telemetry panel. */
   telemetry: Record<number, Telemetry>;
+  /** The active/last coordinated-task plan per tab (task.plan + subagent.start/end),
+   * null when the tab has never run one. Drives the task execution plan view. */
+  plans: Record<number, TaskPlan | null>;
   /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
    * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
   streamEdits: Record<number, StreamEdit | null>;
@@ -98,7 +103,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, streamEdits: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, streamEdits: {} };
 
 /** Fold a tabId-bearing event into that tab's telemetry record. */
 function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
@@ -257,16 +262,19 @@ export function reducer(state: State, action: Action): State {
       if (!cur) return state;
       return { ...state, streamEdits: { ...state.streamEdits, [action.tabId]: { ...cur, done: true, ok: action.ok, summary: action.summary } } };
     }
+    case "task.plan":
+      return { ...state, plans: { ...state.plans, [action.tabId]: planFromEvent(action) } };
     case "subagent.start":
       return withItem(
-        { ...state, subagents: [...state.subagents, { parentId: action.tabId, description: action.description, key: `${action.tabId}:${action.description}:${state.subagents.length}` }] },
+        { ...state, subagents: [...state.subagents, { parentId: action.tabId, description: action.description, key: `${action.tabId}:${action.description}:${state.subagents.length}` }], plans: { ...state.plans, [action.tabId]: foldPlan(state.plans[action.tabId] ?? null, action, Date.now()) } },
         action.tabId,
         { kind: "system", text: `⟳ sub-agent: ${action.description}` },
       );
     case "subagent.end": {
       const i = state.subagents.findIndex((s) => s.parentId === action.tabId && s.description === action.description);
       const subagents = i >= 0 ? state.subagents.filter((_, k) => k !== i) : state.subagents;
-      return withItem({ ...state, subagents }, action.tabId, { kind: "system", text: `✓ sub-agent done: ${action.description}` });
+      const plans = { ...state.plans, [action.tabId]: foldPlan(state.plans[action.tabId] ?? null, action, Date.now()) };
+      return withItem({ ...state, subagents, plans }, action.tabId, { kind: "system", text: `✓ sub-agent done: ${action.description}` });
     }
     case "job.start": {
       const tid = action.tabId ?? state.selected;

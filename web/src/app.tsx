@@ -266,6 +266,7 @@ export function App() {
             onClear={() => { if (activeId != null) send({ type: "goal.clear", tabId: activeId }); }}
           />
         }
+        plan={activeId != null ? state.plans[activeId] ?? null : null}
         streamPanel={
           activeId != null && state.streamEdits[activeId]
             ? <StreamDiff edit={state.streamEdits[activeId]!} onUndo={() => send({ type: "command", tabId: activeId, command: "/undo" })} />
