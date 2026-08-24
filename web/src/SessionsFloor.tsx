@@ -203,8 +203,8 @@ export function SessionsFloor(props: SessionsProps) {
             {/* left rail — session selector (becomes a bottom tab bar on mobile) */}
             <div style={{ flex: "0 0 64px", width: 64, display: "flex", flexDirection: "column", gap: 8 }}>
               {model.floorTabs.map((f) => (
-                <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} style={{ fontFamily: "inherit", width: 64, height: 62, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderLeft: `5px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: 0 }}>
-                  <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: 1 }}>{f.num}</span>
+                <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} title={f.name} style={{ fontFamily: "inherit", width: 64, height: 62, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderLeft: `5px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "0 3px", overflow: "hidden" }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1.15, textAlign: "center", wordBreak: "break-word", overflow: "hidden", maxHeight: 34 }}>{f.label || f.num}</span>
                   <span style={{ width: 8, height: 8, background: f.dot, ...(f.dotAnim || {}) }} />
                 </button>
               ))}
@@ -215,7 +215,8 @@ export function SessionsFloor(props: SessionsProps) {
             {/* center column */}
             <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 3, whiteSpace: "nowrap" }}>{model.sessionTitle}</span>
+                {model.sessionNum && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "#4A4A58", whiteSpace: "nowrap" }}>{model.sessionNum}</span>}
+                <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "60%" }}>{model.sessionTitle}</span>
                 <span style={{ fontSize: 13, color: "#6B6B7B", letterSpacing: 1, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTask}</span>
                 <span style={{ fontSize: 10, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
               </div>
@@ -531,8 +532,8 @@ export function SessionsFloor(props: SessionsProps) {
       {mobile && (
         <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 30, display: "flex", gap: 6, padding: "8px 10px", background: "#0D0D12", borderTop: "2px solid #2A2A38", overflowX: "auto" }}>
           {model.floorTabs.map((f) => (
-            <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} style={{ fontFamily: MONO, flex: "0 0 auto", minWidth: 44, height: 40, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderBottom: `4px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "0 8px" }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>{f.num}</span>
+            <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} title={f.name} style={{ fontFamily: MONO, flex: "0 0 auto", minWidth: 44, maxWidth: 96, height: 40, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderBottom: `4px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "0 8px" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label || f.num}</span>
               <span style={{ width: 7, height: 7, background: f.dot, ...(f.dotAnim || {}) }} />
             </button>
           ))}

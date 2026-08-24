@@ -234,8 +234,11 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals
     const working = figs.filter((a) => a.state === "thinking" || a.state === "speaking").length;
     const awaiting = figs.some((a) => a.state === "awaiting");
     const on = id === active;
+    const nm = state.agents[id]?.name ?? "";
     return {
       key: id, id, num: String(i + 1).padStart(2, "0"),
+      // The rail shows the session NAME (truncated), not a bare number.
+      name: nm, label: nm.length > 12 ? nm.slice(0, 11) + "…" : nm,
       bg: on ? "#1D1D27" : "#101017", fg: on ? "#C9C9D6" : "#6B6B7B",
       border: on ? "#6B6B7B" : "#2A2A38", accent: on ? "#22D3EE" : "#2A2A38",
       dot: awaiting ? "#FBBF24" : working ? "#22D3EE" : "#2A2A38",
@@ -260,7 +263,9 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals
     globalLine: `${order.length} SESSIONS · ${totalAgents} AGENTS`,
     // Live session totals for the active tab (per-message cost stays gone).
     costLine: tab ? `${fmtTokens(tab.tokens)} tok · $${(tab.cost || 0).toFixed(4)}` : "",
-    sessionTitle: tab ? `${String(idx + 1).padStart(2, "0")} · ${tab.name}` : "—",
+    // The floor header shows the session NAME (with its position as a dim prefix).
+    sessionTitle: tab ? tab.name : "—",
+    sessionNum: tab ? String(idx + 1).padStart(2, "0") : "",
     sessionTask: tab ? activityFor(state, active) : "no session",
     sessionAccent: floorAwaiting ? "#FBBF24" : working ? "#22D3EE" : "#2A2A38",
     sessionState: floorAwaiting ? `${floorAwaiting} BLOCKED` : working ? `${working} WORKING` : "PARKED",

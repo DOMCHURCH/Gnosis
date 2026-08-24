@@ -8,7 +8,7 @@ const tick = () => new Promise((r) => setTimeout(r, 15));
 
 // A minimal stand-in for Engine — the controller only forks it, aborts it, and
 // reads .cwd / sets .toolContext.
-const makeEngine = () => ({ cwd: process.cwd(), toolContext: undefined, messages: [], fork() { return makeEngine(); }, abort() {} });
+const makeEngine = (cwd = process.cwd()) => ({ cwd, toolContext: undefined, messages: [], fork(opts) { return makeEngine(opts?.cwd ?? cwd); }, abort() {} });
 
 const runs = [];
 const executor = (tab, text) => { runs.push({ name: tab.name, text }); return Promise.resolve(); };
@@ -85,6 +85,19 @@ controller.close(worker.id); controller.close(other.id);
 const lastId = controller.active().id;
 controller.close(lastId);
 ok("close refuses to remove the final tab", controller.tabs.length === 1);
+
+// --- named sessions: a nameless /new defaults to the cwd basename, not a number ---
+{
+  const c2 = new TabsController(makeEngine("/home/u/myproj"), "myproj", () => Promise.resolve(), () => {});
+  ok("the root tab is named after its cwd basename", c2.active().name === "myproj");
+  const a = c2.create(undefined, "", "/home/u/widgets");
+  ok("a nameless new session defaults to its cwd basename", a.name === "widgets");
+  const b = c2.create(undefined, "", "/home/u/widgets");
+  ok("a second nameless session in the same dir gets a unique suffix", b.name === "widgets2");
+  const named = c2.create("api", "", "/home/u/widgets");
+  ok("an explicit name is still honoured", named.name === "api");
+  ok("no session name is a bare number", c2.tabs.every((t) => !/^\d+$/.test(t.name)));
+}
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

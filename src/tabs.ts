@@ -8,6 +8,7 @@
 // The controller is framework-agnostic; the UI subscribes via onChange and
 // supplies the turn `executor` (which builds the per-tab callbacks + engine.run).
 
+import path from "node:path";
 import type { Engine } from "./engine.js";
 import type { TabRuntime } from "./tools/index.js";
 import type { Preview, PermissionAnswer } from "./permissions.js";
@@ -160,7 +161,10 @@ export class TabsController {
   /** Create a new tab (its own forked Engine). Does not switch to it. A `cwd`
    * roots the tab's engine elsewhere (e.g. a git worktree) instead of the root's. */
   create(name?: string, purpose = "", cwd?: string): Tab {
-    const tab = this.makeTab(this.uniqueName(name ?? `tab${this.nextId}`), purpose, this.root.fork(cwd ? { cwd } : undefined));
+    const engine = this.root.fork(cwd ? { cwd } : undefined);
+    // Default (nameless) sessions take the cwd basename, not a bare number.
+    const base = path.basename(engine.cwd) || `tab${this.nextId}`;
+    const tab = this.makeTab(this.uniqueName(name ?? base), purpose, engine);
     this.tabs.push(tab);
     this.emitCreated(tab);
     this.onChange();

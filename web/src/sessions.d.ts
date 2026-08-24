@@ -54,7 +54,7 @@ export interface FloorLayout {
 }
 
 export interface FloorTab {
-  key: number; id: number; num: string; bg: string; fg: string; border: string; accent: string; dot: string; dotAnim?: CSSProperties;
+  key: number; id: number; num: string; name: string; label: string; bg: string; fg: string; border: string; accent: string; dot: string; dotAnim?: CSSProperties;
 }
 
 export interface SessionsModel {
@@ -65,6 +65,7 @@ export interface SessionsModel {
   globalLine: string;
   costLine: string;
   sessionTitle: string;
+  sessionNum: string;
   sessionTask: string;
   sessionAccent: string;
   sessionState: string;

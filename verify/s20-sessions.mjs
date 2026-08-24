@@ -87,5 +87,16 @@ ok("the header carries the active session's live tokens + cost", (() => {
 })());
 ok("the session header shows the tab name", m.sessionTitle.includes("LEDGER"));
 
+// --- named sessions: the rail shows the NAME (truncated), not a bare number ------
+ok("the rail label is the session name, not a number", m.floorTabs[0].label === "LEDGER" && m.floorTabs[1].label === "HARBOR");
+ok("the session header is the name (no number prefix in the title)", m.sessionTitle === "LEDGER");
+ok("the header still exposes the position separately", m.sessionNum === "01");
+{
+  const longName = "a-very-long-session-name";
+  const s3 = { ...state, agents: { ...state.agents, 1: mk(1, longName, "ask", { busy: true }) } };
+  const lbl = sessionsModel(s3, 1, null).floorTabs[0].label;
+  ok("a long rail name is truncated to 12 chars with an ellipsis", lbl.length === 12 && lbl.endsWith("…") && longName.startsWith(lbl.slice(0, 11)));
+}
+
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);
