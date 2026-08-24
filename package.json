@@ -2,6 +2,27 @@
   "name": "dom-agent",
   "version": "0.1.0",
   "description": "dom — a terminal coding agent. OpenRouter-only, runtime model switching, Windows-first.",
+  "keywords": [
+    "coding-agent",
+    "ai-agent",
+    "openrouter",
+    "terminal",
+    "claude",
+    "deepseek",
+    "llm",
+    "mcp",
+    "typescript",
+    "windows"
+  ],
+  "homepage": "https://github.com/DOMCHURCH/dom#readme",
+  "bugs": {
+    "url": "https://github.com/DOMCHURCH/dom/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DOMCHURCH/dom"
+  },
+  "license": "MIT",
   "type": "module",
   "bin": {
     "dom": "./dist/cli.js"

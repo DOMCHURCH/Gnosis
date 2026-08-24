@@ -11,55 +11,62 @@
 ╚═════╝   ╚═════╝  ╚═╝     ╚═╝
 ```
 
+[![CI](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dom-agent)](https://www.npmjs.com/package/dom-agent)
+[![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
+[![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
+
 **dom** is a terminal coding agent that runs entirely on OpenRouter (bring your own key), lets you switch models mid-session, and ships with a web UI that visualizes your agents as figures moving around an office floor.
 
 ![dom office floor](docs/screenshot.png)
 *Office floor — manual agents across all zones, two live sessions, file browser, goal bar*
 
-## Features
+## Why dom
 
-- **OpenRouter BYOK** — one provider, your own key; no vendor lock-in, no bundled credits
-- **Runtime model switching** — change the model mid-session with `/model`, no restart
+Most coding agents lock you to one model. dom runs on any of hundreds of models via OpenRouter — switch from Sonnet to DeepSeek mid-session and your history survives intact. Verified live.
+
+It is **Windows-first**, where most tools treat Windows as an afterthought: real path handling, a working ConPTY terminal, and CI that runs the full suite on `windows-latest`.
+
+Prompt caching gives a **measured ~12× cost reduction** on cached turns.
+
+And the browser UI is not a dashboard bolted on the side — it is a live pixel-art office floor where every agent, background job, and sub-agent is a figure at a desk, working in real time.
+
+## What it has
+
+- **Any OpenRouter model, switched at runtime** — `/model` mid-session, no restart, conversation history carries over
+- **Browser UI with an animated office floor** — agents as figures in zones (coordinator, planning, coding, application, sub-agents), each showing what it is doing right now
+- **MCP client** — connect Context7, Playwright, Chrome DevTools, or any MCP server
+- **Obsidian vault memory** — browse your vault, save messages as notes, and auto-save by intent into `Code/`, `Decisions/`, and `Research/`
+- **Sub-agents with isolated context budgets** — parallel or scoped work on a restricted tool set, with per-sub-agent cost accounting
+- **Tree-sitter repo map, PageRank-ranked** — structural map of the codebase with the most central files first, so edits are grounded
+- **Web terminal, file browser, diff viewer, webhook inspector** — a real ConPTY shell in the browser, streaming diffs, and a replayable webhook capture buffer
+- **Goal bar with an automated verifier loop** — hold an agent to a goal; a read-only reviewer checks each turn's diff and steers it back on fail
+- **90 automated test suites** — offline, isolated, run on every push
+- **BYOK** — your key stays in `~/.dom/.env`, and there is no telemetry
 
 ![dom model picker](docs/screenshot-model-picker.png)
 *Runtime model switching — full OpenRouter catalog in the browser*
 
-- **10 built-in tools** — read, write, edit, multi-edit, bash, HTTP, web search, tree-sitter repo map, todo, and more
-- **Sub-agents** — spawn isolated agents for parallel or scoped work
-- **Repo map** — tree-sitter structural map of your codebase for grounded edits
-- **Prompt caching** — measured ~12× cost reduction on cached turns
-- **Multi-session tabs** — run several agents side by side, each with its own context
-- **Inter-agent messaging** — tabs can message each other to coordinate
-- **Skills system** — reusable, invokable capabilities the agent loads on demand
-- **Obsidian memory** — point dom at your Obsidian vault (`obsidianVault` in config, or a `vault:` directive in `~/.dom/AGENTS.md`); browse it and save chat messages as notes from the web UI (wikilinks supported), or `/vault` to make it the working root
-- **Auto-commit** — each successful write/edit is committed to git (toggle with `--no-auto-commit`)
-- **Plan mode** — the agent proposes a plan and waits for approval before touching code
-- **Hooks** — run your own commands on agent lifecycle events
-- **Web UI** — office-floor visualization of live agents, a file browser, an in-browser terminal, and a per-tab goal bar
+Also in the box: 15 built-in tools (`read`, `write`, `edit`, `glob`, `grep`, `bash`, `http`, `web_search`, `task`, `todo`, `memory`, `oracle`, `view_image`, `send_message`, `list_tabs`), multi-session tabs, inter-agent messaging, a skills system, plan mode, hooks, and auto-commit on every successful edit.
 
 ## Install
 
 ```sh
-npm install -g dom-agent      # or, from source: npm link
+npm install -g dom-agent
+echo "OPENROUTER_API_KEY=sk-or-..." >> ~/.dom/.env
+dom
 ```
 
-Add your OpenRouter key to `~/.dom/.env`:
+Optional keys:
 
 ```sh
-OPENROUTER_API_KEY=sk-or-...     # required — all model calls route through OpenRouter
-BRAVE_API_KEY=BSA...             # optional — enables the web_search tool (Brave Search API)
+BRAVE_API_KEY=BSA...             # enables the web_search tool (Brave Search API)
 ```
 
-Optional: to route `groq/`-prefixed models natively to Groq, add a Groq key to `~/.dom/config.json`:
+To route `groq/`-prefixed models natively to Groq, add a Groq key to `~/.dom/config.json`:
 
 ```json
 { "groqApiKey": "gsk_..." }
-```
-
-Then run it:
-
-```sh
-dom
 ```
 
 ## Usage
@@ -69,6 +76,8 @@ dom                       # start the TUI
 dom serve                 # start the web UI (office floor, file browser, terminal)
 dom -p "prompt"           # pipe mode: one turn, final answer to stdout, exit
 ```
+
+`dom serve` prints a **LOCAL** and a **LAN** URL, each with a scannable QR code — point your phone's camera at the LAN one to drive the same session from the couch. Both carry the session token, which is what gates access.
 
 Common in-session slash commands:
 
@@ -87,7 +96,7 @@ Type `@` to attach files and `/` to autocomplete commands.
 
 ## Keys & network
 
-All keys are yours and stay local — read at request time from `~/.dom/.env` (or `~/.dom/config.json` for Groq), never bundled with the package, and never sent anywhere except the service they belong to. There is no telemetry.
+**Your key never leaves your machine.** Keys are read at request time from `~/.dom/.env` (or `~/.dom/config.json` for Groq), are never bundled with the package, and are never sent anywhere except the service they belong to. **There is no telemetry — dom does not phone home.**
 
 dom makes outbound HTTP(S) requests to:
 
@@ -95,6 +104,8 @@ dom makes outbound HTTP(S) requests to:
 - **Groq** (`api.groq.com`) — only when you run a `groq/`-prefixed model; fetches its `/models` and routes chat completions natively. Uses `groqApiKey` from `~/.dom/config.json`. Skipped entirely if no Groq key is set.
 - **Brave Search** (`api.search.brave.com`) — the `web_search` tool. Uses `BRAVE_API_KEY`. Skipped if unset.
 - **Arbitrary public hosts** — the `http` tool fetches URLs you (or the agent) request. Loopback, private-network, and cloud-metadata addresses are refused. Secrets are never inlined: reference them as `${VAR_NAME}` and the value is pulled from `~/.dom/.env` at send time.
+
+See [SECURITY.md](SECURITY.md) for the permission model and how the `dom serve` token gate works.
 
 ## Development
 
@@ -104,9 +115,11 @@ cd dom
 npm install
 npm run build
 npm link
-npm run verify      # 68 test suites
+npm run verify      # 90 test suites
 npm run eval        # 10-task eval harness
 ```
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the test conventions, how to add a skill, and PR guidelines.
 
 ---
 

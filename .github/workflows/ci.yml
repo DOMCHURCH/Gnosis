@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    name: build & verify
+    # Windows-first: dom's path handling, the PTY layer (node-pty/ConPTY) and
+    # several verify suites are Windows-specific, so this is the platform that
+    # actually needs to stay green.
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The verify suites import from dist/, so the build has to land first.
+      - run: npm run build
+
+      - run: npm run verify
