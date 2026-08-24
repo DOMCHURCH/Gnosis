@@ -60,7 +60,22 @@ function wsConnect(port, token) {
     let buf = Buffer.alloc(0), up = false;
     const backlog = [], waiters = [];
     const deliver = (o) => { const w = waiters.shift(); if (w) w(o); else backlog.push(o); };
-    const api = { next: () => new Promise((r) => { const m = backlog.shift(); m !== undefined ? r(m) : waiters.push(r); }), close: () => socket.destroy() };
+    const api = {
+      next: () => new Promise((r) => { const m = backlog.shift(); m !== undefined ? r(m) : waiters.push(r); }),
+      /** Collect frames until `stop` matches (inclusive), or the deadline passes. */
+      collectUntil: async (stop, ms = 15000) => {
+        const got = [], deadline = Date.now() + ms;
+        while (Date.now() < deadline) {
+          const left = deadline - Date.now();
+          const m = await Promise.race([api.next(), new Promise((r) => setTimeout(() => r(undefined), left))]);
+          if (m === undefined) break; // timed out
+          got.push(m);
+          if (stop(m)) break;
+        }
+        return got;
+      },
+      close: () => socket.destroy(),
+    };
     socket.on("data", (chunk) => {
       buf = Buffer.concat([buf, chunk]);
       if (!up) { const i = buf.indexOf("\r\n\r\n"); if (i === -1) return; if (!/ 101 /.test(buf.subarray(0, i).toString())) { resolve({ ok: false }); socket.destroy(); return; } up = true; buf = buf.subarray(i + 4); resolve({ ok: true, api }); }
@@ -80,8 +95,21 @@ if (info) {
   const client = await wsConnect(info.port, info.token);
   ok("a browser can connect to the served URL with its token", client.ok === true);
   if (client.ok) {
-    const snap = await client.api.next();
-    ok("the connected browser receives an agent snapshot", snap.type === "agent.created");
+    // The opening burst is sent synchronously on connect: the agent roster, then
+    // any replayed history, then `commands`, then the `@sync` high-water mark.
+    // Assert the roster arrives WITHIN that burst — i.e. before @sync — rather
+    // than at a fixed index. Ordering among the roster frames is not a contract
+    // (a broadcast agent.created can legitimately follow the snapshot one), but
+    // "the snapshot was populated at connect time" is: if the bridge is not wired
+    // yet, getAgents() returns [] and NO agent.created arrives before @sync, which
+    // is precisely the startup race this asserts against.
+    const burst = await client.api.collectUntil((m) => m.type === "@sync");
+    const sawSync = burst.some((m) => m.type === "@sync");
+    const created = burst.filter((m) => m.type === "agent.created");
+    ok(
+      `the connected browser receives an agent snapshot before @sync (got ${created.length} agent.created in [${burst.map((m) => m.type).join(", ")}])`,
+      sawSync && created.length > 0,
+    );
     client.api.close();
   } else {
     ok("the connected browser receives an agent snapshot", false);

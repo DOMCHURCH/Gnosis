@@ -126,9 +126,16 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
   }
 }
 
-/** Run the server headlessly: wire the controller + bridge, then stay alive. The
- * returned promise never resolves (the process runs until Ctrl+C). */
-export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise<void> {
+/** Wire the controller + bridge so the server can answer a browser: the agent
+ * roster, input/command routing, file search, vault saves. Returns as soon as the
+ * wiring is in place.
+ *
+ * This is split out of runServeHeadless because ORDER MATTERS at startup. The
+ * server begins listening (and `dom serve` prints its URL) before this runs, so
+ * until the bridge is wired `bridge.getAgents()` is still the default empty stub —
+ * and a browser connecting in that window receives a snapshot with no agents in
+ * it. Call this BEFORE advertising the URL. */
+export function wireServeHost(rootEngine: Engine, bridge: AppBridge): void {
   rootEngine.interactive = true; // file edits prompt → answered from the browser
   const rootName = path.basename(rootEngine.cwd) || "main";
   const controller = new TabsController(
@@ -167,5 +174,11 @@ export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise
     return r;
   };
 
+}
+
+/** Wire the host, then stay alive. The returned promise never resolves (the
+ * process runs until Ctrl+C). */
+export function runServeHeadless(rootEngine: Engine, bridge: AppBridge): Promise<void> {
+  wireServeHost(rootEngine, bridge);
   return new Promise<void>(() => {}); // keep the process alive
 }

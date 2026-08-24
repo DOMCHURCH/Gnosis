@@ -135,6 +135,18 @@ async function main() {
         process.stdout.write(`(public tunnel unavailable: ${(e as Error).message} — continuing local-only)\n`);
       }
     }
+    // No terminal attached → the browser drives the engines. WIRE IT BEFORE the
+    // URL is printed: the server is already listening, so a browser that connects
+    // the instant it sees the URL must find a populated agent roster. Wiring after
+    // the print leaves a window — widened by this dynamic import on a cold disk —
+    // where `bridge.getAgents()` is still the empty default and the client's
+    // opening snapshot carries no agents at all.
+    const headless = !process.stdin.isTTY || !process.stdout.isTTY;
+    if (headless) {
+      const { wireServeHost } = await import("./servehost.js");
+      wireServeHost(engine, bridge);
+    }
+
     // First output, on STDOUT, before the banner/TUI so it's always visible. Each URL
     // is followed by a scannable QR code so a phone doesn't have to type the token.
     const { serveBlock } = await import("./serveprint.js");
@@ -146,10 +158,9 @@ async function main() {
     const scope = server.lanUrl ? "LAN + loopback" : "loopback only (no LAN address)";
     process.stdout.write(`dom serve — scan or open:\n${await serveBlock(links)}\n(${scope} · token required · Ctrl+C to stop)\n\n`);
 
-    // No terminal attached → run the server headlessly (the browser drives it).
-    if (!process.stdin.isTTY || !process.stdout.isTTY) {
-      const { runServeHeadless } = await import("./servehost.js");
-      await runServeHeadless(engine, bridge);
+    // Already wired above — just stay alive until Ctrl+C.
+    if (headless) {
+      await new Promise<void>(() => {});
       return;
     }
   }
