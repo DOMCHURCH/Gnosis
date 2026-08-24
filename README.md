@@ -11,15 +11,45 @@
 ╚═════╝   ╚═════╝  ╚═╝     ╚═╝
 ```
 
+# dom — terminal coding agent
+
+**Run any model. Switch mid-session. History survives.**
+**12x cheaper via prompt caching. Verified live.**
+
 [![CI](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@dominquechurch/dom-agent)](https://www.npmjs.com/package/@dominquechurch%2Fdom-agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
 
-**dom** is a terminal coding agent that runs entirely on OpenRouter (bring your own key), lets you switch models mid-session, and ships with a web UI that visualizes your agents as figures moving around an office floor.
-
 ![dom office floor](docs/screenshot.png)
 *Office floor — manual agents across all zones, two live sessions, file browser, goal bar*
+
+| Feature | dom | Claude Code | Aider | OpenCode |
+|---|---|---|---|---|
+| Any OpenRouter model | ✓ | ✗ | ✓ | ✓ |
+| Mid-session model switch | ✓ | ✗ | ✗ | ✓ |
+| Browser UI | ✓ | ✗ | ✗ | ✓ |
+| Windows-first | ✓ | ✗ | ✗ | ✗ |
+| Obsidian vault memory | ✓ | ✗ | ✗ | ✗ |
+| MCP client | ✓ | ✓ | ✗ | ✓ |
+| Pixel-art office floor | ✓ | ✗ | ✗ | ✗ |
+| Built by a 16yo | ✓ | ✗ | ✗ | ✗ |
+
+## Install
+
+```sh
+npx @dominquechurch/dom-agent
+```
+
+`npx` works without a global install — easiest way to try it. To keep it around:
+
+```sh
+npm install -g @dominquechurch/dom-agent
+echo "OPENROUTER_API_KEY=sk-or-..." >> ~/.dom/.env
+dom
+```
+
+I built dom in two weeks before starting Grade 12. I wanted Claude Code but provider-agnostic, with a browser UI I could watch while agents worked. The office floor started as a joke and became the thing everyone notices first.
 
 ## Why dom
 
@@ -33,6 +63,7 @@ And the browser UI is not a dashboard bolted on the side — it is a live pixel-
 
 ## What it has
 
+- **12x prompt cache cost reduction** — measured live: $0.0252 → $0.0021 on identical tokens via Anthropic `cache_control` breakpoints
 - **Any OpenRouter model, switched at runtime** — `/model` mid-session, no restart, conversation history carries over
 - **Browser UI with an animated office floor** — agents as figures in zones (coordinator, planning, coding, application, sub-agents), each showing what it is doing right now
 - **MCP client** — connect Context7, Playwright, Chrome DevTools, or any MCP server
@@ -49,15 +80,7 @@ And the browser UI is not a dashboard bolted on the side — it is a live pixel-
 
 Also in the box: 15 built-in tools (`read`, `write`, `edit`, `glob`, `grep`, `bash`, `http`, `web_search`, `task`, `todo`, `memory`, `oracle`, `view_image`, `send_message`, `list_tabs`), multi-session tabs, inter-agent messaging, a skills system, plan mode, hooks, and auto-commit on every successful edit.
 
-## Install
-
-```sh
-npm install -g @dominquechurch/dom-agent
-echo "OPENROUTER_API_KEY=sk-or-..." >> ~/.dom/.env
-dom
-```
-
-Optional keys:
+## Optional keys
 
 ```sh
 BRAVE_API_KEY=BSA...             # enables the web_search tool (Brave Search API)
