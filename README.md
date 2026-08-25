@@ -24,7 +24,7 @@
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
 
 ![Gnosis office floor](docs/screenshot.png)
-*Office floor — manual agents across all zones, two live sessions, file browser, goal bar*
+*The 3D office floor — a Three.js scene of five lit rooms, agents at desks, live sessions, file browser, goal bar*
 
 | Feature | Gnosis | Claude Code | Aider | OpenCode |
 |---|---|---|---|---|
@@ -34,7 +34,9 @@
 | LAN QR code (drive it from your phone) | ✓ | ✗ | ✗ | ✗ |
 | Obsidian vault memory | ✓ | ✗ | ✗ | ✗ |
 | MCP client | ✓ | ✓ | ✗ | ✓ |
-| Pixel-art office floor | ✓ | ✗ | ✗ | ✗ |
+| 3D office floor (Three.js) | ✓ | ✗ | ✗ | ✗ |
+| Dream mode (autonomous background tasks) | ✓ | ✗ | ✗ | ✗ |
+| Issue-to-PR pipeline | ✓ | ✓ | ✗ | ✗ |
 | Built by a 16yo | ✓ | ✗ | ✗ | ✗ |
 
 ## Install
@@ -61,26 +63,33 @@ It is **Windows-first**, where most tools treat Windows as an afterthought: real
 
 Prompt caching gives a **measured ~12× cost reduction** on cached turns.
 
-And the browser UI is not a dashboard bolted on the side — it is a live pixel-art office floor where every agent, background job, and sub-agent is a figure at a desk, working in real time.
+And the browser UI is not a dashboard bolted on the side — it is a live **Three.js office floor**: five lit rooms you can orbit and zoom, where every agent, background job, dream, and sub-agent is a blocky figure at a desk, working in real time.
 
 ## What it has
 
 - **12x prompt cache cost reduction** — measured live: $0.0252 → $0.0021 on identical tokens via Anthropic `cache_control` breakpoints
 - **Any OpenRouter model, switched at runtime** — `/model` mid-session, no restart, conversation history carries over
-- **Browser UI with an animated office floor** — agents as figures in zones (coordinator, planning, coding, application, sub-agents), each showing what it is doing right now
+- **Browser UI with a 3D office floor** — a Three.js scene you can orbit: agents as blocky figures in five lit rooms (coordinator, planning, coding, application, sub-agents), each showing what it is doing right now
 - **MCP client** — connect Context7, Playwright, Chrome DevTools, or any MCP server
 - **Obsidian vault memory** — browse your vault, save messages as notes, and auto-save by intent into `Code/`, `Decisions/`, and `Research/`
 - **Sub-agents with isolated context budgets** — parallel or scoped work on a restricted tool set, with per-sub-agent cost accounting
 - **Tree-sitter repo map, PageRank-ranked** — structural map of the codebase with the most central files first, so edits are grounded
 - **Web terminal, file browser, diff viewer, webhook inspector** — a real ConPTY shell in the browser, streaming diffs, and a replayable webhook capture buffer
 - **Goal bar with an automated verifier loop** — hold an agent to a goal; a read-only reviewer checks each turn's diff and steers it back on fail
-- **90 automated test suites** — offline, isolated, run on every push
+- **Dreaming** — `/dream "refactor the auth module"` runs a long-horizon task in its own engine while you keep working. Hard caps (50 iterations, $2, 2 hours), desktop notification when it lands, and it never outlives the process
+- **GitHub issue → PR** — `/issue <url>` reads an issue, implements it as a dream in an isolated worktree, runs the tests, retries once on failure, and opens a draft PR that closes it
+- **Automatic outcome evaluation** — after any turn that touches files, a read-only verifier judges the diff against your request and reports `✓ outcome: … (94% confidence)`. On a fail, one button feeds the critique back
+- **Security scanning on every write** — API keys, tokens, private keys, and hardcoded passwords block the auto-commit before it happens. The write always stands; `/commit --force` overrides
+- **`ask_user`** — the agent can stop and ask instead of guessing when two approaches are equally valid and the wrong one means rework
+- **Surgical rewind** — double-Esc opens the last 20 turns: rewind to one, or summarize everything before it into a single block via the oracle model
+- **Phone-first task assignment** — on a phone, one button opens a full-screen composer: *Code it*, *Dream it*, or *Research it*, then lock the screen and get a browser notification when it is done
+- **100 automated test suites** — offline, isolated, run on every push
 - **BYOK** — your key stays in `~/.dom/.env`, and there is no telemetry
 
 ![Gnosis model picker](docs/screenshot-model-picker.png)
 *Runtime model switching — full OpenRouter catalog in the browser*
 
-Also in the box: 15 built-in tools (`read`, `write`, `edit`, `glob`, `grep`, `bash`, `http`, `web_search`, `task`, `todo`, `memory`, `oracle`, `view_image`, `send_message`, `list_tabs`), multi-session tabs, inter-agent messaging, a skills system, plan mode, hooks, and auto-commit on every successful edit.
+Also in the box: 16 built-in tools (`read`, `write`, `edit`, `glob`, `grep`, `bash`, `http`, `web_search`, `task`, `todo`, `memory`, `oracle`, `view_image`, `ask_user`, `send_message`, `list_tabs`), multi-session tabs, inter-agent messaging, a skills system, plan mode, hooks, and auto-commit on every successful edit.
 
 ## Optional keys
 
@@ -102,7 +111,7 @@ gnosis serve                 # start the web UI (office floor, file browser, ter
 gnosis -p "prompt"           # pipe mode: one turn, final answer to stdout, exit
 ```
 
-`gnosis serve` prints a **LOCAL** and a **LAN** URL, each with a scannable QR code — point your phone's camera at the LAN one to drive the same session from the couch. Both carry the session token, which is what gates access.
+`gnosis serve` prints a **LOCAL** and a **LAN** URL, with one scannable QR code for the LAN one — point your phone's camera at it to drive the same session from the couch. (A loopback QR would be useless: the only thing that scans one is a phone, which cannot reach `127.0.0.1`.) Both URLs carry the session token, which is what gates access.
 
 Common in-session slash commands:
 
@@ -116,6 +125,11 @@ Common in-session slash commands:
 - `/cost` — show token usage and spend for the session
 - `/undo` — revert the last agent commit
 - `/jobs` — list background jobs
+- `/dream "<task>"` — run a long-horizon task in the background (`/dreams`, `/dream stop <id>`, `/dream resume <id>`)
+- `/issue <url>` — implement a GitHub issue as a dream and open a PR (`/issue status <n>`)
+- `/eval` — judge whether the last turn actually succeeded (`/fix` feeds a failure back)
+- `/rewind` — pick a turn to rewind to, or summarize up to (also double-Esc)
+- `/security scan <path>` — scan a file for exposed keys
 
 Type `@` to attach files and `/` to autocomplete commands.
 
@@ -123,7 +137,7 @@ Type `@` to attach files and `/` to autocomplete commands.
 
 **Your key never leaves your machine.** Keys are read at request time from `~/.dom/.env` (or `~/.dom/config.json` for Groq), are never bundled with the package, and are never sent anywhere except the service they belong to. **There is no telemetry — Gnosis does not phone home.**
 
-gnosis makes outbound HTTP(S) requests to:
+Gnosis makes outbound HTTP(S) requests to:
 
 - **OpenRouter** (`openrouter.ai`) — every model call, plus the public `/models` catalog. Uses `OPENROUTER_API_KEY`.
 - **Groq** (`api.groq.com`) — only when you run a `groq/`-prefixed model; fetches its `/models` and routes chat completions natively. Uses `groqApiKey` from `~/.dom/config.json`. Skipped entirely if no Groq key is set.
@@ -140,7 +154,7 @@ cd Gnosis
 npm install
 npm run build
 npm link
-npm run verify      # 90 test suites
+npm run verify      # 100 test suites
 npm run eval        # 10-task eval harness
 ```
 

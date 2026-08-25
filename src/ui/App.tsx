@@ -52,6 +52,8 @@ import { rankedFiles } from "../filesearch.js";
 import { recentTurns, applyRewind, applySummary, splitForSummary, summaryPrompt, type TurnMark } from "../rewind.js";
 import { DreamManager, formatDream, DREAM_MAX_ITERATIONS, DREAM_MAX_USD } from "../dreams.js";
 import { domDir } from "../config.js";
+import { scanFile, SECURITY_IGNORE_FILE } from "../security.js";
+import { parseIssueRef, currentRepo, fetchIssue, issueBranchName, runIssuePipeline, formatIssueJob, type IssueJob } from "../issue.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -1300,6 +1302,50 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         for (const d of all) for (const line of formatDream(d).split("\n")) sysLog(line);
         break;
       }
+      // /security scan <path> — run the secret scan on any file by hand.
+      case "security": {
+        if (parts[1] !== "scan" || !parts[2]) { sysLog("usage: /security scan <path>"); break; }
+        const target = path.resolve(engine.cwd, parts.slice(2).join(" "));
+        void scanFile(target, engine.cwd).then((res) => {
+          const rel = path.relative(engine.cwd, target).split(path.sep).join("/");
+          if (res.exempt) { sysLog(`${rel}: exempt via ${SECURITY_IGNORE_FILE}`); return; }
+          if (!res.findings.length) { sysLog(`${rel}: clean — no secrets detected`); return; }
+          sysLog(`${rel}: ${res.findings.length} finding(s)`);
+          // Only the redacted sample is ever printed.
+          for (const f of res.findings) sysLog(`  line ${f.line}: ${f.kind} (${f.sample})`);
+        }).catch((e) => sysLog(`security: ${(e as Error).message}`));
+        break;
+      }
+      // /commit --force — commit what the security scan blocked.
+      case "commit": {
+        const force = parts.includes("--force") || parts.includes("-f");
+        if (!engine.blockedCommits.size) { sysLog("nothing blocked — auto-commit is up to date"); break; }
+        if (!force) {
+          sysLog(`${engine.blockedCommits.size} file(s) blocked by the security scan:`);
+          for (const abs of engine.blockedCommits.keys()) sysLog(`  ${path.relative(engine.cwd, abs).split(path.sep).join("/")}`);
+          sysLog("  /commit --force commits them anyway");
+          break;
+        }
+        void engine.forceBlockedCommits().then((done) => {
+          sysLog(done.length ? `committed ${done.length} file(s) despite the security scan: ${done.join(", ")}` : "nothing to commit");
+        });
+        break;
+      }
+      // /issue <url|#n> — implement a GitHub issue as a dream in its own worktree,
+      // then test it and open a PR. /issue status <n> reports where one is.
+      case "issue": {
+        if (parts[1] === "status") {
+          const n = Number(parts[2]);
+          const jobs = [...issueJobsRef.current.values()].filter((j) => !n || j.ref.number === n);
+          if (!jobs.length) { sysLog(n ? `no issue job for #${n}` : "no issue jobs yet — /issue <url> starts one"); break; }
+          for (const j of jobs) sysLog(formatIssueJob(j));
+          break;
+        }
+        const raw = parts.slice(1).join(" ").trim();
+        if (!raw) { sysLog("usage: /issue <github-issue-url>  |  /issue status <number>"); break; }
+        void startIssue(raw);
+        break;
+      }
       case "new":
         newTab(parts[1], parts.slice(2).join(" "));
         break;
@@ -1647,6 +1693,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       bridge: bridgeRef.current ?? undefined,
       ownerTabId: () => controller.active().id,
       notifyEnabled: notifyRef.current,
+      onFinish: (rec) => {
+        const w = dreamWaitersRef.current.get(rec.id);
+        if (!w) return;
+        dreamWaitersRef.current.delete(rec.id);
+        w(rec.summary, rec.status);
+      },
       requestApproval: (dreamId, preview) =>
         new Promise((resolve) => {
           sysLog(`dream ${dreamId} needs approval — answering below`);
@@ -1671,6 +1723,40 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       }
     });
     return dm;
+  };
+
+  /** Live issue jobs, keyed by issue number. */
+  const issueJobsRef = useRef(new Map<number, IssueJob>());
+  /** Dream-completion listeners the issue pipeline registers. */
+  const dreamWaitersRef = useRef(new Map<string, (summary: string, status: string) => void>());
+
+  const startIssue = async (raw: string) => {
+    const fallback = (await currentRepo(engine.cwd)) ?? undefined;
+    const ref = parseIssueRef(raw, fallback);
+    if (!ref) { sysLog(`could not read an issue reference from "${raw}"`); return; }
+    sysLog(`#${ref.number}: fetching from ${ref.owner}/${ref.repo}…`);
+    const got = await fetchIssue(ref, engine.cwd);
+    if (!got.ok) { sysLog(`#${ref.number}: ${got.error}`); return; }
+
+    // Isolated worktree: a dream editing the tree you are also using would
+    // collide with your own turns.
+    const wt = await createWorktree(engine.cwd, issueBranchName(ref.number), "gnosis");
+    if (!wt.ok) { sysLog(`#${ref.number}: ${wt.error}`); return; }
+    sysLog(`#${ref.number}: worktree ${wt.info.branch} at ${wt.info.path}`);
+
+    const job: IssueJob = {
+      ref, title: got.issue.title, dreamId: "", branch: wt.info.branch,
+      worktree: wt.info.path, stage: "implementing",
+    };
+    issueJobsRef.current.set(ref.number, job);
+    const dm = ensureDreams();
+    await dm.ready();
+    await runIssuePipeline(got.issue, wt.info.path, wt.info.branch, {
+      startDream: (task, cwd) => dm.start(task, cwd).id,
+      onDreamFinish: (id, cb) => dreamWaitersRef.current.set(id, cb),
+      label: (id, label) => dm.setLabel(id, label),
+      say: sysLog,
+    }, job);
   };
 
   const launchBackground = (text: string) => {

@@ -44,6 +44,9 @@ export interface DreamRecord {
   iterations: number;
   /** One line: the dream's own closing summary, or why it ended. */
   summary: string;
+  /** Display label for the floor and listings, when the raw id is not the most
+   *  useful name — the issue pipeline sets "#241 implement rate limiting". */
+  label?: string;
   /** Set when this dream is a fresh re-run of an earlier one (`/dream resume`).
    *  The original is left untouched in the log — two attempts at one task are
    *  two entries, not one overwritten. */
@@ -68,6 +71,9 @@ export interface DreamDeps {
   /** Put a question to the user (ask_user from inside a dream). */
   askUser?: (dreamId: string, question: string, options: string[]) => Promise<string>;
   notifyEnabled?: boolean;
+  /** Called whenever a dream reaches a terminal state. The issue pipeline uses
+   *  this to pick the work up again: run the tests, then open the PR. */
+  onFinish?: (record: DreamRecord) => void;
   /** Injected in tests so the suite doesn't wait ten real minutes. */
   askTimeoutMs?: number;
   approvalTimeoutMs?: number;
@@ -294,6 +300,12 @@ export class DreamManager {
   }
 
   /** Start a dream. Returns its record immediately; the work runs detached. */
+  /** Attach a display label to a dream after starting it. */
+  setLabel(id: string, label: string): void {
+    const rec = this.records.find((r) => r.id === id);
+    if (rec) { rec.label = label; this.emit(rec); void saveDreams(this.home, this.records); }
+  }
+
   start(task: string, cwd?: string, resumedFrom?: string): DreamRecord {
     const engine = this.deps.fork(cwd);
     const id = `d${this.seq++}`;
@@ -447,6 +459,7 @@ export class DreamManager {
     rec.summary = summary;
     await saveDreams(this.home, this.records);
     this.emit(rec);
+    try { this.deps.onFinish?.(rec); } catch { /* a listener must not break the dream */ }
     const verb = status === "done" ? "finished" : status;
     notify("Gnosis", `dream ${id} ${verb}: ${summary.slice(0, 80)}`, { enabled: this.deps.notifyEnabled !== false });
   }
@@ -457,7 +470,7 @@ export class DreamManager {
         type: "dream.state",
         id: rec.id,
         status: rec.status,
-        task: rec.task,
+        task: rec.label ?? rec.task,
         usd: rec.usd,
         summary: rec.summary,
       });

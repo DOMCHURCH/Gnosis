@@ -6,6 +6,7 @@ import { promises as fs, existsSync, statSync } from "node:fs";
 import { serialize, estimateTokens, type Msg, type ToolCall, type ImagePart, type FilePart } from "./messages.js";
 import { withWorkingDir } from "./system-prompt.js";
 import { autoCommitFile } from "./autocommit.js";
+import { scanFile, warningLine, toolNote } from "./security.js";
 import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
 import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
 import { gitHead, gitDiff, gitDiffHead } from "./gitinfo.js";
@@ -1025,6 +1026,21 @@ export class Engine {
 
   /** Set when a failed outcome should be fed back as the next turn (autoFixOutcome).
    *  The UI drains it after the turn ends and submits it as a fresh user turn. */
+  /** Files whose auto-commit the security scan blocked, and the action that
+   *  wrote them. `/commit --force` drains this. */
+  readonly blockedCommits = new Map<string, "write" | "edit">();
+
+  /** Commit the files a security scan blocked. Returns what it committed. */
+  async forceBlockedCommits(): Promise<string[]> {
+    const done: string[] = [];
+    for (const [abs, action] of [...this.blockedCommits]) {
+      const c = await autoCommitFile(abs, action).catch(() => null);
+      this.blockedCommits.delete(abs);
+      if (c) done.push(path.relative(this.cwd, abs).split(path.sep).join("/"));
+    }
+    return done;
+  }
+
   pendingOutcomeFix: string | null = null;
   takeOutcomeFix(): string | null {
     const p = this.pendingOutcomeFix;
@@ -1627,7 +1643,20 @@ export class Engine {
       // Dom just wrote the file — treat that as having "read" the current content,
       // so consecutive edits work and only EXTERNAL changes force a re-read.
       await this.recordRead(String(args.path ?? ""));
-      if (this.autoCommit) {
+      // Secret scan between the write landing and auto-commit firing. A leaked
+      // key must not reach a commit, but the write itself always stands —
+      // blocking a commit is recoverable, silently dropping work is not.
+      const scan = await scanFile(abs, this.cwd).catch(() => ({ findings: [], exempt: false }));
+      if (scan.findings.length) {
+        const rel = path.relative(this.cwd, abs).split(path.sep).join("/");
+        this.blockedCommits.set(abs, tool.name);
+        cb.onSystem(warningLine(rel, scan.findings));
+        try { this.bus?.emit({ type: "security.blocked", tabId: this.agentId, path: rel, findings: scan.findings }); } catch { /* emit and forget */ }
+        // The model is told what and where, but only the REDACTED sample: the
+        // tool result goes straight back into context, and a key echoed there is
+        // a key leaked again.
+        result = { ...result, output: `${result.output}\n\n${toolNote(scan.findings)}` };
+      } else if (this.autoCommit) {
         await autoCommitFile(abs, tool.name).catch(() => {});
       }
       // Design mode: after an edit to a web file, auto-screenshot the dev server and

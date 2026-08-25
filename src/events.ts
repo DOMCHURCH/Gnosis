@@ -74,6 +74,8 @@ export type DomEvent =
   // A dream started, changed state, or ended — the floor shows a dreaming agent
   // in its own visual state and the panel lists status/cost/summary.
   | { type: "dream.state"; id: string; status: string; task: string; usd: number; summary: string }
+  // A secret scan blocked a file's auto-commit.
+  | { type: "security.blocked"; tabId: number; path: string; findings: { kind: string; line: number; sample: string }[] }
   | { type: "vault.changed" }
   | { type: "connections.changed" }
   // A webhook was captured (POST /webhook/:label) — clients re-read /api/webhooks.

@@ -10,6 +10,8 @@ import type { TaskPlan } from "./taskplan";
 import { ThreeFloor } from "./ThreeFloor";
 import { FloorMinimap } from "./FloorMinimap";
 import { AskCard } from "./AskCard";
+import { NewTaskSheet, type TaskMode } from "./NewTaskSheet";
+import { requestNotifyPermission } from "./notify";
 import { FileOutputView } from "./FileOutput";
 import type { FileOutput } from "./filekind";
 import { messageStyle } from "./chatgroups.js";
@@ -54,6 +56,8 @@ export interface SessionsProps {
   onAnswerAsk?: (askId: string | undefined, text: string) => void;
   /** Feed a failed outcome's critique back as the next turn. */
   onFixOutcome?: () => void;
+  /** Phone task composer: run `text` as a turn, a dream, or a research sub-agent. */
+  onNewTask?: (text: string, mode: TaskMode) => void;
   /** Re-run one of your own messages as a background agent in a new tab. */
   onRunBackground?: (text: string) => void;
   /** Token-gated URL builder for rich file output (raw bytes vs text preview). */
@@ -151,6 +155,7 @@ export function SessionsFloor(props: SessionsProps) {
   const mobile = vw > 0 && vw < 640; // phones: dedicated one-handed layout (bottom nav)
   const narrow = vw > 0 && vw < 900; // tablets: floor collapses to a zone strip
   const [mobileTab, setMobileTab] = useState<"chat" | "floor" | "files" | "webhooks">("chat");
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [floorOpen, setFloorOpen] = useState(false); // narrow: expand the full floor
   const [filesOpen, setFilesOpen] = useState(false);  // narrow/mobile: file browser bottom sheet
   const [jobsOpen, setJobsOpen] = useState(false);    // narrow/mobile: background jobs bottom sheet
@@ -231,6 +236,16 @@ export function SessionsFloor(props: SessionsProps) {
         <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", paddingBottom: 56 }}>
           {mobileTab === "chat" && (
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              {/* The one thing a phone is actually good for: hand over a task and
+                  put the device away. It sits above the rail so it is the first
+                  thing under your thumb. */}
+              <button
+                type="button"
+                onClick={() => setNewTaskOpen(true)}
+                style={{ minHeight: 52, margin: "10px 10px 0", background: "#15151C", border: "2px solid #22D3EE", color: "#22D3EE", fontFamily: MONO, fontSize: 12, letterSpacing: 2, cursor: "pointer" }}
+              >
+                + NEW TASK
+              </button>
               <ChatPanel {...props} detached={false} canDetach={false} onToggleDetach={() => {}} mobile />
             </div>
           )}
@@ -270,6 +285,14 @@ export function SessionsFloor(props: SessionsProps) {
             );
           })}
         </div>
+
+        {newTaskOpen && (
+          <NewTaskSheet
+            onClose={() => setNewTaskOpen(false)}
+            onWantNotifications={() => void requestNotifyPermission()}
+            onSubmit={(text, mode) => props.onNewTask?.(text, mode)}
+          />
+        )}
 
         {/* agent detail bottom sheet (tap an agent on the FLOOR tab) */}
         {sel && (

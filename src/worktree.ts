@@ -51,11 +51,13 @@ export function worktreesDir(): string {
 
 /** Create a worktree on a fresh branch `dom/<name>` off the current HEAD. Fails
  * clearly when `cwd` isn't a repo, the branch already exists, or git refuses. */
-export async function createWorktree(cwd: string, rawName: string): Promise<WorktreeResult> {
+export async function createWorktree(cwd: string, rawName: string, prefix = "dom"): Promise<WorktreeResult> {
   const root = await repoRoot(cwd);
   if (!root) return { ok: false, error: "not a git repository — worktrees need git." };
   const name = slug(rawName);
-  const branch = `dom/${name}`;
+  // `prefix` defaults to "dom" so existing worktrees and their branches keep
+  // working; the issue pipeline passes "gnosis" for gnosis/issue-<n>.
+  const branch = `${prefix}/${name}`;
   const dir = path.join(worktreesDir(), `${path.basename(root)}-${name}`);
 
   const exists = await git(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]);

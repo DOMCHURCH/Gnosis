@@ -9,6 +9,8 @@ import { QrPopover, type QrCode } from "./QrPopover";
 import { WebhooksBody } from "./WebhooksPanel";
 import { classifyNote, noteSlug } from "./notesort.js";
 import { tokenizedUrl, token, fileUrlFor } from "./api";
+import { notify as webNotify, pageHidden } from "./notify";
+import type { TaskMode } from "./NewTaskSheet";
 import { OverlayModal } from "./OverlayModal";
 import { LeftPanel } from "./LeftPanel";
 import { VaultSaveModal } from "./VaultSaveModal";
@@ -73,6 +75,34 @@ export function App() {
   const [vault, setVault] = useState<VaultTree | null>(null);
   const [saveTarget, setSaveTarget] = useState<string | null>(null);
   useEffect(() => { void apiGet<VaultTree>("/api/vault/tree").then(setVault); }, [state.vaultEpoch]);
+
+  // Phone notifications. The desktop notifier fires on the machine running
+  // Gnosis, not in the pocket of whoever assigned the task — so the browser
+  // raises its own when a dream settles or something needs an answer.
+  const dreamSeenRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    for (const d of Object.values(state.dreams)) {
+      const prev = dreamSeenRef.current[d.id];
+      dreamSeenRef.current[d.id] = d.status;
+      // Only a TRANSITION into a terminal state is worth a notification; the
+      // first sighting of an already-finished dream is just a page reload.
+      if (!prev || prev === d.status || d.status === "running") continue;
+      webNotify(`Gnosis · dream ${d.id} ${d.status}`, d.summary || d.task);
+    }
+  }, [state.dreams]);
+
+  // Anything blocking progress notifies too, but only when the page is not in
+  // front of the user — otherwise the card in the rail is the notification.
+  const pendingRef = useRef<string | null>(null);
+  useEffect(() => {
+    const waiting = state.chatLines.filter((l) => (l.kind === "ask" && !l.answered) || (l.kind === "approval" && !l.resolved)).slice(-1)[0];
+    const key = waiting ? `${waiting.kind}:${waiting.key}` : null;
+    if (key && key !== pendingRef.current && pageHidden()) {
+      const who = waiting!.dreamId ? `dream ${waiting!.dreamId}` : "Gnosis";
+      webNotify(`${who} needs you`, waiting!.kind === "ask" ? (waiting!.question ?? "a question") : (waiting!.label ?? "approval required"));
+    }
+    pendingRef.current = key;
+  }, [state.chatLines]);
   // CONNECTIONS tab data (MCP servers, keys, skills, HTTP jobs). Re-fetched when
   // connectionsEpoch bumps (mcp toggle / job start-end).
   const [connections, setConnections] = useState<ConnectionsData | null>(null);
@@ -229,6 +259,22 @@ export function App() {
   const answerId = (permId: string | undefined, a: string) => { if (permId) send({ type: "permission", id: permId, answer: a }); };
   const answerAsk = (askId: string | undefined, text: string) => { if (askId) send({ type: "ask.answer", id: askId, answer: text }); };
 
+  /**
+   * The phone composer's three verbs, each mapped to what already exists:
+   * a normal turn, a dream, or a read-only research sub-agent.
+   */
+  const onNewTask = (text: string, mode: TaskMode) => {
+    if (activeId == null) return;
+    if (mode === "dream") send({ type: "command", tabId: activeId, command: `/dream ${text}` });
+    else if (mode === "research") send({ type: "input", tabId: activeId, text: `Research this and reply with a summary — do not edit any files:
+
+${text}` });
+    else send({ type: "input", tabId: activeId, text });
+    // The rail already shows what happened next — a dream prints its id and caps,
+    // a turn starts streaming — so the status of what you just handed over is
+    // visible without moving the user anywhere.
+  };
+
   const activeAgent = activeId != null ? state.agents[activeId] ?? null : null;
   const canImage = !!activeAgent?.imageInput;
   const canDoc = !!activeAgent?.documentInput;
@@ -366,6 +412,7 @@ export function App() {
         canDoc={canDoc}
         onAnswerAsk={answerAsk}
         onRunBackground={(text) => activeId != null && send({ type: "agent.background", tabId: activeId, text })}
+        onNewTask={onNewTask}
         onFixOutcome={() => activeId != null && send({ type: "command", tabId: activeId, command: "/fix" })}
         fileUrl={(path, raw) => fileUrlFor(activeId ?? 0, path, raw)}
         onApproveMsg={(permId) => answerId(permId, "yes")}
