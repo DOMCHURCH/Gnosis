@@ -10,7 +10,7 @@
 import { execa } from "execa";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { domDir } from "./config.js";
+import { worktreesDir } from "./config.js";
 
 export interface WorktreeInfo {
   /** dom-facing short name (the slug). */
@@ -45,9 +45,9 @@ export function slug(name: string): string {
   );
 }
 
-export function worktreesDir(): string {
-  return path.join(domDir(), "worktrees");
-}
+// Defined in config.ts beside skillsDir/cacheDir, because the ~/.dom permission
+// guard has to know this path and must not pull git/execa in to learn it.
+export { worktreesDir };
 
 /** Create a worktree on a fresh branch `dom/<name>` off the current HEAD. Fails
  * clearly when `cwd` isn't a repo, the branch already exists, or git refuses. */

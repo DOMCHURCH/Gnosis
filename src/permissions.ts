@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Mode } from "./config.js";
-import { cacheDir, domDir, skillsDir } from "./config.js";
+import { cacheDir, domDir, skillsDir, worktreesDir } from "./config.js";
 import type { ToolDef } from "./tools/index.js";
 import { httpBlockReason, normalizeMethod, UNSAFE_METHODS } from "./tools/http.js";
 import { normalizeCommand, hasHiddenChars } from "./cmdnorm.js";
@@ -98,29 +98,38 @@ function isInside(child: string, parent: string): boolean {
 
 /**
  * ~/.dom is off-limits to every tool, always — it holds the API key and session
- * data. Returns the offending absolute path (for the message) or null.
+ * data — except for the three carve-outs named below. Returns the offending
+ * absolute path (for the message) or null.
  */
 export function domTarget(cwd: string, tool: ToolDef, args: any): string | null {
   const dom = domDir();
-  // ~/.dom/skills and ~/.dom/cache are the readable/writable pockets of ~/.dom:
-  // skills are read on demand, and cache holds skill data indexes (e.g. the
-  // public-apis list) that tools grep/read. The API key (config.json), the
-  // secrets file (.env), and session history stay blocked.
-  const skills = skillsDir();
-  const cache = cacheDir();
+  // Three pockets of ~/.dom are readable/writable; the rest is off-limits.
+  //   skills/    — read on demand
+  //   cache/     — skill data indexes (e.g. the public-apis list) tools grep/read
+  //   worktrees/ — dom's OWN git worktrees. Anything under here was put there by
+  //                createWorktree, so it is dom-managed by construction: the agent
+  //                must be able to edit the files it checked out there, and to run
+  //                `git worktree remove` / `git branch -D` to clean up afterwards.
+  // The API key (config.json), the secrets file (.env), and session history stay
+  // blocked — those are what the guard exists for.
+  const pockets = [skillsDir(), cacheDir(), worktreesDir()];
   const target = resolveTarget(cwd, tool, args);
-  if (target && isInside(target, dom) && !isInside(target, skills) && !isInside(target, cache)) return target;
+  if (target && isInside(target, dom) && !pockets.some((p) => isInside(target, p))) return target;
   if (tool.name === "bash" && bashTouchesBlockedDom(String(args?.command ?? ""))) return dom;
   return null;
 }
 
 /**
  * Best-effort check of a raw bash command for a ~/.dom reference that must be
- * blocked. cache/ and skills/ are the readable/writable pockets (a command may
- * freely touch them); everything else under ~/.dom — config.json, .env,
- * sessions/, or the bare directory — stays blocked. We can only inspect the
- * command string, so: find every `.dom` path token and block the command if ANY
- * of them descends anywhere other than cache/ or skills/.
+ * blocked. cache/, skills/ and worktrees/ are the readable/writable pockets (a
+ * command may freely touch them); everything else under ~/.dom — config.json,
+ * .env, sessions/, or the bare directory — stays blocked. We can only inspect
+ * the command string, so: find every `.dom` path token and block the command if
+ * ANY of them descends anywhere other than those three.
+ *
+ * This is what lets `git worktree remove ~/.dom/worktrees/<repo>-<name>` and the
+ * `git branch -D` that follows it through — without it dom could open worktrees
+ * but never tear them down.
  */
 function bashTouchesBlockedDom(cmd: string): boolean {
   // Normalize \ to / so absolute (C:\...\.dom\x) and ~/.dom/x forms match alike.
@@ -128,7 +137,7 @@ function bashTouchesBlockedDom(cmd: string): boolean {
   const re = /(?:^|[\s"'=/~])\.dom(?=$|[/\s"'])/g;
   for (let m = re.exec(norm); m; m = re.exec(norm)) {
     const rest = norm.slice(m.index + m[0].length); // what follows ".dom", e.g. "/cache/x"
-    if (!/^\/(?:cache|skills)(?:[/\s"']|$)/.test(rest)) return true; // a blocked .dom path
+    if (!/^\/(?:cache|skills|worktrees)(?:[/\s"']|$)/.test(rest)) return true; // a blocked .dom path
   }
   return false;
 }

@@ -124,6 +124,13 @@ export function skillsDir(): string {
 export function cacheDir(): string {
   return path.join(domDir(), "cache");
 }
+/** ~/.dom/worktrees — where git worktree isolation checks out `dom/<name>`
+ * branches (see worktree.ts). Like cache/ and skills/ it is a tool-accessible
+ * pocket of ~/.dom: the agent has to edit the files it checked out in there, and
+ * has to be able to tear the worktree down again afterwards. */
+export function worktreesDir(): string {
+  return path.join(domDir(), "worktrees");
+}
 
 async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });

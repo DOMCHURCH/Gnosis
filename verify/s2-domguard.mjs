@@ -34,12 +34,38 @@ ok("bash blocked from rm -rf ~/.dom", blockedByBash("rm -rf ~/.dom"));
 ok("a mixed command touching .env too is blocked", blockedByBash("cat ~/.dom/cache/x && cat ~/.dom/.env"));
 ok("a command naming no .dom path is unaffected", !blockedByBash("ls src"));
 
+// --- worktrees/ is the third carve-out ----------------------------------------
+// Gnosis creates its own worktrees under ~/.dom/worktrees/<repo>-<name>. If the
+// guard blocked that path, the agent could neither edit the files it checked out
+// there nor ever clean the worktree up again.
+const WT = `${process.env.USERPROFILE}/.dom/worktrees/dom-feature-x`;
+ok("bash may git worktree remove a worktree", !blockedByBash(`git worktree remove ${WT}`));
+ok("bash may git worktree remove --force", !blockedByBash(`git worktree remove --force ${WT}`));
+ok("bash may git worktree remove via ~ form", !blockedByBash("git worktree remove ~/.dom/worktrees/dom-feature-x"));
+ok("bash may git worktree prune under .dom", !blockedByBash("git -C ~/.dom/worktrees/dom-feature-x worktree prune"));
+ok("bash may delete a worktree's branch", !blockedByBash("git branch -D dom/feature-x"));
+ok("bash may read a file inside a worktree", !blockedByBash(`cat ${WT}/src/app.ts`));
+ok("bash may rm -rf a single worktree dir", !blockedByBash(`rm -rf ${WT}`));
+ok("worktrees carve-out does not unblock sessions/", blockedByBash("ls ~/.dom/worktrees/../sessions") || blockedByBash("ls ~/.dom/sessions"));
+ok("a command mixing a worktree and .env is still blocked", blockedByBash(`cat ${WT}/x && cat ~/.dom/.env`));
+
+// path tools follow the same carve-out — the agent edits files in there
+ok("read may open a file in a worktree", domTarget(CWD, read, { path: `${WT}/src/app.ts` }) === null);
+ok("edit may target a file in a worktree", domTarget(CWD, TOOLS.edit, { path: `${WT}/src/app.ts` }) === null);
+ok("write may target a file in a worktree", domTarget(CWD, TOOLS.write, { path: `${WT}/new.ts` }) === null);
+ok("grep may scan a worktree", domTarget(CWD, TOOLS.grep, { path: WT }) === null);
+// An engine rooted IN the worktree resolves relative paths to that dir.
+ok("a relative path from inside a worktree is allowed", domTarget(WT, read, { path: "src/app.ts" }) === null);
+ok("config.json is still blocked from inside a worktree", domTarget(WT, read, { path: "~/.dom/config.json" }) !== null);
+
 // --- the gate agrees: cache is allowed (in yolo), config.json is a hard reject --
 ok("gate allows bash reading cache (yolo)", gate(bash, { command: "cat ~/.dom/cache/x" }, { mode: "yolo", approvals: new Set(), cwd: CWD }).kind === "allow");
 {
   const d = gate(bash, { command: "cat ~/.dom/.env" }, { mode: "yolo", approvals: new Set(), cwd: CWD });
   ok("gate rejects bash reading .env (never a prompt)", d.kind === "reject" && /\.dom/.test(d.reason));
 }
+
+ok("gate allows the worktree cleanup command (yolo)", gate(bash, { command: `git worktree remove ${WT}` }, { mode: "yolo", approvals: new Set(), cwd: CWD }).kind === "allow");
 
 // --- path tools keep the same carve-out (read cache ok, config blocked) --------
 ok("read may open ~/.dom/cache", domTarget(CWD, read, { path: "~/.dom/cache/x" }) === null);
