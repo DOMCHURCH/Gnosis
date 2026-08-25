@@ -115,6 +115,72 @@ ok("the listing shows the summary", /did the thing/.test(line));
   try { await fs.rm(h, { recursive: true, force: true }); } catch {}
 }
 
+// --- a dream must be reachable from a browser --------------------------------
+// Engine.fork() copies neither bus nor bridge, so a forked dream is deaf and mute
+// by default: wrapCallbacks early-returns and no permission/ask event is ever
+// emitted. That is the bug where prompts showed in the TUI and nowhere else.
+{
+  const h = await fs.mkdtemp(path.join(os.tmpdir(), "gnosis-bus-"));
+  const wired = [];
+  const fakeBus = { emit() {}, subscribe() { return () => {}; } };
+  const fakeBridge = { bus: fakeBus, registerPermission() {}, clearPermission() {}, answerPermission() {}, registerAsk() {}, clearAsk() {}, answerAsk() {} };
+  const mgr = new DreamManager(h, {
+    bus: fakeBus,
+    bridge: fakeBridge,
+    ownerTabId: () => 7,
+    fork: () => {
+      const e = { cwd: "/w", modelId: "m", interactive: true, noPersist: false, maxIterations: 0, cost: { usd: 0 }, messages: [], abort() {}, run: () => new Promise(() => {}) };
+      wired.push(e);
+      return e;
+    },
+  });
+  await mgr.init();
+  const rec = mgr.start("do a thing");
+  const e = wired[0];
+  ok("the dream engine is wired to the MAIN bus", e.bus === fakeBus);
+  ok("...and to the MAIN bridge, so a browser can answer", e.bridge === fakeBridge);
+  ok("...and borrows the owner tab id, so it lands in that rail", e.agentId === 7);
+  ok("...and is tagged with its dream id for labelling", e.dreamId === rec.id);
+  ok("...and still runs headless", e.interactive === false && e.noPersist === true);
+  mgr.stopAll(); mgr.dispose();
+  try { await fs.rm(h, { recursive: true, force: true }); } catch {}
+}
+
+// --- init() must not clobber a dream started while it was loading -------------
+// Callers do `void dm.init()` and use the manager immediately. A plain overwrite
+// silently dropped any dream started in that window: it kept running, but
+// vanished from /dreams and from the persisted log.
+{
+  const h = await fs.mkdtemp(path.join(os.tmpdir(), "gnosis-race-"));
+  await saveDreams(h, [{ ...base, id: "d1", status: "done", task: "older", startedAt: 1 }]);
+  const mgr = new DreamManager(h, {
+    fork: () => ({ cwd: "/w", modelId: "m", interactive: true, noPersist: false, maxIterations: 0, cost: { usd: 0 }, messages: [], abort() {}, run: () => new Promise(() => {}) }),
+  });
+  // Start BEFORE init resolves, exactly as the command handlers do.
+  const initPromise = mgr.init();
+  const started = mgr.start("started during init");
+  await initPromise;
+
+  ok("the dream started during init survives", !!mgr.get(started.id));
+  ok("...and is still marked running, not reconciled away", mgr.get(started.id).status === "running");
+  ok("...and appears in the listing", mgr.list().some((d) => d.task === "started during init"));
+  ok("the previously persisted dream is still there", !!mgr.get("d1"));
+  ok("no duplicate ids after the merge", new Set(mgr.list().map((d) => d.id)).size === mgr.list().length);
+  // The collision that displaced a persisted dream: an early start minted d1
+  // while d1 already existed on disk, and the merge then dropped the older one.
+  // A collision here is possible only if a caller skips ready(). When it happens
+  // the historical record must be renumbered, never dropped.
+  ok("no persisted record is lost to an id collision", mgr.list().some((d) => d.task === "older"));
+  ok("...and the live dream keeps the id it was announced under", mgr.get(started.id).task === "started during init");
+  // ready() is the proper gate: awaiting it seeds the sequence first.
+  await mgr.ready();
+  const afterReady = mgr.start("after ready");
+  ok("a start after ready() gets a fresh id", !["d1", started.id].includes(afterReady.id));
+
+  mgr.stopAll(); mgr.dispose();
+  try { await fs.rm(h, { recursive: true, force: true }); } catch {}
+}
+
 // --- cleanup ------------------------------------------------------------------
 ok("stopAll is safe with nothing running", (() => { try { dm.stopAll(); return true; } catch { return false; } })());
 ok("dispose is safe to call", (() => { try { dm.dispose(); dm2.dispose(); return true; } catch { return false; } })());

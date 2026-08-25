@@ -44,7 +44,7 @@ export function groupChat(lines) {
     // Approvals are always their own sealed block (buttons while pending; the
     // outcome once resolved).
     if (ln.kind === "approval") {
-      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "approval", epoch: ln.epoch, segments: [{ type: "text", text: ln.text || "" }], code: false, isApproval: true, permId: ln.permId, resolved: ln.resolved });
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "approval", epoch: ln.epoch, segments: [{ type: "text", text: ln.text || "" }], code: false, isApproval: true, permId: ln.permId, resolved: ln.resolved, dreamId: ln.dreamId });
       cur = null;
       continue;
     }
@@ -58,7 +58,7 @@ export function groupChat(lines) {
     // An ask_user question is its own sealed block: the question, its option
     // buttons while unanswered, and the reply once it has one.
     if (ln.kind === "ask") {
-      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "ask", epoch: ln.epoch, segments: [{ type: "text", text: ln.question || "" }], code: false, isApproval: false, askId: ln.askId, options: ln.options || [], answered: ln.answered });
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "ask", epoch: ln.epoch, segments: [{ type: "text", text: ln.question || "" }], code: false, isApproval: false, askId: ln.askId, options: ln.options || [], answered: ln.answered, dreamId: ln.dreamId });
       cur = null;
       continue;
     }
@@ -98,6 +98,7 @@ export function groupChat(lines) {
       tool: g.tool,
       fileOutput: g.fileOutput,
       askId: g.askId, options: g.options, answered: g.answered,
+      dreamId: g.dreamId,
       verdict: g.verdict, confidence: g.confidence,
       segments: g.segments.map((s) => ({ type: s.type, lang: s.lang, text: s.text })),
     }));

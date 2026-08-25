@@ -59,9 +59,9 @@ export type DomEvent =
   // (null for the first), `after` the current one — both base64 PNG data URLs. `path`
   // is the web file whose edit triggered the auto-shot ("" for the initial /design).
   | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
-  | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }
+  | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[]; dreamId?: string }
   // ask_user: the agent paused mid-turn for a decision only the user can make.
-  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[] }
+  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[]; dreamId?: string }
   | { type: "ask.resolved"; tabId: number; id: string; answer: string }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }

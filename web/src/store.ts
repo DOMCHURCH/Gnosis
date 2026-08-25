@@ -102,6 +102,8 @@ export interface RawLine {
   permId?: string; label?: string; resolved?: string;
   // ask_user (kind "ask"): the question, its suggested options, and the reply once given.
   askId?: string; question?: string; options?: string[]; answered?: string;
+  // Set when this prompt came from a dream rather than the foreground turn.
+  dreamId?: string;
   // outcome (kind "outcome"): the automatic post-turn verdict.
   verdict?: "pass" | "fail" | "unknown"; confidence?: number;
   // tool call (kind "tool"): the compact call parts + summary, and the full detail.
@@ -322,7 +324,7 @@ export function reducer(state: State, action: Action): State {
       const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
       const epoch = state.turnEpoch[action.tabId] ?? 0;
       const label = previewLabel(action.preview);
-      const ln: RawLine = { key: `p${action.id}`, tabId: action.tabId, from, kind: "approval", epoch, time: clock(), text: `Needs approval: ${label}`, permId: action.id, label };
+      const ln: RawLine = { key: `p${action.id}`, tabId: action.tabId, from, kind: "approval", epoch, time: clock(), text: `Needs approval: ${label}`, permId: action.id, label, dreamId: action.dreamId };
       return { ...pushLine(withFlag, ln), permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
     }
     case "dream.state": {
@@ -343,7 +345,7 @@ export function reducer(state: State, action: Action): State {
       const epoch = state.turnEpoch[action.tabId] ?? 0;
       const ln: RawLine = {
         key: `q${action.id}`, tabId: action.tabId, from, kind: "ask", epoch, time: clock(),
-        askId: action.id, question: action.question, options: action.options,
+        askId: action.id, question: action.question, options: action.options, dreamId: action.dreamId,
       };
       return pushLine(state, ln);
     }

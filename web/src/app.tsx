@@ -220,6 +220,7 @@ export function App() {
         askId: g.askId,
         options: g.options,
         answered: g.answered,
+        dreamId: g.dreamId,
         autoSaved: g.kind === "assistant" ? savedTurns[`${activeId}:${epochByKey[g.key]}`] : undefined,
       };
     });

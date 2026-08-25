@@ -18,7 +18,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { Engine, type Callbacks } from "./engine.js";
 import { notify } from "./notify.js";
-import type { EventBus } from "./events.js";
+import type { EventBus, AppBridge } from "./events.js";
 import type { PermissionAnswer, Preview } from "./permissions.js";
 
 /** Hard caps. A dream that hits any one of these stops cleanly and says which. */
@@ -55,6 +55,14 @@ export interface DreamDeps {
   /** Forks the engine the dream runs on (its own history + session). */
   fork: (cwd?: string) => Engine;
   bus?: EventBus;
+  /** The MAIN bridge. A dream's engine is wired to it so its permission and
+   *  ask_user gates go through the same first-to-answer registry the foreground
+   *  uses — without this the browser can see a prompt but never answer it. */
+  bridge?: AppBridge;
+  /** The tab a dream's prompts surface in. Dreams are not tabs, so they borrow
+   *  the id of the session that started them: that is the rail the user is
+   *  actually looking at, and the store's per-tab filtering then works unchanged. */
+  ownerTabId?: () => number;
   /** Raise a dangerous-call approval that the TUI or a browser can answer. */
   requestApproval?: (dreamId: string, preview: Preview) => Promise<PermissionAnswer>;
   /** Put a question to the user (ask_user from inside a dream). */
@@ -185,6 +193,7 @@ export class DreamManager {
   private live = new Map<string, Live>();
   private records: DreamRecord[] = [];
   private seq = 1;
+  private readyPromise: Promise<void> | null = null;
 
   constructor(private home: string, private deps: DreamDeps) {
     MANAGERS.add(this);
@@ -200,11 +209,35 @@ export class DreamManager {
   /** Load the persisted log. Any dream still marked `running` belongs to a process
    *  that is gone, so it is reconciled to `stopped` rather than silently resumed —
    *  we cannot resume an agent loop whose context died with its process. */
+  /** Resolves once init() has read the log. Callers that start a dream should
+   *  await this first: ids are seeded from the persisted log, so starting before
+   *  it lands can mint an id that already exists on disk. */
+  ready(): Promise<void> {
+    return this.readyPromise ?? Promise.resolve();
+  }
+
   async init(): Promise<DreamRecord[]> {
-    this.records = await loadDreams(this.home);
+    let settle = () => {};
+    this.readyPromise = new Promise<void>((r) => { settle = r; });
+    const loaded = await loadDreams(this.home);
+    // Merge rather than assign. Callers create the manager and use it immediately
+    // while init() is still reading the log (`void dm.init()`), so a dream started
+    // in that window would be wiped by a plain overwrite — it keeps running, but
+    // vanishes from /dreams. In-memory wins for any id present in both: it is the
+    // live one.
+    const live = new Map(this.records.map((r) => [r.id, r]));
+    // A colliding id means someone started a dream before ready() resolved, so it
+    // minted an id the log already used. The live one keeps the id it was
+    // announced under; the historical one is renumbered rather than dropped —
+    // losing a record is worse than renumbering one.
+    let nextFree = loaded.reduce((m, r) => Math.max(m, Number(/^d(\d+)$/.exec(r.id)?.[1] ?? 0)), 0);
+    const rescued = loaded.map((r) => (live.has(r.id) ? { ...r, id: `d${++nextFree}` } : r));
+    this.records = [...rescued, ...this.records];
     let changed = false;
     for (const r of this.records) {
-      if (r.status === "running") {
+      // Only a record loaded from disk can be stale; one started in this process
+      // is genuinely running.
+      if (r.status === "running" && !live.has(r.id) && !this.liveIds().has(r.id)) {
         r.status = "stopped";
         r.endedAt = r.endedAt ?? Date.now();
         r.summary = r.summary || "interrupted — the process it ran in exited";
@@ -215,7 +248,13 @@ export class DreamManager {
     const maxSeq = this.records.reduce((m, r) => Math.max(m, Number(/^d(\d+)$/.exec(r.id)?.[1] ?? 0)), 0);
     this.seq = maxSeq + 1;
     if (changed) await saveDreams(this.home, this.records);
+    settle();
     return this.records;
+  }
+
+  /** Ids with a running engine in THIS process. */
+  private liveIds(): Set<string> {
+    return new Set(this.live.keys());
   }
 
   /** Dreams that were interrupted by a restart and could be picked up again. */
@@ -279,6 +318,16 @@ export class DreamManager {
     engine.interactive = false;
     engine.noPersist = true;
     engine.maxIterations = DREAM_MAX_ITERATIONS;
+
+    // THE thing that makes a dream reachable from a browser. Engine.fork() copies
+    // neither bus nor bridge, so a forked dream is deaf and mute by default: its
+    // wrapCallbacks early-returns and no permission or ask event is ever emitted.
+    // Wiring the MAIN bus and bridge here puts a dream's gates on exactly the same
+    // path the foreground uses, so the browser both sees them and can answer them.
+    engine.bus = this.deps.bus;
+    engine.bridge = this.deps.bridge;
+    engine.agentId = this.deps.ownerTabId?.() ?? 0;
+    engine.dreamId = id;
 
     let stopped = false;
     const abort = () => {

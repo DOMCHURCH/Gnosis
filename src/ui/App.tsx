@@ -1285,9 +1285,12 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         }
         const task = parts.slice(1).join(" ").trim();
         if (!task) { sysLog('usage: /dream "refactor the auth module"'); break; }
-        const rec = dm.start(task, controller.active().engine.cwd);
-        sysLog(`✨ dreaming ${rec.id}: ${task.slice(0, 70)}`);
-        sysLog(`   caps: ${DREAM_MAX_ITERATIONS} iterations · $${DREAM_MAX_USD} · 2h — /dreams to check, /dream stop ${rec.id} to end`);
+        // Wait for the log to load: ids are seeded from it.
+        void dm.ready().then(() => {
+          const rec = dm.start(task, controller.active().engine.cwd);
+          sysLog(`✨ dreaming ${rec.id}: ${task.slice(0, 70)}`);
+          sysLog(`   caps: ${DREAM_MAX_ITERATIONS} iterations · $${DREAM_MAX_USD} · 2h — /dreams to check, /dream stop ${rec.id} to end`);
+        });
         break;
       }
       case "dreams": {
@@ -1639,6 +1642,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     const dm = new DreamManager(domDir(), {
       fork: (cwd) => engine.fork(cwd ? { cwd } : undefined),
       bus: bridgeRef.current?.bus,
+      // The bridge is what lets a browser ANSWER a dream's prompt, not just see
+      // it; the owner tab is the rail it surfaces in.
+      bridge: bridgeRef.current ?? undefined,
+      ownerTabId: () => controller.active().id,
       notifyEnabled: notifyRef.current,
       requestApproval: (dreamId, preview) =>
         new Promise((resolve) => {
@@ -1877,6 +1884,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     const unsub = bridge.bus.subscribe((e) => {
       if (e.type === "permission.resolved" && overlayRef.current.type === "permission" && permOwnerRef.current === e.tabId) {
         resolvePerm(e.answer as PermissionAnswer);
+      }
+      // Same for ask_user: whoever answered, the other surface closes.
+      if (e.type === "ask.resolved" && overlayRef.current.type === "ask") {
+        resolveAsk(e.answer);
       }
     });
     return () => {
