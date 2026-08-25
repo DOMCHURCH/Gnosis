@@ -1268,6 +1268,15 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       // /dream stop <id> — end one. /dreams — list them.
       case "dream": {
         const dm = ensureDreams();
+        if (parts[1] === "resume") {
+          const id = parts[2];
+          if (!id) { sysLog("usage: /dream resume <id>  (see /dreams)"); break; }
+          const r = dm.resume(id);
+          if (!r.ok) { sysLog(r.reason); break; }
+          sysLog(`✨ dreaming ${r.record.id}: re-running ${id} from the start`);
+          sysLog(`   ${r.record.task.slice(0, 70)}`);
+          break;
+        }
         if (parts[1] === "stop") {
           const id = parts[2];
           if (!id) { sysLog("usage: /dream stop <id>  (see /dreams)"); break; }
@@ -1649,7 +1658,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     dreamsRef.current = dm;
     void dm.init().then((records) => {
       const orphans = records.filter((r) => /interrupted/.test(r.summary));
-      if (orphans.length) sysLog(`${orphans.length} dream(s) were interrupted by a restart — /dreams to review`);
+      if (orphans.length) {
+        const ids = orphans.map((o) => o.id).join(", ");
+        sysLog(`${orphans.length} dream(s) interrupted by a restart: ${ids} — /dream resume <id> re-runs one from the start`);
+      }
     });
     return dm;
   };

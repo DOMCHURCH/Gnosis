@@ -71,6 +71,50 @@ const line = formatDream({ ...base, id: "d1", status: "done", usd: 0.1234, start
 ok("the listing shows id, status and cost", /d1/.test(line) && /done/.test(line) && /\$0\.1234/.test(line));
 ok("the listing shows the summary", /did the thing/.test(line));
 
+// --- resume: a fresh re-run, never a continuation -----------------------------
+{
+  const h = await fs.mkdtemp(path.join(os.tmpdir(), "gnosis-resume-"));
+  await saveDreams(h, [
+    { ...base, id: "d3", status: "stopped", task: "refactor auth", cwd: "/work", summary: "interrupted — the process it ran in exited", startedAt: 10 },
+    { ...base, id: "d4", status: "done", task: "already finished", startedAt: 20 },
+  ]);
+  // A fork that records what it was asked for, so we can assert the re-run uses
+  // the ORIGINAL task and cwd rather than anything derived from the old run.
+  const forked = [];
+  const mgr = new DreamManager(h, {
+    fork: (cwd) => {
+      forked.push(cwd);
+      // Minimal engine stand-in: start() only touches these before running.
+      return { cwd: cwd ?? "/default", modelId: "m", interactive: true, noPersist: false, maxIterations: 0, cost: { usd: 0 }, messages: [], abort() {}, run: () => new Promise(() => {}) };
+    },
+  });
+  await mgr.init();
+
+  ok("resuming an unknown id is refused", mgr.resume("nope").ok === false);
+  const r = mgr.resume("d3");
+  ok("resuming an interrupted dream succeeds", r.ok === true);
+  ok("...with a NEW id", r.record.id !== "d3");
+  ok("...carrying the ORIGINAL task", r.record.task === "refactor auth");
+  ok("...re-run in the original cwd", forked[0] === "/work");
+  ok("...starting from scratch, not mid-flight", r.record.iterations === 0 && r.record.usd === 0 && r.record.summary === "");
+  ok("...and running", r.record.status === "running");
+  ok("...linked back to the dream it re-runs", r.record.resumedFrom === "d3");
+
+  const old = mgr.get("d3");
+  ok("the original record is untouched", old.status === "stopped" && /interrupted/.test(old.summary));
+  ok("both attempts appear in the history", mgr.list().filter((d) => d.task === "refactor auth").length === 2);
+
+  ok("a still-running dream cannot be resumed", mgr.resume(r.record.id).ok === false);
+  ok("a finished (non-interrupted) dream can still be re-run", mgr.resume("d4").ok === true);
+
+  const line = formatDream(r.record);
+  ok("the listing shows the lineage", /resumed from d3/.test(line));
+
+  mgr.stopAll();
+  mgr.dispose();
+  try { await fs.rm(h, { recursive: true, force: true }); } catch {}
+}
+
 // --- cleanup ------------------------------------------------------------------
 ok("stopAll is safe with nothing running", (() => { try { dm.stopAll(); return true; } catch { return false; } })());
 ok("dispose is safe to call", (() => { try { dm.dispose(); dm2.dispose(); return true; } catch { return false; } })());

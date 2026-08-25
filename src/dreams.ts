@@ -44,6 +44,10 @@ export interface DreamRecord {
   iterations: number;
   /** One line: the dream's own closing summary, or why it ended. */
   summary: string;
+  /** Set when this dream is a fresh re-run of an earlier one (`/dream resume`).
+   *  The original is left untouched in the log — two attempts at one task are
+   *  two entries, not one overwritten. */
+  resumedFrom?: string;
 }
 
 /** Everything a dream needs from the host to run and to reach the user. */
@@ -134,7 +138,8 @@ export function capHit(rec: DreamRecord, now: number): string | null {
 export function formatDream(d: DreamRecord, now = Date.now()): string {
   const mins = Math.round(((d.endedAt ?? now) - d.startedAt) / 60000);
   const cost = `$${d.usd.toFixed(4)}`;
-  const head = `${d.id}  ${d.status.padEnd(7)}  ${cost.padStart(8)}  ${String(mins).padStart(3)}m  ${d.task.slice(0, 44)}`;
+  const from = d.resumedFrom ? ` (resumed from ${d.resumedFrom})` : "";
+  const head = `${d.id}  ${d.status.padEnd(7)}  ${cost.padStart(8)}  ${String(mins).padStart(3)}m  ${d.task.slice(0, 44)}${from}`;
   return d.summary ? `${head}\n      ↳ ${d.summary}` : head;
 }
 
@@ -218,6 +223,25 @@ export class DreamManager {
     return this.records.filter((r) => r.status === "stopped" && /interrupted/.test(r.summary));
   }
 
+  /**
+   * Re-run a finished dream's original task as a NEW dream, from the start.
+   *
+   * Deliberately not a continuation: the old dream's engine, history, and context
+   * died with the process that ran it, so there is nothing to continue. What
+   * survives is the task, and that is what runs again — new id, fresh budget,
+   * clean context. The original record is never modified, so /dreams keeps both
+   * attempts.
+   *
+   * Refuses an unknown id, and a dream that is still running.
+   */
+  resume(id: string): { ok: false; reason: string } | { ok: true; record: DreamRecord } {
+    const prev = this.records.find((r) => r.id === id);
+    if (!prev) return { ok: false, reason: `no dream "${id}" — /dreams lists them` };
+    if (prev.status === "running") return { ok: false, reason: `dream ${id} is still running` };
+    // Re-run in the directory it started in: a task's meaning is tied to its cwd.
+    return { ok: true, record: this.start(prev.task, prev.cwd, prev.id) };
+  }
+
   list(): DreamRecord[] {
     return [...this.records].sort((a, b) => b.startedAt - a.startedAt);
   }
@@ -231,7 +255,7 @@ export class DreamManager {
   }
 
   /** Start a dream. Returns its record immediately; the work runs detached. */
-  start(task: string, cwd?: string): DreamRecord {
+  start(task: string, cwd?: string, resumedFrom?: string): DreamRecord {
     const engine = this.deps.fork(cwd);
     const id = `d${this.seq++}`;
     const rec: DreamRecord = {
@@ -245,6 +269,7 @@ export class DreamManager {
       usd: 0,
       iterations: 0,
       summary: "",
+      ...(resumedFrom ? { resumedFrom } : {}),
     };
     this.records.push(rec);
     void saveDreams(this.home, this.records);
