@@ -219,7 +219,9 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
     zoneCurbs.push({ key: `${zone.id}-l`, x: zone.x, y: zone.y, w: 8, h: collapsed ? stripH : zone.d, fill: zone.color, op: collapsed ? 0.35 : 0.9 });
     zoneCurbs.push({ key: `${zone.id}-b`, x: zone.x, y: zone.y + (collapsed ? stripH - 6 : zone.d - 6), w: zone.w, h: 6, fill: zone.color, op: collapsed ? 0.18 : 0.4 });
     zoneLabels.push({
-      key: zone.id, left: pctX(zone.label[0]), top: pctY(zone.label[1]),
+      // `zone` is what the label is CLICKED with (place a manual agent here), and
+      // it was missing — the click passed undefined until the typecheck caught it.
+      key: zone.id, zone: zone.id, left: pctX(zone.label[0]), top: pctY(zone.label[1]),
       // Active zone names read at full brightness, idle ones drop back to the dim
       // grey — the zone's own colour still identifies it via the curb and plate.
       accent: collapsed ? "#6B6B7B" : "#C9C9D6", name: zone.name,

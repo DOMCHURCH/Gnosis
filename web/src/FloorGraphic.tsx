@@ -246,7 +246,7 @@ export function FloorGraphic(props: {
 
       {propsL && <div style={{ position: "absolute", inset: 0, containerType: "size", pointerEvents: "none" }}>
         {L.zoneLabels.map((z) => (
-          <div key={z.key} onClick={() => props.onDeskClick(z.zone as ZoneId, 0)} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap", pointerEvents: "auto", cursor: "pointer" }}>
+          <div key={z.key} onClick={() => props.onDeskClick(z.zone, 0)} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap", pointerEvents: "auto", cursor: "pointer" }}>
             {/* Active zones render their name at full #C9C9D6; idle ones drop to the
                 dim grey (the model decides — see layoutFloor). */}
             <span style={{ fontSize: "1.45cqw", fontWeight: 700, letterSpacing: "0.22cqw", color: z.accent }}>{z.name}</span>

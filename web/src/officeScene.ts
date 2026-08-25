@@ -198,7 +198,7 @@ export function createOfficeScene(container: HTMLElement) {
 
   // --- rooms ---------------------------------------------------------------
   const zoneLabels: Record<string, HTMLElement> = {};
-  const roomDisposables: (THREE.BufferGeometry | THREE.Material)[] = [];
+  const roomDisposables: { dispose(): void }[] = [];
   for (const z of ZONES) {
     const r = zoneRect(z);
     const accent = ACCENT[z.id] ?? 0x6b6b7b;

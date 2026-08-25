@@ -83,7 +83,7 @@ export type DomEvent =
   | { type: "subagent.end"; tabId: number; description: string; result: string; ok: boolean }
   | { type: "task.plan"; tabId: number; planId: string; subtasks: { index: number; description: string }[] }
   | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
-  | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[] }
+  | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[]; dreamId?: string }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "dream.state"; id: string; status: string; task: string; usd: number; summary: string }
   | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }

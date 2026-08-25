@@ -28,4 +28,11 @@ jobs:
       # The verify suites import from dist/, so the build has to land first.
       - run: npm run build
 
+      # The browser UI is checked by its OWN tsconfig: the root one is rootDir
+      # "src" and never saw web/src, which is how a call to a function that did
+      # not exist reached a phone. Named as a separate step so a UI type error
+      # reads as one rather than as a build failure.
+      - name: typecheck web UI
+        run: npm run typecheck:web
+
       - run: npm run verify

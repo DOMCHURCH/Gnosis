@@ -52,7 +52,7 @@ export interface Placed {
 export interface ZonePlate { key: string; zone?: ZoneId; collapsed?: boolean; x: number; y: number; w: number; h: number; fill: string; op: number; }
 /** One zone's depth shell: ceiling strip + light/dark borders. `dim` scales it for idle zones. */
 export interface ZoneDepth { key: string; zone: ZoneId; collapsed: boolean; x: number; y: number; w: number; h: number; dim: number; }
-export interface ZoneLabel { key: string; left: string; top: string; accent: string; name: string; count: string; countColor: string; hint: string; }
+export interface ZoneLabel { key: string; zone: ZoneId; left: string; top: string; accent: string; name: string; count: string; countColor: string; hint: string; }
 export interface NameTag { key: string; left: string; top: string; name: string; stateColor: string; border: string; }
 export interface RosterRow { key: string; id: string; name: string; action: string; manual: boolean; accent: string; color: string; tag: string; stateColor: string; bg: string; opacity: number; }
 

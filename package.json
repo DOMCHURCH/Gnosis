@@ -35,9 +35,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc && vite build --config web/vite.config.ts",
+    "build": "tsc && npm run typecheck:web && vite build --config web/vite.config.ts",
     "build:server": "tsc",
     "build:web": "vite build --config web/vite.config.ts",
+    "typecheck": "tsc --noEmit && npm run typecheck:web",
+    "typecheck:web": "tsc --noEmit -p web/tsconfig.json",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "verify": "node verify/run-all.mjs",
