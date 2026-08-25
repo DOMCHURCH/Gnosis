@@ -18,17 +18,16 @@ export const C = {
 };
 
 // DOM block letters with a big "=^.^=" cat face to the right, separated by a
-// 4-space gutter. Each row is drawn in one gradient color (BANNER_ROWS, row 0
-// cyan -> row 5 magenta), so the cat shares the same continuous per-row
-// gradient. All six lines are one width (74) so the banner box's right border
-// stays square.
+// Each row is drawn in one gradient color (BANNER_ROWS, row 0 cyan -> row 5
+// magenta). All six lines are padded to one width (48) so the banner box's
+// right border stays square.
 export const ART = [
-  "██████╗   ██████╗  ███╗   ███╗               ██              ██           ",
-  "██╔══██╗ ██╔═══██╗ ████╗ ████║    ██████    ████            ████    ██████",
-  "██║  ██║ ██║   ██║ ██╔████╔██║             ██  ██          ██  ██         ",
-  "██║  ██║ ██║   ██║ ██║╚██╔╝██║    ██████  ██    ██        ██    ██  ██████",
-  "██████╔╝ ╚██████╔╝ ██║ ╚═╝ ██║                       ██                   ",
-  "╚═════╝   ╚═════╝  ╚═╝     ╚═╝                       ██                   ",
+  "  ██████╗ ███╗   ██╗ ██████╗ ███████╗██╗███████╗",
+  " ██╔════╝ ████╗  ██║██╔═══██╗██╔════╝██║██╔════╝",
+  " ██║  ███╗██╔██╗ ██║██║   ██║███████╗██║███████╗",
+  " ██║   ██║██║╚██╗██║██║   ██║╚════██║██║╚════██║",
+  " ╚██████╔╝██║ ╚████║╚██████╔╝███████║██║███████║",
+  "  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝",
 ];
 
 export const TAGLINE = "terminal coding agent · v0.1.0";

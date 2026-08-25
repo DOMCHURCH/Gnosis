@@ -45,7 +45,7 @@ function run(extraEnv) {
 
 // Current build (freshly built before verify): no rebuild, prints version.
 const fresh = await run({ DOM_NO_BUILD: "" });
-ok("a current build starts without rebuilding", !/rebuilding/.test(fresh.err) && /dom \d/.test(fresh.out));
+ok("a current build starts without rebuilding", !/rebuilding/.test(fresh.err) && /gnosis \d/.test(fresh.out));
 
 // Force staleness by bumping a source file's mtime into the future, then restore.
 const marker = path.join(root, "src", "install.ts");
@@ -56,13 +56,13 @@ try {
 
   // DOM_NO_BUILD skips the check even when stale.
   const skipped = await run({ DOM_NO_BUILD: "1" });
-  ok("DOM_NO_BUILD skips the rebuild when stale", !/rebuilding/.test(skipped.err) && /dom \d/.test(skipped.out));
+  ok("DOM_NO_BUILD skips the rebuild when stale", !/rebuilding/.test(skipped.err) && /gnosis \d/.test(skipped.out));
 
   // Without it, a stale build rebuilds (dim notice on stderr) and re-execs to print
   // the version from the fresh build.
   const rebuilt = await run({ DOM_NO_BUILD: "" });
   ok("a stale build triggers 'rebuilding…' on stderr", /rebuilding/.test(rebuilt.err));
-  ok("...and the re-exec'd fresh build still runs (prints version)", /dom \d/.test(rebuilt.out) && rebuilt.code === 0);
+  ok("...and the re-exec'd fresh build still runs (prints version)", /gnosis \d/.test(rebuilt.out) && rebuilt.code === 0);
 } finally {
   fss.utimesSync(marker, orig.atime, orig.mtime); // restore so the repo isn't left stale
 }

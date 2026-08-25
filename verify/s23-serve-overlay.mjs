@@ -52,7 +52,7 @@ function connect(port, token) {
 
 const s = spawnServe(["--port", "0"]);
 const info = await waitForUrl(s.getOut);
-ok("real `dom serve` prints a tokenized URL to drive", !!info);
+ok("real `gnosis serve` prints a tokenized URL to drive", !!info);
 
 if (info) {
   try {

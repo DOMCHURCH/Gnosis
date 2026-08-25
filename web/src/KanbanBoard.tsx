@@ -38,7 +38,7 @@ export function KanbanBoard(props: {
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, borderBottom: "2px solid #2A2A38", paddingBottom: 12, marginBottom: 16 }}>
-        <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>dom</span>
+        <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
         <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2 }}>KANBAN · {state.order.length} SESSIONS</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, alignItems: "start" }}>

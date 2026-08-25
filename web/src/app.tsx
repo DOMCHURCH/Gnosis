@@ -121,7 +121,7 @@ export function App() {
   const sendTo = (id: number, text: string) =>
     text.startsWith("/") ? send({ type: "command", tabId: id, command: text }) : send({ type: "input", tabId: id, text });
 
-  // window.domOffice — debug overlay (add/update/think/remove/list/say/setFloor/addFloor).
+  // window.gnosisOffice — debug overlay (add/update/think/remove/list/say/setFloor/addFloor).
   useEffect(() => {
     const fu = () => bump((n) => n + 1);
     const floorOf = (fid?: number) => (fid != null ? fid : activeId) ?? 0;
@@ -138,14 +138,13 @@ export function App() {
       onUserMessage: (cb: any) => { debugRef.current.userCb = cb; },
       onApproval: (cb: any) => { debugRef.current.approvalCb = cb; },
     };
-    (window as any).domOffice = api;
-    // The 3D floor is driven by the same model as the SVG one, so domThree is the
-    // same surface under the name the event-bus wiring expects — no separate path
-    // that could drift out of sync with domOffice.
-    (window as any).domThree = api;
+    // gnosisOffice is the current name. domOffice and domThree stay as aliases of
+    // the SAME object so existing wiring keeps working across the rename — the
+    // same back-compat promise the `dom` bin alias makes.
+    const names = ["gnosisOffice", "domOffice", "domThree"];
+    for (const n of names) (window as any)[n] = api;
     return () => {
-      if ((window as any).domOffice === api) delete (window as any).domOffice;
-      if ((window as any).domThree === api) delete (window as any).domThree;
+      for (const n of names) if ((window as any)[n] === api) delete (window as any)[n];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, activeId]);

@@ -86,7 +86,7 @@ export async function runHeadless(engine: Engine, opts: { prompt?: string }): Pr
     return;
   }
 
-  process.stdout.write(cyan("dom headless — type a message, or /exit to quit\n"));
+  process.stdout.write(cyan("gnosis headless — type a message, or /exit to quit\n"));
   while (true) {
     const line = (await ask(rl, magenta("\n❯ "))).trim();
     if (!line) continue;

@@ -17,12 +17,12 @@ export function Banner({ caps, width, tools, ghAuth }: Props) {
   // and can't repaint after a mid-session /model switch, so it would go stale.
   // The status bar (which reads live session state) is the single source of truth.
 
-  // <52 cols: flat "DOM".
+  // <52 cols: flat "GNOSIS".
   if (width < 52) {
     return (
       <Box>
         <Text color={col(C.cyan)} bold>
-          DOM
+          GNOSIS
         </Text>
       </Box>
     );

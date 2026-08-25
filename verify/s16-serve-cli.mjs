@@ -1,4 +1,4 @@
-// Verify (dom serve — the COMMAND, run for real): spawn the actual `node dist/cli.js
+// Verify (gnosis serve — the COMMAND, run for real): spawn the actual `node dist/cli.js
 // serve` binary the way a user types it and confirm a tokenized 127.0.0.1 URL is the
 // first stdout output, that a browser can connect to it, and that a busy port exits
 // with a clear error. This closes the gap where s14 tested the server MODULE while
@@ -88,8 +88,8 @@ function wsConnect(port, token) {
 // --- run the real command ----------------------------------------------------
 const s = spawnServe(["--port", "0"]);
 const info = await waitForUrl(s.getOut);
-ok("real `dom serve` prints a tokenized 127.0.0.1 URL", !!info && /token=/.test(info.url));
-ok("the URL is the first stdout output", s.getOut().trimStart().startsWith("dom serve"));
+ok("real `gnosis serve` prints a tokenized 127.0.0.1 URL", !!info && /token=/.test(info.url));
+ok("the URL is the first stdout output", s.getOut().trimStart().startsWith("gnosis serve"));
 
 if (info) {
   const client = await wsConnect(info.port, info.token);

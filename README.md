@@ -3,28 +3,30 @@
   left-to-right across the wordmark
 -->
 ```
-██████╗   ██████╗  ███╗   ███╗
-██╔══██╗ ██╔═══██╗ ████╗ ████║
-██║  ██║ ██║   ██║ ██╔████╔██║
-██║  ██║ ██║   ██║ ██║╚██╔╝██║
-██████╔╝ ╚██████╔╝ ██║ ╚═╝ ██║
-╚═════╝   ╚═════╝  ╚═╝     ╚═╝
+  ██████╗ ███╗   ██╗ ██████╗ ███████╗██╗███████╗
+ ██╔════╝ ████╗  ██║██╔═══██╗██╔════╝██║██╔════╝
+ ██║  ███╗██╔██╗ ██║██║   ██║███████╗██║███████╗
+ ██║   ██║██║╚██╗██║██║   ██║╚════██║██║╚════██║
+ ╚██████╔╝██║ ╚████║╚██████╔╝███████║██║███████║
+  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝
 ```
 
-# dom — terminal coding agent
+# Gnosis — terminal coding agent
+
+> **Gnosis** was formerly released as **dom**. The `dom` command still works as an alias, and `window.domOffice` remains available in the web UI.
 
 **Run any model. Switch mid-session. History survives.**
 **12x cheaper via prompt caching. Verified live.**
 
 [![CI](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@dominquechurch/dom-agent)](https://www.npmjs.com/package/@dominquechurch%2Fdom-agent)
+[![npm](https://img.shields.io/npm/v/@dominquechurch/gnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
 
-![dom office floor](docs/screenshot.png)
+![Gnosis office floor](docs/screenshot.png)
 *Office floor — manual agents across all zones, two live sessions, file browser, goal bar*
 
-| Feature | dom | Claude Code | Aider | OpenCode |
+| Feature | Gnosis | Claude Code | Aider | OpenCode |
 |---|---|---|---|---|
 | Any OpenRouter model | ✓ | ✗ | ✓ | ✓ |
 | Mid-session model switch | ✓ | ✗ | ✗ | ✓ |
@@ -38,22 +40,22 @@
 ## Install
 
 ```sh
-npx @dominquechurch/dom-agent
+npx @dominquechurch/gnosis
 ```
 
 `npx` works without a global install — easiest way to try it. To keep it around:
 
 ```sh
-npm install -g @dominquechurch/dom-agent
+npm install -g @dominquechurch/gnosis
 echo "OPENROUTER_API_KEY=sk-or-..." >> ~/.dom/.env
-dom
+gnosis
 ```
 
-I built dom in two weeks before starting Grade 12. I wanted Claude Code but provider-agnostic, with a browser UI I could watch while agents worked. The office floor started as a joke and became the thing everyone notices first.
+I built Gnosis in two weeks before starting Grade 12. I wanted Claude Code but provider-agnostic, with a browser UI I could watch while agents worked. The office floor started as a joke and became the thing everyone notices first.
 
-## Why dom
+## Why Gnosis
 
-Most coding agents lock you to one model. dom runs on any of hundreds of models via OpenRouter — switch from Sonnet to DeepSeek mid-session and your history survives intact. Verified live.
+Most coding agents lock you to one model. Gnosis runs on any of hundreds of models via OpenRouter — switch from Sonnet to DeepSeek mid-session and your history survives intact. Verified live.
 
 It is **Windows-first**, where most tools treat Windows as an afterthought: real path handling, a working ConPTY terminal, and CI that runs the full suite on `windows-latest`.
 
@@ -75,7 +77,7 @@ And the browser UI is not a dashboard bolted on the side — it is a live pixel-
 - **90 automated test suites** — offline, isolated, run on every push
 - **BYOK** — your key stays in `~/.dom/.env`, and there is no telemetry
 
-![dom model picker](docs/screenshot-model-picker.png)
+![Gnosis model picker](docs/screenshot-model-picker.png)
 *Runtime model switching — full OpenRouter catalog in the browser*
 
 Also in the box: 15 built-in tools (`read`, `write`, `edit`, `glob`, `grep`, `bash`, `http`, `web_search`, `task`, `todo`, `memory`, `oracle`, `view_image`, `send_message`, `list_tabs`), multi-session tabs, inter-agent messaging, a skills system, plan mode, hooks, and auto-commit on every successful edit.
@@ -95,12 +97,12 @@ To route `groq/`-prefixed models natively to Groq, add a Groq key to `~/.dom/con
 ## Usage
 
 ```sh
-dom                       # start the TUI
-dom serve                 # start the web UI (office floor, file browser, terminal)
-dom -p "prompt"           # pipe mode: one turn, final answer to stdout, exit
+gnosis                       # start the TUI
+gnosis serve                 # start the web UI (office floor, file browser, terminal)
+gnosis -p "prompt"           # pipe mode: one turn, final answer to stdout, exit
 ```
 
-`dom serve` prints a **LOCAL** and a **LAN** URL, each with a scannable QR code — point your phone's camera at the LAN one to drive the same session from the couch. Both carry the session token, which is what gates access.
+`gnosis serve` prints a **LOCAL** and a **LAN** URL, each with a scannable QR code — point your phone's camera at the LAN one to drive the same session from the couch. Both carry the session token, which is what gates access.
 
 Common in-session slash commands:
 
@@ -119,16 +121,16 @@ Type `@` to attach files and `/` to autocomplete commands.
 
 ## Keys & network
 
-**Your key never leaves your machine.** Keys are read at request time from `~/.dom/.env` (or `~/.dom/config.json` for Groq), are never bundled with the package, and are never sent anywhere except the service they belong to. **There is no telemetry — dom does not phone home.**
+**Your key never leaves your machine.** Keys are read at request time from `~/.dom/.env` (or `~/.dom/config.json` for Groq), are never bundled with the package, and are never sent anywhere except the service they belong to. **There is no telemetry — Gnosis does not phone home.**
 
-dom makes outbound HTTP(S) requests to:
+gnosis makes outbound HTTP(S) requests to:
 
 - **OpenRouter** (`openrouter.ai`) — every model call, plus the public `/models` catalog. Uses `OPENROUTER_API_KEY`.
 - **Groq** (`api.groq.com`) — only when you run a `groq/`-prefixed model; fetches its `/models` and routes chat completions natively. Uses `groqApiKey` from `~/.dom/config.json`. Skipped entirely if no Groq key is set.
 - **Brave Search** (`api.search.brave.com`) — the `web_search` tool. Uses `BRAVE_API_KEY`. Skipped if unset.
 - **Arbitrary public hosts** — the `http` tool fetches URLs you (or the agent) request. Loopback, private-network, and cloud-metadata addresses are refused. Secrets are never inlined: reference them as `${VAR_NAME}` and the value is pulled from `~/.dom/.env` at send time.
 
-See [SECURITY.md](SECURITY.md) for the permission model and how the `dom serve` token gate works.
+See [SECURITY.md](SECURITY.md) for the permission model and how the `gnosis serve` token gate works.
 
 ## Development
 

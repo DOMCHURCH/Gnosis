@@ -14,24 +14,24 @@ import { getGhAuth, getRepoInfo } from "./gitinfo.js";
 
 const VERSION = "0.1.0";
 
-const HELP = `dom — terminal coding agent (OpenRouter)
+const HELP = `Gnosis — terminal coding agent (OpenRouter)
 
 usage:
-  dom [message]              start the TUI (optionally send an opening message in --headless)
-  dom -c                     resume the latest session for this directory
-  dom -r <id>                resume a specific session
-  dom --model <id>           start with a specific model
-  dom --yolo                 allow all tools without prompting (dangerous commands still prompt)
-  dom --no-auto-commit       don't commit each successful write/edit to git
-  dom --headless [message]   run without the TUI (plain stdout)
-  dom -p "prompt"            pipe mode: read stdin, run one turn, print the result, exit
-  dom -p "prompt" --save     ...and persist the one-shot turn as a session
-  dom --json "prompt"        headless: stream structured JSONL events to stdout, exit
-  dom schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
-  dom serve [--port 7777] [--public]          TUI + web view (LOCAL + LAN QR always; --public: tunnel)
-  dom --help | --version
+  gnosis [message]              start the TUI (optionally send an opening message in --headless)
+  gnosis -c                     resume the latest session for this directory
+  gnosis -r <id>                resume a specific session
+  gnosis --model <id>           start with a specific model
+  gnosis --yolo                 allow all tools without prompting (dangerous commands still prompt)
+  gnosis --no-auto-commit       don't commit each successful write/edit to git
+  gnosis --headless [message]   run without the TUI (plain stdout)
+  gnosis -p "prompt"            pipe mode: read stdin, run one turn, print the result, exit
+  gnosis -p "prompt" --save     ...and persist the one-shot turn as a session
+  gnosis --json "prompt"        headless: stream structured JSONL events to stdout, exit
+  gnosis schedule <sub>         manage/fire scheduled runs (add|list|remove|run|tick|daemon)
+  gnosis serve [--port 7777] [--public]          TUI + web view (LOCAL + LAN QR always; --public: tunnel)
+  gnosis --help | --version
 
-Pipe mode composes in shell pipelines, e.g.  git diff | dom -p "review this".
+Pipe mode composes in shell pipelines, e.g.  git diff | gnosis -p "review this".
 JSON mode is the machine contract (web UI / scripts): one JSON object per line,
 ending with a {"type":"result"} line. Reads piped stdin too, like -p.
 
@@ -54,7 +54,7 @@ async function main() {
 
   const flags = parseArgs(argv);
   if (flags.version) {
-    console.log(`dom ${VERSION}`);
+    console.log(`gnosis ${VERSION}`);
     return;
   }
   if (flags.help) {
@@ -113,9 +113,9 @@ async function main() {
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
       if (code === "EADDRINUSE") {
-        console.error(`dom serve: port ${flags.port ?? 7777} is already in use. Pick another with --port <n>.`);
+        console.error(`gnosis serve: port ${flags.port ?? 7777} is already in use. Pick another with --port <n>.`);
       } else {
-        console.error(`dom serve: could not start the server — ${(e as Error).message}`);
+        console.error(`gnosis serve: could not start the server — ${(e as Error).message}`);
       }
       process.exit(1);
     }
@@ -156,7 +156,7 @@ async function main() {
     if (server.lanUrl) links.push({ label: "LAN   ", url: `${server.lanUrl}/?token=${server.token}` });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
     const scope = server.lanUrl ? "LAN + loopback" : "loopback only (no LAN address)";
-    process.stdout.write(`dom serve — scan or open:\n${await serveBlock(links)}\n(${scope} · token required · Ctrl+C to stop)\n\n`);
+    process.stdout.write(`gnosis serve — scan or open:\n${await serveBlock(links)}\n(${scope} · token required · Ctrl+C to stop)\n\n`);
 
     // Already wired above — just stay alive until Ctrl+C.
     if (headless) {

@@ -76,7 +76,7 @@ export async function runScheduleCommand(args: string[]): Promise<number> {
       const spec = args[1];
       const prompt = args.slice(2).join(" ");
       if (!spec || !prompt) {
-        process.stderr.write('usage: dom schedule add "<spec>" "<prompt>"   (spec: "every 30m", "hourly", "daily 14:30")\n');
+        process.stderr.write('usage: gnosis schedule add "<spec>" "<prompt>"   (spec: "every 30m", "hourly", "daily 14:30")\n');
         return 1;
       }
       const r = await addSchedule({ spec, prompt, cwd: process.cwd() }, Date.now(), randSuffix());
@@ -113,7 +113,7 @@ export async function runScheduleCommand(args: string[]): Promise<number> {
     case "rm": {
       const id = args[1];
       if (!id) {
-        process.stderr.write("usage: dom schedule remove <id>\n");
+        process.stderr.write("usage: gnosis schedule remove <id>\n");
         return 1;
       }
       const ok = await removeSchedule(id);
@@ -125,7 +125,7 @@ export async function runScheduleCommand(args: string[]): Promise<number> {
       // Force-run one schedule now, regardless of whether it's due.
       const id = args[1];
       if (!id) {
-        process.stderr.write("usage: dom schedule run <id>\n");
+        process.stderr.write("usage: gnosis schedule run <id>\n");
         return 1;
       }
       const s = (await loadSchedules()).find((x) => x.id === id);
@@ -153,7 +153,7 @@ export async function runScheduleCommand(args: string[]): Promise<number> {
     case "daemon": {
       // Long-running: tick once a minute. Real scheduled firing over wall-clock
       // time is only exercised here (not auto-verified).
-      process.stderr.write("dom scheduler running — ticking every 60s. Ctrl+C to stop.\n");
+      process.stderr.write("gnosis scheduler running — ticking every 60s. Ctrl+C to stop.\n");
       for (;;) {
         const outcomes = await tick(Date.now());
         for (const o of outcomes) process.stderr.write(`${o.status === "ok" ? "✓" : "✗"} ${o.id}: ${o.prompt}\n`);
@@ -163,7 +163,7 @@ export async function runScheduleCommand(args: string[]): Promise<number> {
 
     default:
       process.stderr.write(
-        "usage: dom schedule <add|list|remove|run|tick|daemon>\n" +
+        "usage: gnosis schedule <add|list|remove|run|tick|daemon>\n" +
           '  add "<spec>" "<prompt>"   spec: "every 30m" | "hourly" | "daily 14:30"\n' +
           "  list                      show schedules with next-run times\n" +
           "  remove <id>               delete a schedule\n" +

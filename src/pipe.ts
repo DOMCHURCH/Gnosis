@@ -1,6 +1,6 @@
-// Pipe mode: `dom -p "prompt"` runs ONE turn non-interactively and writes the
+// Pipe mode: `gnosis -p "prompt"` runs ONE turn non-interactively and writes the
 // model's final answer to stdout, so it composes in shell pipelines
-// (`git diff | dom -p "review this"`). Piped stdin, when present, is appended to
+// (`git diff | gnosis -p "review this"`). Piped stdin, when present, is appended to
 // the prompt. Progress and errors go to STDERR so stdout stays clean. No session
 // file is written unless --save. Returns the process exit code (0 ok, 1 error).
 
@@ -23,7 +23,7 @@ export async function runPipe(engine: Engine, opts: { prompt?: string; save?: bo
   // The -p argument is the instruction; piped stdin (e.g. a diff) is the material.
   const prompt = [opts.prompt?.trim(), piped.trim()].filter((s): s is string => !!s).join("\n\n");
   if (!prompt) {
-    process.stderr.write('dom -p: nothing to do — pass a prompt (dom -p "…") or pipe input (… | dom -p "…").\n');
+    process.stderr.write('gnosis -p: nothing to do — pass a prompt (gnosis -p "…") or pipe input (… | gnosis -p "…").\n');
     return 1;
   }
 

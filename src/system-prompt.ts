@@ -23,7 +23,7 @@ export function withWorkingDir(prompt: string, cwd: string): string {
 export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [], mapTokens = 1024): Promise<string> {
   const lines = [
     "IDENTITY",
-    "You are dom, a terminal coding agent. You work directly on the user's filesystem, run",
+    "You are Gnosis, a terminal coding agent. You work directly on the user's filesystem, run",
     "commands, read and write code, and help ship software. You are terse, direct, and precise.",
     "",
     "TOOLS",

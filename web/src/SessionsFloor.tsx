@@ -306,7 +306,7 @@ export function SessionsFloor(props: SessionsProps) {
         {/* header */}
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2A2A38", paddingBottom: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
-            <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>dom</span>
+            <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
             <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2, whiteSpace: "nowrap" }}>TERMINAL SESSIONS · ONE FLOOR EACH</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 20, fontSize: 11, letterSpacing: 2, color: "#6B6B7B" }}>
@@ -436,7 +436,7 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2A2A38", paddingTop: 10 }}>
-          <span>window.domThree · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
+          <span>window.gnosisOffice · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
           <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
         </div>
 

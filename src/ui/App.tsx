@@ -362,7 +362,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     if (!busy) {
       // A real turn just ended (busy true→false): notify unless it was a ctrl+c abort.
       if (wasBusyRef.current) {
-        if (!abortedTurnRef.current) notify("dom", "turn finished", { enabled: notifyRef.current });
+        if (!abortedTurnRef.current) notify("Gnosis", "turn finished", { enabled: notifyRef.current });
         abortedTurnRef.current = false;
         wasBusyRef.current = false;
       }
@@ -555,7 +555,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     requestPermission: (preview) =>
       new Promise<PermissionAnswer>((resolve) => {
         const label = preview.kind === "diff" ? preview.path : preview.kind === "bash" ? preview.command : `${preview.method} ${preview.url}`;
-        notify("dom", `needs approval: ${label}`, { enabled: notifyRef.current });
+        notify("Gnosis", `needs approval: ${label}`, { enabled: notifyRef.current });
         // Active tab: prompt inline. Background tab: park it (badge amber, keep
         // focus); it surfaces when the user switches over.
         if (isActive(tab)) {
@@ -784,7 +784,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     // (used when auto-commit is off or the change was never committed).
     const undoneCommit = await undoLastDomCommit(engine.cwd);
     if (undoneCommit) {
-      sysLog(`reverted last dom commit — ${undoneCommit.message}`);
+      sysLog(`reverted last Gnosis commit — ${undoneCommit.message}`);
       refreshRepo();
       return;
     }
@@ -1231,7 +1231,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         } else {
           void loadSchedules().then((all) => {
             if (!all.length) {
-              sysLog("no scheduled runs. /schedule add <spec> | <prompt>. A cron entry / `dom schedule tick` fires due ones.");
+              sysLog("no scheduled runs. /schedule add <spec> | <prompt>. A cron entry / `gnosis schedule tick` fires due ones.");
               return;
             }
             const now = Date.now();
