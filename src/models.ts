@@ -201,6 +201,34 @@ function basename(id: string): string {
  * id in the picker before switching. Never resolves to a non-chat (:batch) id —
  * those are already absent from the catalog.
  */
+/** `/model` arguments, split into the flag and the model query. */
+export interface ModelCommand {
+  /** `--save` / `-s` seen anywhere in the arguments. */
+  save: boolean;
+  /** Everything that was not a flag — the model id or search query ("" for none). */
+  model: string;
+}
+
+/**
+ * Parse `/model` arguments. Order-independent by construction: the flag is found
+ * by scanning every token rather than by looking at a fixed position, so
+ * `--save <id>` and `<id> --save` behave identically.
+ *
+ * Positional parsing was the bug: it only recognised a LEADING flag, so
+ * `/model deepseek/deepseek-v4-flash --save` folded "--save" into the model
+ * query and matched nothing. A model id never begins with "-", which is what
+ * makes dropping flag tokens safe.
+ */
+export function parseModelCommand(arg: string): ModelCommand {
+  const toks = (arg ?? "").trim().split(/\s+/).filter(Boolean);
+  const isFlag = (t: string) => t === "--save" || t === "-s";
+  return {
+    save: toks.some(isFlag),
+    // Remaining tokens re-joined, so a multi-word search ("claude sonnet") survives.
+    model: toks.filter((t) => !isFlag(t)).join(" "),
+  };
+}
+
 export function resolveModelQuery(models: ModelEntry[], query: string): ModelResolution {
   const q = query.trim().toLowerCase();
   if (!q) return { kind: "none" };

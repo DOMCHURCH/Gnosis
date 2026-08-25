@@ -26,7 +26,7 @@ import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
 import { loadImage, isImagePath } from "../tools/viewimage.js";
 import { gatherPromptHistory } from "../history.js";
-import { fetchModels, resolveModelQuery, type ModelEntry } from "../models.js";
+import { fetchModels, resolveModelQuery, parseModelCommand, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
@@ -935,7 +935,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const applyModel = async (id: string, save = false) => {
     engine.setModel(id);
     const m = modelsRef.current.find((x) => x.id === id);
-    sysLog(`model ${g.chevron} ${id}${save ? "  (saved as default)" : ""}${m ? `  ${priceLabel(m)}` : ""}`);
+    sysLog(`switched to ${id}${save ? " (saved as default)" : ""}${m ? `  ${priceLabel(m)}` : ""}`);
     // Persist the session durably (awaited) so a hard exit can't lose the switch.
     await engine.persist();
     if (save) {
@@ -1551,11 +1551,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         revisePlan(arg);
         break;
       case "model": {
-        // /model               → picker (session switch; ctrl+s saves as default)
-        // /model <id>          → switch the session only
-        // /model --save [<id>] → switch AND save as default (no id: save current)
-        const save = parts[1] === "--save" || parts[1] === "-s";
-        const modelArg = save ? parts.slice(2).join(" ") : arg;
+        // /model                 → picker (session switch; ctrl+s saves as default)
+        // /model <id>            → switch the session only
+        // /model --save [<id>]   → switch AND save as default (no id: save current)
+        // /model <id> --save     → same; the flag is position-independent
+        const { save, model: modelArg } = parseModelCommand(arg);
         if (save && !modelArg) void applyModel(engine.modelId, true);
         else if (modelArg) void selectModelByArg(modelArg, save);
         else void openModelPicker();

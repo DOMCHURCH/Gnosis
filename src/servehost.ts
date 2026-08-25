@@ -10,8 +10,8 @@ import { Engine, type Callbacks } from "./engine.js";
 import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
 import { partitionAttachments } from "./messages.js";
-import { fetchModels } from "./models.js";
-import { listSessions, loadSession, domDir } from "./config.js";
+import { fetchModels, parseModelCommand } from "./models.js";
+import { listSessions, loadSession, domDir, saveConfig } from "./config.js";
 import { DreamManager, formatDream, DREAM_MAX_ITERATIONS, DREAM_MAX_USD } from "./dreams.js";
 import { saveVaultNote } from "./vault.js";
 import { callParts, resultBody, toolDetail } from "./ui/toolrender.js";
@@ -104,19 +104,32 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
     case "new":
       say(`new agent ${controller.create(parts[1]).name}`);
       break;
-    case "model":
-      // With an arg, switch directly; bare `/model` opens the picker in the browser
-      // (the same overlay the TUI shows) rather than doing nothing.
-      if (parts[1]) { tab.engine.setModel(parts[1]); say(`model → ${parts[1]}`); break; }
+    case "model": {
+      // Same parsing as the TUI, so `--save` works here too and in any position.
+      // Previously this took parts[1] verbatim, which meant `/model --save <id>`
+      // tried to switch to a model literally named "--save".
+      const { save, model } = parseModelCommand(parts.slice(1).join(" "));
+      if (save && !model) {
+        void saveConfig({ model: tab.engine.modelId }).then(() => say(`switched to ${tab.engine.modelId} (saved as default)`));
+        break;
+      }
+      if (model) {
+        tab.engine.setModel(model);
+        void tab.engine.persist();
+        if (save) void saveConfig({ model }).then(() => say(`switched to ${model} (saved as default)`));
+        else say(`switched to ${model}`);
+        break;
+      }
       void fetchModels().then((models) => {
         const items = models.map((m) => ({ value: m.id, label: m.id }));
         openOverlay(bridge, tab.id, "model", "select model", items, tab.engine.modelId, (v) => {
           tab.engine.setModel(v);
           void tab.engine.persist();
-          say(`model → ${v}`);
+          say(`switched to ${v}`);
         });
       });
       break;
+    }
     case "resume":
       // Open the session picker for THIS directory (newest-first list); selecting
       // one adopts it into the live engine.

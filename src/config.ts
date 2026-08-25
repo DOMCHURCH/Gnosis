@@ -133,18 +133,48 @@ async function ensureDir(dir: string): Promise<void> {
 // Config
 // ---------------------------------------------------------------------------
 
-export async function loadConfig(): Promise<Config> {
+/**
+ * Read and parse the config file, distinguishing ABSENT from UNPARSEABLE. A
+ * broken file used to be indistinguishable from no file at all, which is how a
+ * config could be silently ignored for weeks with nothing to show for it.
+ */
+async function readConfigFile(): Promise<{ config: Config; broken: boolean }> {
+  let txt: string;
   try {
-    const txt = await fs.readFile(configPath(), "utf8");
-    return JSON.parse(txt) as Config;
+    txt = await fs.readFile(configPath(), "utf8");
   } catch {
-    return {};
+    return { config: {}, broken: false }; // no file yet is a normal state
   }
+  try {
+    return { config: JSON.parse(stripBom(txt)) as Config, broken: false };
+  } catch {
+    return { config: {}, broken: true };
+  }
+}
+
+/** Drop a leading UTF-8 BOM. Windows editors add one — PowerShell's Set-Content
+ *  and Out-File, and Notepad — and JSON.parse throws on it, which silently
+ *  discarded the entire config of anyone who hand-edited the file. */
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+export async function loadConfig(): Promise<Config> {
+  return (await readConfigFile()).config;
+}
+
+/** True when a config file exists but could not be parsed — the caller can then
+ *  tell the user, instead of the settings just not applying. */
+export async function configIsBroken(): Promise<boolean> {
+  return (await readConfigFile()).broken;
 }
 
 export async function saveConfig(patch: Partial<Config>): Promise<void> {
   await ensureDir(domDir());
-  const current = await loadConfig();
+  const { config: current, broken } = await readConfigFile();
+  // Never merge into a file we could not read: `{...{}, ...patch}` would quietly
+  // drop every setting it holds. Keep the original beside it so nothing is lost.
+  if (broken) await fs.copyFile(configPath(), `${configPath()}.bak`).catch(() => {});
   const next = { ...current, ...patch };
   await fs.writeFile(configPath(), JSON.stringify(next, null, 2), "utf8");
 }
