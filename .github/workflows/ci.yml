@@ -35,4 +35,13 @@ jobs:
       - name: typecheck web UI
         run: npm run typecheck:web
 
+      # The browser's event types are generated from src/events.ts. If the
+      # checkout's copy differs from what the generator produces, someone edited
+      # the generated file or forgot to rebuild — fail rather than ship a wire
+      # format that disagrees with itself.
+      - name: event types are in sync with the server
+        run: |
+          npm run gen:events
+          git diff --exit-code web/src/events.generated.ts
+
       - run: npm run verify

@@ -66,40 +66,11 @@ export interface PermissionRequest {
   options: string[];
 }
 
-export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number }
-  | { type: "agent.closed"; tabId: number; name: string }
-  | { type: "agent.mode"; tabId: number; mode: string }
-  | { type: "agent.busy"; tabId: number; busy: boolean }
-  | { type: "turn.start"; tabId: number }
-  | { type: "turn.end"; tabId: number; cost: number; tokens: number; cachedTokens: number }
-  | { type: "line"; tabId: number; item: TranscriptItem }
-  | { type: "tool.start"; tabId: number; tool: string; args: unknown }
-  | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }
-  | { type: "edit.start"; tabId: number; path: string; original: string; totalLines: number }
-  | { type: "edit.line"; tabId: number; index: number; text: string; changed: boolean; chars: number }
-  | { type: "edit.commit"; tabId: number; path: string; ok: boolean; summary: string }
-  | { type: "subagent.start"; tabId: number; description: string }
-  | { type: "subagent.end"; tabId: number; description: string; result: string; ok: boolean }
-  | { type: "task.plan"; tabId: number; planId: string; subtasks: { index: number; description: string }[] }
-  | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
-  | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[]; dreamId?: string }
-  | { type: "permission.resolved"; tabId: number; id: string; answer: string }
-  | { type: "dream.state"; id: string; status: string; task: string; usd: number; summary: string }
-  | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }
-  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[]; dreamId?: string }
-  | { type: "ask.resolved"; tabId: number; id: string; answer: string }
-  | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
-  | { type: "overlay.resolved"; id: string }
-  | { type: "job.start"; tabId: number | null; jobId: string; command: string }
-  | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
-  | { type: "message.sent"; from: string; to: string; hops: number }
-  | { type: "goal.state"; tabId: number; goal: GoalState | null }
-  | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
-  | { type: "vault.changed" }
-  | { type: "connections.changed" }
-  | { type: "webhook.received"; id: string; label: string; method: string; size: number }
-  | { type: "serve.public"; url: string | null };
+/**
+ * The wire format is generated from src/events.ts — the server is the single
+ * source of truth. Editing a copy here is what let the two sides drift.
+ */
+export type { DomEvent } from "./events.generated";
 
 /** The goal bar's per-tab standing goal (mirrors src/engine.ts GoalState). */
 export interface GoalState {
