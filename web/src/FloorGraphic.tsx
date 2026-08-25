@@ -13,8 +13,15 @@ export function FloorGraphic(props: {
   plan?: TaskPlan | null;
   onSelectFig: (id: string | null) => void;
   onDeskClick: (zone: ZoneId, slot: number) => void;
+  /** "ground" draws only the floor plane (tiles, zone boxes, fixed props); "props"
+   *  draws only desks/agents/labels. Used by the isometric renderer, which puts the
+   *  ground on a CSS-tilted plane and billboards the props upright on top of it. */
+  layer?: "all" | "ground" | "props";
 }) {
   const { L } = props;
+  const layer = props.layer || "all";
+  const ground = layer !== "props";
+  const propsL = layer !== "ground";
   return (
     <>
       <svg viewBox="0 0 1440 900" width="100%" preserveAspectRatio="xMidYMid meet" shapeRendering="crispEdges" style={{ display: "block" }} xmlns="http://www.w3.org/2000/svg">
@@ -116,6 +123,7 @@ export function FloorGraphic(props: {
           </g>
         </defs>
 
+        {ground && <>
         <rect x="0" y="0" width="1440" height="900" fill="#12111A" />
         <rect x="16" y="16" width="1408" height="868" fill="#CFC8B7" />
         <rect x="32" y="32" width="1376" height="836" fill="url(#tile)" />
@@ -205,8 +213,9 @@ export function FloorGraphic(props: {
         <rect x="1332" y="648" width="48" height="8" fill="#22D3EE" fillOpacity="0.35" />
         <rect x="1332" y="666" width="48" height="8" fill="#3A3038" />
         <rect x="1320" y="740" width="80" height="4" fill="#1A171F" />
+        </>}
 
-        {L.freeDesks.map((d) => (
+        {propsL && L.freeDesks.map((d) => (
           <g key={d.key} onClick={() => props.onDeskClick(d.zone, d.slot)} style={{ cursor: "pointer" }}>
             <use href="#deskEmpty" x={d.x} y={d.y} opacity="0.55" />
             {/* a dim "+" marks the desk as placeable */}
@@ -215,7 +224,7 @@ export function FloorGraphic(props: {
           </g>
         ))}
 
-        {L.placed.map((a) => (
+        {propsL && L.placed.map((a) => (
           <g key={a.key} onClick={() => props.onSelectFig(a.id)} style={{ cursor: "pointer" }}>
             <use href="#desk" x={a.deskX} y={a.deskY} style={{ color: a.color }} />
             {a.deskGlow && <use href="#deskGlow" x={a.deskX} y={a.deskY} style={{ color: a.color }} opacity={a.opacity} />}
@@ -235,7 +244,7 @@ export function FloorGraphic(props: {
         ))}
       </svg>
 
-      <div style={{ position: "absolute", inset: 0, containerType: "size", pointerEvents: "none" }}>
+      {propsL && <div style={{ position: "absolute", inset: 0, containerType: "size", pointerEvents: "none" }}>
         {L.zoneLabels.map((z) => (
           <div key={z.key} onClick={() => props.onDeskClick(z.zone as ZoneId, 0)} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap", pointerEvents: "auto", cursor: "pointer" }}>
             {/* Active zones render their name at full #C9C9D6; idle ones drop to the
@@ -257,7 +266,7 @@ export function FloorGraphic(props: {
             <TaskPlanView plan={props.plan} compact />
           </div>
         )}
-      </div>
+      </div>}
     </>
   );
 }

@@ -31,6 +31,8 @@ export type Variant = "A" | "B" | "C";
 
 export interface Placed {
   key: string; id: string; color: string; opacity: number; manual: boolean;
+  /** Placement + identity for the 3D floor (officeScene seats by zone/slot). */
+  zone: ZoneId; slot: number; name: string; state: FigState;
   /** Colour family: A cyan, B purple/indigo, C green — drives the silhouette tweak. */
   variant: Variant;
   /** SVG transform for the busy 110% scale and VAR-B's extra height (undefined at 1:1). */

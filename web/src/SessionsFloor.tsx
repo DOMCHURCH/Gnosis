@@ -7,7 +7,7 @@ import { DiffView, FileView } from "./DiffView";
 import { elapsedLabel } from "./telemetry.js";
 import { TaskPlanView } from "./TaskPlanView";
 import type { TaskPlan } from "./taskplan";
-import { FloorGraphic } from "./FloorGraphic";
+import { ThreeFloor } from "./ThreeFloor";
 import { FloorMinimap } from "./FloorMinimap";
 import { messageStyle } from "./chatgroups.js";
 import { centerScrollLeft } from "./sessions.js";
@@ -235,7 +235,7 @@ export function SessionsFloor(props: SessionsProps) {
                   </div>
                 )}
                 <div ref={mobileScrollRef} onScroll={bumpFloor} style={{ overflowX: "auto", overflowY: "hidden" }}>
-                  <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+                  <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
                 </div>
                 <FloorMinimap L={L} scrollRef={mobileScrollRef} epoch={floorEpoch} mobile />
               </div>
@@ -375,7 +375,7 @@ export function SessionsFloor(props: SessionsProps) {
                   )}
                   <div ref={floorScrollRef} onScroll={bumpFloor} style={{ overflowX: zoom > 1 ? "auto" : "hidden", overflowY: "hidden" }}>
                     <div style={{ position: "relative", width: `${zoom * 100}%` }}>
-                      <FloorGraphic L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+                      <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
                     </div>
                   </div>
                   <FloorMinimap L={L} scrollRef={floorScrollRef} epoch={floorEpoch} />
@@ -436,7 +436,7 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2A2A38", paddingTop: 10 }}>
-          <span>window.domOffice · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
+          <span>window.domThree · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
           <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
         </div>
 

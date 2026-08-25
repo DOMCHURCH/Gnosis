@@ -127,7 +127,7 @@ export function floorFigures(state, tabId) {
 
 /** Geometry for one seated figure at desk slot `sl` = [x, y]. Shared by real,
  * debug, and manual figures so they line up on the desks identically. */
-function placeFigure(id, color, state, sl, selectedId, manual) {
+function placeFigure(id, color, state, sl, selectedId, manual, zone, slot, name) {
   const variant = variantOf(color);
   const agX = sl[0] + 48, agY = sl[1] - 96;
   // Working agents grow 10% and pick up a soft cyan glow; VAR-B stands 7% taller.
@@ -137,6 +137,9 @@ function placeFigure(id, color, state, sl, selectedId, manual) {
   const cx = agX + 32, by = agY + 96;
   return {
     key: id, id, color, variant,
+    // Identity/placement carried through for the 3D floor, which seats figures by
+    // (zone, slot) rather than by the SVG's pixel coordinates. Unused by the SVG.
+    zone, slot, name, state,
     // Idle agents sit at 90% opacity — present, but not competing with the working
     // ones for attention. Manual (decorative) figures stay dimmer still.
     opacity: state === "idle" ? (manual ? 0.4 : 0.9) : (manual ? 0.72 : 1),
@@ -221,7 +224,7 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
     if (collapsed) return;
     list.forEach((a, i) => {
       const sl = zone.slots[i];
-      placed.push(placeFigure(a.id, colorById[a.id], a.state, sl, selectedId, false));
+      placed.push(placeFigure(a.id, colorById[a.id], a.state, sl, selectedId, false, zone.id, i, a.name));
       nameTags.push({ key: `${a.id}-t`, left: pctX(sl[0] + 80), top: pctY(sl[1] - 130), name: a.name, stateColor: STATE_COLOR[a.state] || "#6B6B7B", border: a.state === "awaiting" ? "#FBBF24" : "#2A2A38" });
     });
     // Slots past the real figures: a pinned manual sits there, else a free desk.
@@ -229,7 +232,7 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
       if (i < list.length) return;
       const m = manualBySlot[zone.id][i];
       if (m) {
-        placed.push(placeFigure(m.id, zone.color, m.state || "idle", sl, selectedId, true));
+        placed.push(placeFigure(m.id, zone.color, m.state || "idle", sl, selectedId, true, zone.id, i, m.name));
         nameTags.push({ key: `${m.id}-t`, left: pctX(sl[0] + 80), top: pctY(sl[1] - 130), name: m.name, stateColor: STATE_COLOR[m.state] || "#6B6B7B", border: m.state === "awaiting" ? "#FBBF24" : "#2A2A38" });
       } else {
         freeDesks.push({ key: `${zone.id}-f${i}`, x: sl[0], y: sl[1], zone: zone.id, slot: i });

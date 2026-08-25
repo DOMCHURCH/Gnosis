@@ -139,7 +139,14 @@ export function App() {
       onApproval: (cb: any) => { debugRef.current.approvalCb = cb; },
     };
     (window as any).domOffice = api;
-    return () => { if ((window as any).domOffice === api) delete (window as any).domOffice; };
+    // The 3D floor is driven by the same model as the SVG one, so domThree is the
+    // same surface under the name the event-bus wiring expects — no separate path
+    // that could drift out of sync with domOffice.
+    (window as any).domThree = api;
+    return () => {
+      if ((window as any).domOffice === api) delete (window as any).domOffice;
+      if ((window as any).domThree === api) delete (window as any).domThree;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, activeId]);
 
