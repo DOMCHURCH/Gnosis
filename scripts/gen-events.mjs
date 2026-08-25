@@ -3,8 +3,8 @@
 //
 // They had already drifted: `security.blocked` existed only on the server, and
 // `permission.request.preview` was `unknown` on one side and `Preview` on the
-// other — which is why adding `dreamId` to the browser copy silently matched
-// nothing and the field went untyped for a whole release.
+// other — so a field added to one copy could silently go untyped in the other
+// for a whole release.
 //
 // The bus is deliberately payload-agnostic: src/events.ts types `item`,
 // `preview`, and the goal shape loosely because the bus must not couple to them.

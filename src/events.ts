@@ -59,9 +59,9 @@ export type DomEvent =
   // (null for the first), `after` the current one — both base64 PNG data URLs. `path`
   // is the web file whose edit triggered the auto-shot ("" for the initial /design).
   | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
-  | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[]; dreamId?: string }
+  | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }
   // ask_user: the agent paused mid-turn for a decision only the user can make.
-  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[]; dreamId?: string }
+  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[] }
   | { type: "ask.resolved"; tabId: number; id: string; answer: string }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
@@ -71,9 +71,6 @@ export type DomEvent =
   | { type: "message.sent"; from: string; to: string; hops: number }
   | { type: "goal.state"; tabId: number; goal: { text: string; active: boolean; roundsLeft: number; maxRounds: number; reviewModel?: string } | null }
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
-  // A dream started, changed state, or ended — the floor shows a dreaming agent
-  // in its own visual state and the panel lists status/cost/summary.
-  | { type: "dream.state"; id: string; status: string; task: string; usd: number; summary: string }
   // A secret scan blocked a file's auto-commit.
   | { type: "security.blocked"; tabId: number; path: string; findings: { kind: string; line: number; sample: string }[] }
   | { type: "vault.changed" }

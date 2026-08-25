@@ -27,8 +27,6 @@ export interface ChatGroup {
   askId?: string;
   options?: string[];
   answered?: string;
-  /** Set when the prompt came from a dream rather than the foreground turn. */
-  dreamId?: string;
   /** outcome block: the post-turn verdict and how sure it was. */
   verdict?: "pass" | "fail" | "unknown";
   confidence?: number;

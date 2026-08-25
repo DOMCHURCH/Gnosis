@@ -1,4 +1,4 @@
-// Verify (phone task assignment): the three modes map to the right actions, and
+// Verify (phone task assignment): the modes map to the right actions, and
 // the notification helper stays quiet rather than throwing when the browser has
 // not granted (or does not have) permission.
 import { canNotify, notify, requestNotifyPermission, pageHidden } from "../web/src/notify.js";
@@ -38,12 +38,12 @@ ok("pageHidden is false with no document", pageHidden() === false);
   globalThis.window.Notification = globalThis.Notification;
 
   ok("a granted permission short-circuits the prompt", (await requestNotifyPermission()) === true);
-  notify("Gnosis · dream d1 done", "deleted the scratch dir");
+  notify("Gnosis · turn done", "deleted the scratch dir");
   ok("a notification is shown", shown.length === 1);
-  ok("...with the title", shown[0].title === "Gnosis · dream d1 done");
+  ok("...with the title", shown[0].title === "Gnosis · turn done");
   ok("...and the body", shown[0].body === "deleted the scratch dir");
   // Repeats on a lock screen are noise; tagging collapses them.
-  ok("...tagged so repeats collapse", shown[0].tag === "Gnosis · dream d1 done");
+  ok("...tagged so repeats collapse", shown[0].tag === "Gnosis · turn done");
 }
 
 // --- page visibility gates the 'needs you' notifications --------------------------

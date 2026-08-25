@@ -36,7 +36,7 @@ await tool.run(
 );
 ok("option list is capped at 5", seen === 5);
 
-// --- timeout (a dream that nobody answered) -----------------------------------
+// --- timeout (a question that nobody answered) --------------------------------
 const timedOut = await tool.run(
   { question: "A or B?", options: ["A", "B"] },
   undefined,

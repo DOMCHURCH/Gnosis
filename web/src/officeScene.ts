@@ -10,7 +10,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { ZONES } from "./sessions.js";
 
-export type AgentState = "idle" | "thinking" | "awaiting" | "speaking" | "dreaming";
+export type AgentState = "idle" | "thinking" | "awaiting" | "speaking";
 export type SceneAgent = { id: string; name: string; zone: string; slot: number; state: AgentState; color?: string };
 
 /** SVG floor units per world unit. The 1440x900 floor becomes 24x15 world units,
@@ -29,9 +29,6 @@ const SCREEN: Record<AgentState, { color: number; intensity: number }> = {
   thinking: { color: 0x22d3ee, intensity: 0.8 },
   awaiting: { color: 0xfbbf24, intensity: 0.7 },
   speaking: { color: 0xe879f9, intensity: 0.6 },
-  // Dreaming: a dim violet screen. The figure itself carries the signal (a slow
-  // breathing pulse), so the monitor stays quiet.
-  dreaming: { color: 0xa78bfa, intensity: 0.35 },
 };
 
 /** World-space rect for a zone, derived from the SVG layout so the 3D rooms sit in
@@ -565,12 +562,6 @@ export function createOfficeScene(container: HTMLElement) {
       if (e.agent.state === "thinking") {
         e.figure.position.y = e.baseY + Math.sin(t * Math.PI * 2) * 0.1;
         if (e.ring) e.ring.rotation.y = t * 1.6;
-      } else if (e.agent.state === "dreaming") {
-        // A quarter the rate of "thinking" and a third the travel: it reads as
-        // breathing rather than working, which is exactly the distinction.
-        e.figure.position.y = e.baseY + Math.sin(t * Math.PI * 0.5) * 0.035;
-        const glow = 0.18 + (Math.sin(t * Math.PI * 0.5) + 1) * 0.12;
-        e.screen.material.emissiveIntensity = glow;
       } else if (e.agent.state === "awaiting" && e.badge) {
         e.badge.scale.setScalar(1 + Math.sin(t * Math.PI * 4) * 0.2);
         e.badge.rotation.y = t;

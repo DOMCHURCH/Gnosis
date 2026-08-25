@@ -35,8 +35,6 @@
 | Obsidian vault memory | ✓ | ✗ | ✗ | ✗ |
 | MCP client | ✓ | ✓ | ✗ | ✓ |
 | 3D office floor (Three.js) | ✓ | ✗ | ✗ | ✗ |
-| Dream mode (autonomous background tasks) | ✓ | ✗ | ✗ | ✗ |
-| Issue-to-PR pipeline | ✓ | ✓ | ✗ | ✗ |
 | Built by a 16yo | ✓ | ✗ | ✗ | ✗ |
 
 ## Install
@@ -63,7 +61,7 @@ It is **Windows-first**, where most tools treat Windows as an afterthought: real
 
 Prompt caching gives a **measured ~12× cost reduction** on cached turns.
 
-And the browser UI is not a dashboard bolted on the side — it is a live **Three.js office floor**: five lit rooms you can orbit and zoom, where every agent, background job, dream, and sub-agent is a blocky figure at a desk, working in real time.
+And the browser UI is not a dashboard bolted on the side — it is a live **Three.js office floor**: five lit rooms you can orbit and zoom, where every agent, background job, and sub-agent is a blocky figure at a desk, working in real time.
 
 ## What it has
 
@@ -76,14 +74,12 @@ And the browser UI is not a dashboard bolted on the side — it is a live **Thre
 - **Tree-sitter repo map, PageRank-ranked** — structural map of the codebase with the most central files first, so edits are grounded
 - **Web terminal, file browser, diff viewer, webhook inspector** — a real ConPTY shell in the browser, streaming diffs, and a replayable webhook capture buffer
 - **Goal bar with an automated verifier loop** — hold an agent to a goal; a read-only reviewer checks each turn's diff and steers it back on fail
-- **Dreaming** — `/dream "refactor the auth module"` runs a long-horizon task in its own engine while you keep working. Hard caps (50 iterations, $2, 2 hours), desktop notification when it lands, and it never outlives the process
-- **GitHub issue → PR** — `/issue <url>` reads an issue, implements it as a dream in an isolated worktree, runs the tests, retries once on failure, and opens a draft PR that closes it
 - **Automatic outcome evaluation** — after any turn that touches files, a read-only verifier judges the diff against your request and reports `✓ outcome: … (94% confidence)`. On a fail, one button feeds the critique back
 - **Security scanning on every write** — API keys, tokens, private keys, and hardcoded passwords block the auto-commit before it happens. The write always stands; `/commit --force` overrides
 - **`ask_user`** — the agent can stop and ask instead of guessing when two approaches are equally valid and the wrong one means rework
 - **Surgical rewind** — double-Esc opens the last 20 turns: rewind to one, or summarize everything before it into a single block via the oracle model
-- **Phone-first task assignment** — on a phone, one button opens a full-screen composer: *Code it*, *Dream it*, or *Research it*, then lock the screen and get a browser notification when it is done
-- **100 automated test suites** — offline, isolated, run on every push
+- **Phone-first task assignment** — on a phone, one button opens a full-screen composer: *Code it* or *Research it*, then lock the screen and get a browser notification when it needs you
+- **99 automated test suites** — offline, isolated, run on every push
 - **BYOK** — your key stays in `~/.dom/.env`, and there is no telemetry
 
 ![Gnosis model picker](docs/screenshot-model-picker.png)
@@ -125,8 +121,6 @@ Common in-session slash commands:
 - `/cost` — show token usage and spend for the session
 - `/undo` — revert the last agent commit
 - `/jobs` — list background jobs
-- `/dream "<task>"` — run a long-horizon task in the background (`/dreams`, `/dream stop <id>`, `/dream resume <id>`)
-- `/issue <url>` — implement a GitHub issue as a dream and open a PR (`/issue status <n>`)
 - `/eval` — judge whether the last turn actually succeeded (`/fix` feeds a failure back)
 - `/rewind` — pick a turn to rewind to, or summarize up to (also double-Esc)
 - `/security scan <path>` — scan a file for exposed keys
@@ -154,7 +148,7 @@ cd Gnosis
 npm install
 npm run build
 npm link
-npm run verify      # 100 test suites
+npm run verify      # 99 test suites
 npm run eval        # 10-task eval harness
 ```
 

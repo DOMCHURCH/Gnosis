@@ -2,19 +2,18 @@ import { useEffect, useRef, useState } from "react";
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
-/** How the task should be run. The three verbs a phone actually needs. */
-export type TaskMode = "code" | "dream" | "research";
+/** How the task should be run. The two verbs a phone actually needs. */
+export type TaskMode = "code" | "research";
 
 const ACTIONS: { mode: TaskMode; label: string; hint: string; color: string }[] = [
   { mode: "code", label: "CODE IT", hint: "a normal turn — watch it work", color: "#22D3EE" },
-  { mode: "dream", label: "DREAM IT", hint: "runs in the background — lock your phone", color: "#A78BFA" },
   { mode: "research", label: "RESEARCH IT", hint: "read-only — comes back with a summary", color: "#4ADE80" },
 ];
 
 /**
  * The full-screen task composer for phones. Deliberately not the ordinary chat
  * input: on a phone the useful interaction is "say the thing, choose how it runs,
- * put the phone away", and that wants a big target for each of those three steps
+ * put the phone away", and that wants a big target for each of those steps
  * rather than a one-line field and a send arrow.
  */
 export function NewTaskSheet(props: {

@@ -272,11 +272,6 @@ export class Engine {
   bus?: EventBus;
   bridge?: AppBridge;
   agentId = 0;
-  /** Set when this engine IS a dream (see dreams.ts). Rides along on the
-   * permission/ask events so a client can label whose prompt it is — a dream's
-   * question arrives in a rail the user never typed into, so "which dream?" is
-   * the first thing they need to know. */
-  dreamId?: string;
   agentName = "";
   /** The model's task list (the `todo` tool). Persisted per session; the UI
    * renders it live above the input. Replaced wholesale on each todo call. */
@@ -601,7 +596,7 @@ export class Engine {
       },
       requestPermission: (preview) => {
         if (!bridge) {
-          bus.emit({ type: "permission.request", tabId, id: `${tabId}:${++this.permSeq}`, preview, options: ["yes", "no", "always"], dreamId: this.dreamId });
+          bus.emit({ type: "permission.request", tabId, id: `${tabId}:${++this.permSeq}`, preview, options: ["yes", "no", "always"] });
           return cb.requestPermission(preview);
         }
         const id = `${tabId}:${++this.permSeq}`;
@@ -615,7 +610,7 @@ export class Engine {
             resolve(a);
           };
           bridge.registerPermission(id, finish); // a web client may answer
-          bus.emit({ type: "permission.request", tabId, id, preview, options: ["yes", "no", "always"], dreamId: this.dreamId });
+          bus.emit({ type: "permission.request", tabId, id, preview, options: ["yes", "no", "always"] });
           void Promise.resolve(cb.requestPermission(preview)).then(finish); // the TUI overlay
         });
       },
@@ -624,7 +619,7 @@ export class Engine {
       askUser: cb.askUser
         ? (question, options, signal) => {
             if (!bridge) {
-              bus.emit({ type: "ask.request", tabId, id: `${tabId}:${++this.permSeq}`, question, options, dreamId: this.dreamId });
+              bus.emit({ type: "ask.request", tabId, id: `${tabId}:${++this.permSeq}`, question, options });
               return cb.askUser!(question, options, signal);
             }
             const id = `ask:${tabId}:${++this.permSeq}`;
@@ -638,7 +633,7 @@ export class Engine {
                 resolve(a);
               };
               bridge.registerAsk(id, (text) => finish({ text }));
-              bus.emit({ type: "ask.request", tabId, id, question, options, dreamId: this.dreamId });
+              bus.emit({ type: "ask.request", tabId, id, question, options });
               void Promise.resolve(cb.askUser!(question, options, signal)).then(finish);
             });
           }

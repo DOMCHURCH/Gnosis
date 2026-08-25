@@ -16,7 +16,7 @@ export const ZONES = [
 export const ZONE_BY_ID = {};
 ZONES.forEach((z) => { ZONE_BY_ID[z.id] = z; });
 
-export const STATE_COLOR = { thinking: "#22D3EE", awaiting: "#FBBF24", speaking: "#E879F9", dreaming: "#A78BFA", idle: "#6B6B7B" };
+export const STATE_COLOR = { thinking: "#22D3EE", awaiting: "#FBBF24", speaking: "#E879F9", idle: "#6B6B7B" };
 const VARIANTS = {
   coordinator: ["#E879F9"], planning: ["#818CF8", "#A5ADFB"],
   coding: ["#22D3EE", "#5BE1F2", "#818CF8", "#C084FC", "#22D3EE", "#5BE1F2", "#818CF8", "#C084FC"],
@@ -121,13 +121,6 @@ export function floorFigures(state, tabId) {
     { id: `tab:${tabId}`, tabId, kind: "tab", name: tab.name, zone: zoneForTab(tab, { ownsSub: subs.length > 0 }), state: st, action: activityFor(state, tabId), output: recentText(state, tabId, "tool", 3), thinking: recentText(state, tabId, "line", 3) },
   ];
   for (const j of jobs) figs.push({ id: `job:${j.id}`, tabId, kind: "job", name: `job ${j.id}`, zone: "application", state: "thinking", action: j.command || "background job", output: [], thinking: [`background job ${j.id}`] });
-  // Dreams are long-horizon autonomous work: they sit in the sub-agents zone in
-  // their own "dreaming" state (slow pulse, dim glow) so the floor shows at a
-  // glance that something is running without you.
-  for (const d of Object.values(state.dreams || {})) {
-    if (d.status !== "running") continue;
-    figs.push({ id: `dream:${d.id}`, tabId, kind: "dream", name: d.id, zone: "subagents", state: "dreaming", action: d.task, output: [], thinking: [`dreaming: ${d.task}`] });
-  }
   for (const s of subs) figs.push({ id: `sub:${s.key}`, tabId, kind: "subagent", name: (s.description || "task").slice(0, 8), zone: "subagents", state: "thinking", action: s.description || "sub-task", output: [], thinking: [`spawned by ${tab.name}`] });
   return figs;
 }

@@ -17,7 +17,7 @@ import type { FileOutput } from "./filekind";
 import { messageStyle } from "./chatgroups.js";
 import { centerScrollLeft } from "./sessions.js";
 
-export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; fileOutput?: FileOutput | null; autoSaved?: string; askId?: string; options?: string[]; answered?: string; dreamId?: string; verdict?: "pass" | "fail" | "unknown"; confidence?: number; }
+export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; fileOutput?: FileOutput | null; autoSaved?: string; askId?: string; options?: string[]; answered?: string; verdict?: "pass" | "fail" | "unknown"; confidence?: number; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
@@ -56,7 +56,7 @@ export interface SessionsProps {
   onAnswerAsk?: (askId: string | undefined, text: string) => void;
   /** Feed a failed outcome's critique back as the next turn. */
   onFixOutcome?: () => void;
-  /** Phone task composer: run `text` as a turn, a dream, or a research sub-agent. */
+  /** Phone task composer: run `text` as a turn or a research sub-agent. */
   onNewTask?: (text: string, mode: TaskMode) => void;
   /** Re-run one of your own messages as a background agent in a new tab. */
   onRunBackground?: (text: string) => void;
@@ -846,14 +846,6 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
             const st = messageStyle(m.kind, m.isApproval);
             return (
               <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 5, ...(st.wrapTint ? { background: st.wrapTint, padding: 8 } : {}), ...(st.centered ? { alignItems: "center", textAlign: "center" } : {}) }}>
-                {m.dreamId && (
-                  // A dream's prompt lands in a rail the user never typed into,
-                  // so name the dream ABOVE the question it is asking.
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9, letterSpacing: 1, color: "#A78BFA" }}>
-                    <span style={{ width: 6, height: 6, background: "#A78BFA" }} />
-                    <span>DREAM {m.dreamId.toUpperCase()}</span>
-                  </div>
-                )}
                 {st.showMeta && (
                   <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 9, letterSpacing: 1 }}>
                     <span style={{ width: 8, height: 8, background: m.color }} />

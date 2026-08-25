@@ -12,7 +12,6 @@ import type { AppBridge } from "./events.js";
 import { partitionAttachments } from "./messages.js";
 import { fetchModels, parseModelCommand } from "./models.js";
 import { listSessions, loadSession, domDir, saveConfig } from "./config.js";
-import { DreamManager, formatDream, DREAM_MAX_ITERATIONS, DREAM_MAX_USD } from "./dreams.js";
 import { saveVaultNote } from "./vault.js";
 import { callParts, resultBody, toolDetail } from "./ui/toolrender.js";
 
@@ -70,26 +69,6 @@ function openOverlay(bridge: AppBridge, tabId: number, kind: string, title: stri
 }
 
 /** A minimal slash-command handler for headless serve (the TUI has the full set). */
-/** Dreams for headless serve, created on first use. Without this, /dream is
- *  unavailable in exactly the mode where the browser IS the only UI — which is
- *  the natural home for "start it and walk away". */
-let dreams: DreamManager | null = null;
-function ensureDreams(controller: TabsController, bridge: AppBridge): DreamManager {
-  if (dreams) return dreams;
-  dreams = new DreamManager(domDir(), {
-    fork: (cwd) => controller.active().engine.fork(cwd ? { cwd } : undefined),
-    bus: bridge.bus,
-    bridge,
-    ownerTabId: () => controller.active().id,
-    // Headless serve has no TUI overlay, so a dream's prompts are answered by
-    // the browser alone — the bridge registry is the whole channel.
-    requestApproval: () => new Promise(() => {}),
-    askUser: () => new Promise(() => {}),
-  });
-  void dreams.init();
-  return dreams;
-}
-
 function handleCommand(controller: TabsController, tabId: number, command: string, bridge: AppBridge): void {
   const tab = controller.byId(tabId) ?? controller.active();
   const parts = command.replace(/^\//, "").trim().split(/\s+/);
@@ -155,37 +134,6 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
       tab.engine.clear();
       say("conversation cleared");
       break;
-    case "dream": {
-      const dm = ensureDreams(controller, bridge);
-      if (parts[1] === "stop") {
-        const id = parts[2];
-        if (!id) { say("usage: /dream stop <id>"); break; }
-        void dm.stop(id).then((okStop) => say(okStop ? `dream ${id} stopped` : `no running dream "${id}"`));
-        break;
-      }
-      if (parts[1] === "resume") {
-        const id = parts[2];
-        if (!id) { say("usage: /dream resume <id>"); break; }
-        const r = dm.resume(id);
-        say(r.ok ? `✨ dreaming ${r.record.id}: re-running ${id} from the start` : r.reason);
-        break;
-      }
-      const task = parts.slice(1).join(" ").trim();
-      if (!task) { say('usage: /dream "<task>"'); break; }
-      // Wait for the log to load: ids are seeded from it.
-      void dm.ready().then(() => {
-        const rec = dm.start(task, tab.engine.cwd);
-        say(`✨ dreaming ${rec.id}: ${task.slice(0, 70)}`);
-        say(`   caps: ${DREAM_MAX_ITERATIONS} iterations · $${DREAM_MAX_USD} · 2h — /dreams to check, /dream stop ${rec.id} to end`);
-      });
-      break;
-    }
-    case "dreams": {
-      const all = ensureDreams(controller, bridge).list();
-      if (!all.length) { say('no dreams yet — /dream "<task>" starts one'); break; }
-      for (const d of all) for (const line of formatDream(d).split("\n")) say(line);
-      break;
-    }
     default:
       say(`(${command}) isn't available in headless serve — attach a terminal for the full command set`);
   }

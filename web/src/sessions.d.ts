@@ -9,7 +9,7 @@ export const STATE_COLOR: Record<string, string>;
 export const pctX: (v: number) => string;
 export const pctY: (v: number) => string;
 
-export type FigState = "thinking" | "awaiting" | "speaking" | "dreaming" | "idle";
+export type FigState = "thinking" | "awaiting" | "speaking" | "idle";
 export interface Figure {
   id: string;
   tabId: number;

@@ -78,28 +78,14 @@ export function App() {
 
   // Phone notifications. The desktop notifier fires on the machine running
   // Gnosis, not in the pocket of whoever assigned the task — so the browser
-  // raises its own when a dream settles or something needs an answer.
-  const dreamSeenRef = useRef<Record<string, string>>({});
-  useEffect(() => {
-    for (const d of Object.values(state.dreams)) {
-      const prev = dreamSeenRef.current[d.id];
-      dreamSeenRef.current[d.id] = d.status;
-      // Only a TRANSITION into a terminal state is worth a notification; the
-      // first sighting of an already-finished dream is just a page reload.
-      if (!prev || prev === d.status || d.status === "running") continue;
-      webNotify(`Gnosis · dream ${d.id} ${d.status}`, d.summary || d.task);
-    }
-  }, [state.dreams]);
-
-  // Anything blocking progress notifies too, but only when the page is not in
+  // raises its own when something needs an answer, but only when the page is not in
   // front of the user — otherwise the card in the rail is the notification.
   const pendingRef = useRef<string | null>(null);
   useEffect(() => {
     const waiting = state.chatLines.filter((l) => (l.kind === "ask" && !l.answered) || (l.kind === "approval" && !l.resolved)).slice(-1)[0];
     const key = waiting ? `${waiting.kind}:${waiting.key}` : null;
     if (key && key !== pendingRef.current && pageHidden()) {
-      const who = waiting!.dreamId ? `dream ${waiting!.dreamId}` : "Gnosis";
-      webNotify(`${who} needs you`, waiting!.kind === "ask" ? (waiting!.question ?? "a question") : (waiting!.label ?? "approval required"));
+      webNotify("Gnosis needs you", waiting!.kind === "ask" ? (waiting!.question ?? "a question") : (waiting!.label ?? "approval required"));
     }
     pendingRef.current = key;
   }, [state.chatLines]);
@@ -250,7 +236,6 @@ export function App() {
         askId: g.askId,
         options: g.options,
         answered: g.answered,
-        dreamId: g.dreamId,
         autoSaved: g.kind === "assistant" ? savedTurns[`${activeId}:${epochByKey[g.key]}`] : undefined,
       };
     });
@@ -260,19 +245,18 @@ export function App() {
   const answerAsk = (askId: string | undefined, text: string) => { if (askId) send({ type: "ask.answer", id: askId, answer: text }); };
 
   /**
-   * The phone composer's three verbs, each mapped to what already exists:
-   * a normal turn, a dream, or a read-only research sub-agent.
+   * The phone composer's two verbs, each mapped to what already exists:
+   * a normal turn, or a read-only research sub-agent.
    */
   const onNewTask = (text: string, mode: TaskMode) => {
     if (activeId == null) return;
-    if (mode === "dream") send({ type: "command", tabId: activeId, command: `/dream ${text}` });
-    else if (mode === "research") send({ type: "input", tabId: activeId, text: `Research this and reply with a summary — do not edit any files:
+    if (mode === "research") send({ type: "input", tabId: activeId, text: `Research this and reply with a summary — do not edit any files:
 
 ${text}` });
     else send({ type: "input", tabId: activeId, text });
-    // The rail already shows what happened next — a dream prints its id and caps,
-    // a turn starts streaming — so the status of what you just handed over is
-    // visible without moving the user anywhere.
+    // The rail already shows what happened next — the turn starts streaming — so
+    // the status of what you just handed over is visible without moving the user
+    // anywhere.
   };
 
   const activeAgent = activeId != null ? state.agents[activeId] ?? null : null;

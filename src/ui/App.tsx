@@ -50,10 +50,7 @@ import { startServer, type ServerHandle } from "../server.js";
 import { helpText } from "../commands.js";
 import { rankedFiles } from "../filesearch.js";
 import { recentTurns, applyRewind, applySummary, splitForSummary, summaryPrompt, type TurnMark } from "../rewind.js";
-import { DreamManager, formatDream, DREAM_MAX_ITERATIONS, DREAM_MAX_USD } from "../dreams.js";
-import { domDir } from "../config.js";
 import { scanFile, SECURITY_IGNORE_FILE } from "../security.js";
-import { parseIssueRef, currentRepo, fetchIssue, issueBranchName, runIssuePipeline, formatIssueJob, type IssueJob } from "../issue.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -626,8 +623,6 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const handleSubmitRef = useRef<((v: string) => void) | null>(null);
   /** Names background tabs bg-1, bg-2, … independent of the tab numbering. */
   const bgSeqRef = useRef(1);
-  /** Dreams live for the process, not the render. */
-  const dreamsRef = useRef<DreamManager | null>(null);
   /** The last message the user actually sent, so ctrl+b works after the fact. */
   const lastUserTextRef = useRef("");
   /** Timestamp of the last bare Esc, for double-Esc detection. */
@@ -1266,42 +1261,6 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "tools":
         sysLog("tools: " + TOOL_NAMES.join(", "));
         break;
-      // /dream <task> — run a long-horizon task in the background.
-      // /dream stop <id> — end one. /dreams — list them.
-      case "dream": {
-        const dm = ensureDreams();
-        if (parts[1] === "resume") {
-          const id = parts[2];
-          if (!id) { sysLog("usage: /dream resume <id>  (see /dreams)"); break; }
-          const r = dm.resume(id);
-          if (!r.ok) { sysLog(r.reason); break; }
-          sysLog(`✨ dreaming ${r.record.id}: re-running ${id} from the start`);
-          sysLog(`   ${r.record.task.slice(0, 70)}`);
-          break;
-        }
-        if (parts[1] === "stop") {
-          const id = parts[2];
-          if (!id) { sysLog("usage: /dream stop <id>  (see /dreams)"); break; }
-          void dm.stop(id).then((okStop) => sysLog(okStop ? `dream ${id} stopped` : `no running dream "${id}"`));
-          break;
-        }
-        const task = parts.slice(1).join(" ").trim();
-        if (!task) { sysLog('usage: /dream "refactor the auth module"'); break; }
-        // Wait for the log to load: ids are seeded from it.
-        void dm.ready().then(() => {
-          const rec = dm.start(task, controller.active().engine.cwd);
-          sysLog(`✨ dreaming ${rec.id}: ${task.slice(0, 70)}`);
-          sysLog(`   caps: ${DREAM_MAX_ITERATIONS} iterations · $${DREAM_MAX_USD} · 2h — /dreams to check, /dream stop ${rec.id} to end`);
-        });
-        break;
-      }
-      case "dreams": {
-        const all = ensureDreams().list();
-        if (!all.length) { sysLog('no dreams yet — /dream "<task>" starts one'); break; }
-        sysLog("id    status   cost      time  task");
-        for (const d of all) for (const line of formatDream(d).split("\n")) sysLog(line);
-        break;
-      }
       // /security scan <path> — run the secret scan on any file by hand.
       case "security": {
         if (parts[1] !== "scan" || !parts[2]) { sysLog("usage: /security scan <path>"); break; }
@@ -1329,21 +1288,6 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         void engine.forceBlockedCommits().then((done) => {
           sysLog(done.length ? `committed ${done.length} file(s) despite the security scan: ${done.join(", ")}` : "nothing to commit");
         });
-        break;
-      }
-      // /issue <url|#n> — implement a GitHub issue as a dream in its own worktree,
-      // then test it and open a PR. /issue status <n> reports where one is.
-      case "issue": {
-        if (parts[1] === "status") {
-          const n = Number(parts[2]);
-          const jobs = [...issueJobsRef.current.values()].filter((j) => !n || j.ref.number === n);
-          if (!jobs.length) { sysLog(n ? `no issue job for #${n}` : "no issue jobs yet — /issue <url> starts one"); break; }
-          for (const j of jobs) sysLog(formatIssueJob(j));
-          break;
-        }
-        const raw = parts.slice(1).join(" ").trim();
-        if (!raw) { sysLog("usage: /issue <github-issue-url>  |  /issue status <number>"); break; }
-        void startIssue(raw);
         break;
       }
       case "new":
@@ -1678,87 +1622,6 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
    * it would be a privilege escalation), and focus deliberately does NOT move —
    * the whole point is to keep working here.
    */
-  /**
-   * The dream manager, built on first use. Dangerous approvals and ask_user
-   * questions from a dream are routed into the SAME overlays a foreground turn
-   * uses, so answering one is the ordinary interaction rather than a new UI.
-   */
-  const ensureDreams = (): DreamManager => {
-    if (dreamsRef.current) return dreamsRef.current;
-    const dm = new DreamManager(domDir(), {
-      fork: (cwd) => engine.fork(cwd ? { cwd } : undefined),
-      bus: bridgeRef.current?.bus,
-      // The bridge is what lets a browser ANSWER a dream's prompt, not just see
-      // it; the owner tab is the rail it surfaces in.
-      bridge: bridgeRef.current ?? undefined,
-      ownerTabId: () => controller.active().id,
-      notifyEnabled: notifyRef.current,
-      onFinish: (rec) => {
-        const w = dreamWaitersRef.current.get(rec.id);
-        if (!w) return;
-        dreamWaitersRef.current.delete(rec.id);
-        w(rec.summary, rec.status);
-      },
-      requestApproval: (dreamId, preview) =>
-        new Promise((resolve) => {
-          sysLog(`dream ${dreamId} needs approval — answering below`);
-          permResolveRef.current = resolve;
-          permPreviewRef.current = preview;
-          permOwnerRef.current = controller.active().id;
-          setOverlay({ type: "permission", preview });
-        }),
-      askUser: (dreamId, question, options) =>
-        new Promise((resolve) => {
-          sysLog(`dream ${dreamId} asks: ${question}`);
-          askResolveRef.current = resolve;
-          setOverlay({ type: "ask", question, options });
-        }),
-    });
-    dreamsRef.current = dm;
-    void dm.init().then((records) => {
-      const orphans = records.filter((r) => /interrupted/.test(r.summary));
-      if (orphans.length) {
-        const ids = orphans.map((o) => o.id).join(", ");
-        sysLog(`${orphans.length} dream(s) interrupted by a restart: ${ids} — /dream resume <id> re-runs one from the start`);
-      }
-    });
-    return dm;
-  };
-
-  /** Live issue jobs, keyed by issue number. */
-  const issueJobsRef = useRef(new Map<number, IssueJob>());
-  /** Dream-completion listeners the issue pipeline registers. */
-  const dreamWaitersRef = useRef(new Map<string, (summary: string, status: string) => void>());
-
-  const startIssue = async (raw: string) => {
-    const fallback = (await currentRepo(engine.cwd)) ?? undefined;
-    const ref = parseIssueRef(raw, fallback);
-    if (!ref) { sysLog(`could not read an issue reference from "${raw}"`); return; }
-    sysLog(`#${ref.number}: fetching from ${ref.owner}/${ref.repo}…`);
-    const got = await fetchIssue(ref, engine.cwd);
-    if (!got.ok) { sysLog(`#${ref.number}: ${got.error}`); return; }
-
-    // Isolated worktree: a dream editing the tree you are also using would
-    // collide with your own turns.
-    const wt = await createWorktree(engine.cwd, issueBranchName(ref.number), "gnosis");
-    if (!wt.ok) { sysLog(`#${ref.number}: ${wt.error}`); return; }
-    sysLog(`#${ref.number}: worktree ${wt.info.branch} at ${wt.info.path}`);
-
-    const job: IssueJob = {
-      ref, title: got.issue.title, dreamId: "", branch: wt.info.branch,
-      worktree: wt.info.path, stage: "implementing",
-    };
-    issueJobsRef.current.set(ref.number, job);
-    const dm = ensureDreams();
-    await dm.ready();
-    await runIssuePipeline(got.issue, wt.info.path, wt.info.branch, {
-      startDream: (task, cwd) => dm.start(task, cwd).id,
-      onDreamFinish: (id, cb) => dreamWaitersRef.current.set(id, cb),
-      label: (id, label) => dm.setLabel(id, label),
-      say: sysLog,
-    }, job);
-  };
-
   const launchBackground = (text: string) => {
     const from = controller.active();
     const tab = controller.create(`bg-${bgSeqRef.current++}`, text.slice(0, 60), from.engine.cwd);

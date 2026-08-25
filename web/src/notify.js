@@ -1,4 +1,4 @@
-// Browser notifications for phone use. The point of "Dream it" is that you lock
+// Browser notifications for phone use. The point of handing work over is that you lock
 // the phone and walk away, which only works if something tells you when the work
 // lands or stalls — the desktop notifier fires on the machine running Gnosis, not
 // in your pocket.
