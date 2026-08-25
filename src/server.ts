@@ -17,10 +17,14 @@ import http from "node:http";
 import net from "node:net";
 import type { Duplex } from "node:stream";
 import crypto from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, promises as fsp } from "node:fs";
 import path from "node:path";
+
+/** Ceiling for /api/file/raw. Large enough for charts and PDFs, small enough that
+ *  a stray binary can't pin the process buffering it. */
+const MAX_RAW_BYTES = 12 * 1024 * 1024;
 import { WEB_ASSETS_DIR } from "./install.js";
-import { buildTree, readFileInRoot } from "./filetree.js";
+import { buildTree, readFileInRoot, resolveInRoot, RAW_MIME } from "./filetree.js";
 import { buildIgnorer } from "./tools/ignore.js";
 import { buildVaultTree, vaultRoot } from "./vault.js";
 import { jobs, bridgeJobsToBus } from "./jobs.js";
@@ -256,6 +260,39 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
     sendJson(res, 200, preview);
     return true;
   }
+  // Raw file bytes for the chat rail's rich output (inline images, PDF cards).
+  // Same token gate and same traversal guard as the file browser; the only
+  // difference is that this one answers with bytes instead of a utf8 preview.
+  if (url.pathname === "/api/file/raw") {
+    const tabId = Number(url.searchParams.get("tabId"));
+    const rel = url.searchParams.get("path") ?? "";
+    const cwd = cwdForTab(bridge, tabId);
+    if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
+    const full = resolveInRoot(cwd, rel);
+    if (!full) { sendJson(res, 403, { error: "outside the session root" }); return true; }
+    try {
+      const stat = await fsp.stat(full);
+      if (!stat.isFile()) { sendJson(res, 404, { error: "not a file" }); return true; }
+      if (stat.size > MAX_RAW_BYTES) { sendJson(res, 413, { error: "file too large to preview" }); return true; }
+      const ext = path.extname(full).toLowerCase();
+      const mime = RAW_MIME[ext] ?? "application/octet-stream";
+      const body = await fsp.readFile(full);
+      res.writeHead(200, {
+        "content-type": mime,
+        "content-length": String(body.length),
+        // An unrecognised type is a download, never something the browser sniffs.
+        ...(mime === "application/octet-stream" ? { "content-disposition": `attachment; filename="${path.basename(full).replace(/"/g, "")}"` } : {}),
+        // The bytes are the user's own files behind a token — never let a shared
+        // cache hold them.
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      });
+      res.end(body);
+    } catch {
+      sendJson(res, 404, { error: "not found" });
+    }
+    return true;
+  }
   // Background jobs: the whole live list (pid/port/status/runtime source), and one
   // job's captured output for the "view output" modal. Kill is a WS action, not a
   // GET, so it can't be triggered by a stray navigation.
@@ -358,6 +395,12 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
       break;
     case "permission":
       bridge.answerPermission(String(msg.id ?? ""), String(msg.answer ?? "no") as PermissionAnswer);
+      break;
+    case "agent.background":
+      bridge.onBackgroundAgent?.(Number(msg.tabId), String(msg.text ?? ""));
+      break;
+    case "ask.answer":
+      bridge.answerAsk(String(msg.id ?? ""), String(msg.answer ?? ""));
       break;
     case "overlay.select":
       bridge.answerOverlay(String(msg.id ?? ""), String(msg.value ?? ""));

@@ -9,10 +9,13 @@ import { TaskPlanView } from "./TaskPlanView";
 import type { TaskPlan } from "./taskplan";
 import { ThreeFloor } from "./ThreeFloor";
 import { FloorMinimap } from "./FloorMinimap";
+import { AskCard } from "./AskCard";
+import { FileOutputView } from "./FileOutput";
+import type { FileOutput } from "./filekind";
 import { messageStyle } from "./chatgroups.js";
 import { centerScrollLeft } from "./sessions.js";
 
-export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; autoSaved?: string; }
+export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; fileOutput?: FileOutput | null; autoSaved?: string; askId?: string; options?: string[]; answered?: string; verdict?: "pass" | "fail" | "unknown"; confidence?: number; }
 export interface SelDetail {
   id: string; name: string; zone: string; color: string; stateColor: string; state: string;
   action: string; output: string[]; thinking: string[]; awaiting: boolean;
@@ -47,6 +50,16 @@ export interface SessionsProps {
   onDraft: (v: string) => void;
   onSend: () => void;
   onApproveMsg: (permId?: string) => void;
+  /** ask_user: reply to the agent's question from the chat rail. */
+  onAnswerAsk?: (askId: string | undefined, text: string) => void;
+  /** Feed a failed outcome's critique back as the next turn. */
+  onFixOutcome?: () => void;
+  /** Re-run one of your own messages as a background agent in a new tab. */
+  onRunBackground?: (text: string) => void;
+  /** Token-gated URL builder for rich file output (raw bytes vs text preview). */
+  fileUrl?: (path: string, raw: boolean) => string;
+  /** Save a written file into the Obsidian vault (images only, today). */
+  onSaveFile?: (path: string) => void;
   onDenyMsg: (permId?: string) => void;
   /** Files staged for the next message (name + mime only; bytes live in App). */
   attachments: { name: string; mime: string }[];
@@ -792,7 +805,18 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
       <div style={{ position: "relative", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div ref={scrollRef} onScroll={onScroll} style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
           {p.chat.map((m) => {
-            if (m.kind === "tool" && m.tool) return <ToolLine key={m.key} tool={m.tool} />;
+            if (m.kind === "tool" && m.tool) {
+              return (
+                <div key={m.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <ToolLine tool={m.tool} />
+                  {m.fileOutput && p.fileUrl && (
+                    <div style={{ paddingLeft: 10 }}>
+                      <FileOutputView out={m.fileOutput} fileUrl={p.fileUrl} onSaveVault={p.onSaveFile} />
+                    </div>
+                  )}
+                </div>
+              );
+            }
             const resolvedColor = m.resolved ? (m.resolved === "no" ? "#F87171" : "#4ADE80") : null;
             // One visual treatment per message type so a long scroll is scannable
             // without reading a word — see messageStyle in chatgroups.js.
@@ -819,6 +843,28 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                     ? <CodeBlock key={i} lang={s.lang} text={s.text} />
                     : <div key={i} style={{ textWrap: "pretty", whiteSpace: "pre-wrap", color: resolvedColor ?? undefined }}>{s.text}</div>)}
                 </div>
+                {m.kind === "user" && p.onRunBackground && (
+                  <div className="msg-actions" style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button type="button" title="run this message again as a background agent"
+                      onClick={() => p.onRunBackground!(messageToText(m))}
+                      style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#818CF8", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
+                      ⇥ RUN IN BACKGROUND
+                    </button>
+                  </div>
+                )}
+                {m.kind === "outcome" && m.verdict === "fail" && p.onFixOutcome && (
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <button type="button" onClick={() => p.onFixOutcome!()}
+                      style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#FBBF24", border: "1px solid #FBBF24", padding: "3px 10px", cursor: "pointer" }}>
+                      FIX IT
+                    </button>
+                  </div>
+                )}
+                {m.kind === "ask" && (
+                  m.answered
+                    ? <div style={{ fontSize: 10, letterSpacing: 1, color: "#4ADE80" }}>↳ {m.answered}</div>
+                    : <AskCard options={m.options ?? []} onAnswer={(t) => p.onAnswerAsk?.(m.askId, t)} />
+                )}
                 {m.isApproval && (
                   <div style={{ display: "flex", gap: 6 }}>
                     <button type="button" onClick={() => p.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>

@@ -38,6 +38,9 @@ export type DomEvent =
   | { type: "agent.busy"; tabId: number; busy: boolean }
   | { type: "turn.start"; tabId: number }
   | { type: "turn.end"; tabId: number; cost: number; tokens: number; cachedTokens: number }
+  // The automatic outcome evaluation for a file-touching turn. `line` is the dim
+  // one-liner already shown in the rail; the rest lets a client offer "fix it".
+  | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }
   | { type: "line"; tabId: number; item: unknown }
   | { type: "tool.start"; tabId: number; tool: string; args: unknown }
   | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }
@@ -57,6 +60,9 @@ export type DomEvent =
   // is the web file whose edit triggered the auto-shot ("" for the initial /design).
   | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
   | { type: "permission.request"; tabId: number; id: string; preview: unknown; options: string[] }
+  // ask_user: the agent paused mid-turn for a decision only the user can make.
+  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[] }
+  | { type: "ask.resolved"; tabId: number; id: string; answer: string }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
   | { type: "overlay.resolved"; id: string }
@@ -65,6 +71,9 @@ export type DomEvent =
   | { type: "message.sent"; from: string; to: string; hops: number }
   | { type: "goal.state"; tabId: number; goal: { text: string; active: boolean; roundsLeft: number; maxRounds: number; reviewModel?: string } | null }
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
+  // A dream started, changed state, or ended — the floor shows a dreaming agent
+  // in its own visual state and the panel lists status/cost/summary.
+  | { type: "dream.state"; id: string; status: string; task: string; usd: number; summary: string }
   | { type: "vault.changed" }
   | { type: "connections.changed" }
   // A webhook was captured (POST /webhook/:label) — clients re-read /api/webhooks.
@@ -114,6 +123,8 @@ export interface AppBridge {
   onInput?(tabId: number, text: string, attachments?: Attachment[]): void;
   onCommand?(tabId: number, command: string): void;
   onCreateAgent?(name?: string, purpose?: string): void;
+  /** Run `text` as a background agent in a new tab, without moving focus. */
+  onBackgroundAgent?(fromTabId: number, text: string): void;
   onCloseAgent?(tabId: number): void;
   /** @-autocomplete: ranked file paths under the tab's cwd matching `query`. */
   onFiles?(tabId: number, query: string): Promise<string[]>;
@@ -131,6 +142,12 @@ export interface AppBridge {
   clearPermission(id: string): void;
   answerPermission(id: string, answer: PermissionAnswer): void;
 
+  // ask_user coordination — identical first-to-answer contract to permissions,
+  // but the payload is free text (or a chosen option label) rather than yes/no.
+  registerAsk(id: string, resolve: (answer: string) => void): void;
+  clearAsk(id: string): void;
+  answerAsk(id: string, answer: string): void;
+
   // Overlay coordination (selection UI: /model, /resume, @-file, Ctrl+R history).
   // Same first-to-answer model as permissions, but the pickers live in the UI, so
   // the UI registers the resolver here; a web client answers via answerOverlay. A
@@ -143,6 +160,7 @@ export interface AppBridge {
 /** Build a bridge with the permission registry wired; the UI fills the rest. */
 export function createBridge(bus: EventBus): AppBridge {
   const pending = new Map<string, (a: PermissionAnswer) => void>();
+  const asks = new Map<string, (answer: string) => void>();
   const overlays = new Map<string, (value: string | null) => void>();
   return {
     bus,
@@ -156,6 +174,16 @@ export function createBridge(bus: EventBus): AppBridge {
     },
     answerPermission: (id, answer) => {
       const resolve = pending.get(id);
+      if (resolve) resolve(answer);
+    },
+    registerAsk: (id, resolve) => {
+      asks.set(id, resolve);
+    },
+    clearAsk: (id) => {
+      asks.delete(id);
+    },
+    answerAsk: (id, answer) => {
+      const resolve = asks.get(id);
       if (resolve) resolve(answer);
     },
     registerOverlay: (id, resolve) => {

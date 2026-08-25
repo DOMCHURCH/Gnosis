@@ -8,7 +8,7 @@ const BASE = "https://openrouter.ai/api/v1";
 const GROQ_BASE = "https://api.groq.com/openai/v1";
 export const GROQ_PREFIX = "groq/";
 const ATTRIBUTION = {
-  "HTTP-Referer": "https://github.com/dom-agent/dom",
+  "HTTP-Referer": "https://github.com/DOMCHURCH/Gnosis",
   "X-Title": "Gnosis",
 };
 

@@ -13,7 +13,16 @@ const KIND_HINT: Record<string, string> = {
   session: "resume a prior session",
   file: "insert a file path",
   history: "reverse-search your prompts",
+  rewind: "pick a turn to rewind to",
+  "rewind-action": "what should happen to this turn?",
 };
+
+/** Rewind renders as a TIMELINE rather than a filter list: the turns are a
+ *  sequence you scrub through, and a connected spine reads that way at a glance
+ *  where a flat list of rows does not. */
+function isTimeline(kind: string): boolean {
+  return kind === "rewind";
+}
 
 export function OverlayModal(props: { overlay: OverlayState; onSelect: (value: string) => void; onCancel: () => void }) {
   const { overlay, onSelect, onCancel } = props;
@@ -83,7 +92,15 @@ export function OverlayModal(props: { overlay: OverlayState; onSelect: (value: s
                 onMouseDown={(e) => { e.preventDefault(); pick(it.value); }}
                 style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", padding: "6px 10px", borderRadius: 6, cursor: "pointer", background: i === active ? "#1B2540" : "transparent", color: i === active ? "#E5E5EE" : "#B4B4C2" }}
               >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
+                {isTimeline(overlay.kind) && (
+                  // The spine: a dot per turn joined by a rule, so the list reads
+                  // as a sequence you are moving back along.
+                  <span style={{ position: "relative", flexShrink: 0, width: 14, alignSelf: "stretch", display: "flex", justifyContent: "center" }}>
+                    <span style={{ position: "absolute", top: 0, bottom: 0, width: 1, background: "#2A2A38" }} />
+                    <span style={{ position: "relative", marginTop: 5, width: 7, height: 7, borderRadius: 7, background: i === active ? "#22D3EE" : "#3A3A4A" }} />
+                  </span>
+                )}
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
                 {it.value === overlay.selected ? <span style={{ color: "#22D3EE", fontSize: 11, flexShrink: 0 }}>current</span> : null}
               </div>
             ))

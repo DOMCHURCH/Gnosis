@@ -18,7 +18,7 @@
 **Run any model. Switch mid-session. History survives.**
 **12x cheaper via prompt caching. Verified live.**
 
-[![CI](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/dom/actions/workflows/ci.yml)
+[![CI](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@dominquechurch/gnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
@@ -135,8 +135,8 @@ See [SECURITY.md](SECURITY.md) for the permission model and how the `gnosis serv
 ## Development
 
 ```sh
-git clone https://github.com/DOMCHURCH/dom.git
-cd dom
+git clone https://github.com/DOMCHURCH/Gnosis.git
+cd Gnosis
 npm install
 npm run build
 npm link

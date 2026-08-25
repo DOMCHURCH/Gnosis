@@ -85,6 +85,10 @@ export type DomEvent =
   | { type: "design.shot"; tabId: number; path: string; before: string | null; after: string }
   | { type: "permission.request"; tabId: number; id: string; preview: Preview; options: string[] }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
+  | { type: "dream.state"; id: string; status: string; task: string; usd: number; summary: string }
+  | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }
+  | { type: "ask.request"; tabId: number; id: string; question: string; options: string[] }
+  | { type: "ask.resolved"; tabId: number; id: string; answer: string }
   | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
   | { type: "overlay.resolved"; id: string }
   | { type: "job.start"; tabId: number | null; jobId: string; command: string }
@@ -118,9 +122,11 @@ export type ClientMessage =
   | { type: "input"; tabId: number; text: string; attachments?: Attachment[] }
   | { type: "command"; tabId: number; command: string }
   | { type: "permission"; id: string; answer: string }
+  | { type: "ask.answer"; id: string; answer: string }
   | { type: "overlay.select"; id: string; value: string }
   | { type: "overlay.cancel"; id: string }
   | { type: "agent.create"; name?: string; purpose?: string }
+  | { type: "agent.background"; tabId: number; text: string }
   | { type: "agent.close"; tabId: number }
   | { type: "job.kill"; jobId: string }
   | { type: "goal.set"; tabId: number; text: string; maxRounds?: number; reviewModel?: string; active?: boolean }

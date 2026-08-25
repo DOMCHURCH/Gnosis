@@ -36,9 +36,15 @@ export interface Config {
   /** Enable the auto lint/test loop: after a turn that edited files, run
    * lint/test; feed any failure back so the model retries (cap 3). Default off. */
   autoFix?: boolean;
-  /** Auto-run the verifier subagent on a turn that touched 2+ files. Default off;
-   * /verify always triggers it manually. */
+  /** Legacy name for autoEval — still honoured so existing configs keep working. */
   autoVerify?: boolean;
+  /** Automatic outcome evaluation: after ANY turn that touched files, a read-only
+   * verifier judges the diff against the request and reports pass/fail with a
+   * confidence. Default ON; /eval always triggers it manually. */
+  autoEval?: boolean;
+  /** When an outcome evaluation FAILS, feed its critique back as the next turn
+   * automatically instead of waiting to be asked. Default off. */
+  autoFixOutcome?: boolean;
   /** Automatic session memory: after each file-touching turn, distill what happened
    * into the learned-context bank (~/.dom/memory). Default ON; set false to disable. */
   autoMemory?: boolean;

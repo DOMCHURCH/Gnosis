@@ -138,3 +138,9 @@ button:hover { filter: brightness(1.12); }
 .zone-label .zl-count { font: 9px ui-monospace, monospace; letter-spacing: 1px; color: #8b8b9b; }
 .agent-badge { font: 11px ui-monospace, monospace; color: #c9d1d9; background: #0d0d12e6; border: 1px solid #2a2a38; padding: 1px 6px; white-space: nowrap; pointer-events: none; }
 .agent-badge.far { display: none; }
+
+/* Per-message actions (run-in-background) stay hidden until the message is
+   hovered, so the rail reads as conversation rather than a wall of buttons.
+   Always visible to keyboard users via :focus-within. */
+.msg-actions { opacity: 0; transition: opacity 120ms ease; }
+*:hover > .msg-actions, .msg-actions:focus-within { opacity: 1; }

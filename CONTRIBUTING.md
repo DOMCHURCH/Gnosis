@@ -6,8 +6,8 @@ the whole thing is TypeScript, and everything ships from this one repo.
 ## Running it locally
 
 ```sh
-git clone https://github.com/DOMCHURCH/dom.git
-cd dom
+git clone https://github.com/DOMCHURCH/Gnosis.git
+cd Gnosis
 npm install
 npm run build      # tsc → dist/, then vite → dist/web/
 npm link           # puts `dom` on your PATH, pointing at this checkout
@@ -16,7 +16,7 @@ dom
 
 `npm link` symlinks the global `dom` command to your working copy, so a rebuild
 is enough to pick up changes — no reinstall. Undo it later with
-`npm unlink -g dom-agent`.
+`npm unlink -g @dominquechurch/gnosis`.
 
 You need an OpenRouter key in `~/.dom/.env` before dom will do anything:
 
@@ -115,7 +115,7 @@ At most 40 skills are advertised, to keep the prompt bounded.
 ## Reporting bugs and security issues
 
 Bugs and feature requests go through the
-[issue templates](https://github.com/DOMCHURCH/dom/issues/new/choose).
+[issue templates](https://github.com/DOMCHURCH/Gnosis/issues/new/choose).
 
 Security vulnerabilities do **not** — see [SECURITY.md](SECURITY.md) for the
 private reporting channel.

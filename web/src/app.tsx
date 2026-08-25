@@ -8,7 +8,7 @@ import type { KanbanColumn } from "./kanban";
 import { QrPopover, type QrCode } from "./QrPopover";
 import { WebhooksBody } from "./WebhooksPanel";
 import { classifyNote, noteSlug } from "./notesort.js";
-import { tokenizedUrl, token } from "./api";
+import { tokenizedUrl, token, fileUrlFor } from "./api";
 import { OverlayModal } from "./OverlayModal";
 import { LeftPanel } from "./LeftPanel";
 import { VaultSaveModal } from "./VaultSaveModal";
@@ -214,12 +214,19 @@ export function App() {
         permId: g.permId,
         resolved: g.resolved,
         tool: g.tool,
+        verdict: g.verdict,
+        confidence: g.confidence,
+        fileOutput: g.fileOutput,
+        askId: g.askId,
+        options: g.options,
+        answered: g.answered,
         autoSaved: g.kind === "assistant" ? savedTurns[`${activeId}:${epochByKey[g.key]}`] : undefined,
       };
     });
 
   const answer = (a: string) => { if (state.permission) send({ type: "permission", id: state.permission.id, answer: a }); if (debugRef.current.approvalCb) debugRef.current.approvalCb({ approved: a !== "no" }); };
   const answerId = (permId: string | undefined, a: string) => { if (permId) send({ type: "permission", id: permId, answer: a }); };
+  const answerAsk = (askId: string | undefined, text: string) => { if (askId) send({ type: "ask.answer", id: askId, answer: text }); };
 
   const activeAgent = activeId != null ? state.agents[activeId] ?? null : null;
   const canImage = !!activeAgent?.imageInput;
@@ -356,6 +363,10 @@ export function App() {
         onRemoveAttachment={removeAttachment}
         canImage={canImage}
         canDoc={canDoc}
+        onAnswerAsk={answerAsk}
+        onRunBackground={(text) => activeId != null && send({ type: "agent.background", tabId: activeId, text })}
+        onFixOutcome={() => activeId != null && send({ type: "command", tabId: activeId, command: "/fix" })}
+        fileUrl={(path, raw) => fileUrlFor(activeId ?? 0, path, raw)}
         onApproveMsg={(permId) => answerId(permId, "yes")}
         onDenyMsg={(permId) => answerId(permId, "no")}
         goalBar={

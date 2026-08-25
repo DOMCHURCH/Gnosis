@@ -16,6 +16,7 @@ import {
   taskSchema,
   todoSchema,
   viewImageSchema,
+  askUserSchema,
   webSearchSchema,
   toJsonSchema,
   writeSchema,
@@ -34,6 +35,7 @@ import { runViewImage } from "./viewimage.js";
 import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
 import { runMemory } from "./memory.js";
+import { runAskUser } from "./askuser.js";
 
 /** Progressive-write channel for the edit tool. Set by the engine (after the
  * permission gate passes) only for streamable edits; absent → atomic write. The
@@ -98,6 +100,16 @@ export interface OracleResult {
 /** Runs a single-turn, tool-less completion on the stronger oracle model. */
 export type OracleRunner = (question: string, signal?: AbortSignal) => Promise<OracleResult>;
 
+/** How an ask_user question came back: answered, timed out, or aborted (Ctrl+C). */
+export interface AskUserAnswer {
+  text: string;
+  timedOut?: boolean;
+  aborted?: boolean;
+}
+/** Puts a question to whoever is driving (TUI overlay or browser card; first to
+ * answer wins) and resolves with their reply. */
+export type AskUserRunner = (question: string, options: string[], signal?: AbortSignal) => Promise<AskUserAnswer>;
+
 /** Per-turn context passed to tool.run. Carries the working directory paths are
  * resolved against (each engine owns its own — tabs and sub-agents pass theirs);
  * the multi-tab tools use `tab`; the `task` tool uses `subagent`; the `todo` tool
@@ -126,6 +138,10 @@ export interface ToolContext {
   /** Set (post-approval) when a large edit should stream its write line-by-line.
    * Absent → the edit tool writes atomically (small edits, headless, sub-agents). */
   editStream?: EditStream;
+  /** Put one question to the user and wait for the answer (`ask_user`). Absent
+   * where there is nobody to ask — headless runs and sub-agents — and the tool
+   * refuses rather than blocking. */
+  askUser?: AskUserRunner;
 }
 
 export interface ToolDef {
@@ -174,6 +190,19 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: bashSchema,
     mutating: true,
     run: runBash,
+  },
+  ask_user: {
+    name: "ask_user",
+    description:
+      "Ask the user one question and wait for their answer. Use this ONLY when the task admits two or more " +
+      "equally valid approaches AND choosing wrong would mean significant rework. Never use it for anything you " +
+      "can infer from the code, the request, or context. At most one ask per turn — otherwise state your " +
+      "assumption and keep going.",
+    schema: askUserSchema,
+    // Not "mutating": it changes nothing on disk, so it skips the permission gate.
+    // Its own prompt IS the confirmation.
+    mutating: false,
+    run: runAskUser,
   },
   glob: {
     name: "glob",

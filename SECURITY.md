@@ -23,7 +23,7 @@ Please include:
 Expect an acknowledgement within 72 hours. Please give a fix a reasonable window
 before disclosing publicly.
 
-[advisory]: https://github.com/DOMCHURCH/dom/security/advisories/new
+[advisory]: https://github.com/DOMCHURCH/Gnosis/security/advisories/new
 
 ## What dom can reach
 

@@ -1,3 +1,4 @@
+import { fileOutputFor } from "./filekind.js";
 // Group a tab's raw chat lines into message blocks — PURE logic, shared by the
 // browser renderer and the Node verify run. Consecutive lines from the same
 // speaker within the same turn (epoch) collapse into ONE block instead of one
@@ -47,9 +48,26 @@ export function groupChat(lines) {
       cur = null;
       continue;
     }
+    // The post-turn outcome verdict: one dim line, with a fix-it affordance when
+    // it failed.
+    if (ln.kind === "outcome") {
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "outcome", epoch: ln.epoch, segments: [{ type: "text", text: ln.text || "" }], code: false, isApproval: false, verdict: ln.verdict, confidence: ln.confidence });
+      cur = null;
+      continue;
+    }
+    // An ask_user question is its own sealed block: the question, its option
+    // buttons while unanswered, and the reply once it has one.
+    if (ln.kind === "ask") {
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "ask", epoch: ln.epoch, segments: [{ type: "text", text: ln.question || "" }], code: false, isApproval: false, askId: ln.askId, options: ln.options || [], answered: ln.answered });
+      cur = null;
+      continue;
+    }
     // Tool calls are their own sealed block (compact line, expandable to detail).
     if (ln.kind === "tool") {
-      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "tool", epoch: ln.epoch, segments: [], code: false, isApproval: false, tool: { tool: ln.tool, primary: ln.primary, secondary: ln.secondary, ok: ln.ok, summary: ln.summary, detail: ln.detail } });
+      // A successful write/edit of a recognised type also carries a fileOutput
+      // descriptor, which the rail renders richly under the tool line.
+      const fileOutput = ln.ok ? fileOutputFor(ln.tool, ln.primary, `${ln.summary || ""} ${ln.detail || ""}`) : null;
+      groups.push({ key: ln.key, from: ln.from, time: ln.time, kind: "tool", epoch: ln.epoch, segments: [], code: false, isApproval: false, fileOutput, tool: { tool: ln.tool, primary: ln.primary, secondary: ln.secondary, ok: ln.ok, summary: ln.summary, detail: ln.detail } });
       cur = null;
       continue;
     }
@@ -71,7 +89,18 @@ export function groupChat(lines) {
     .map((g) => ({ ...g, segments: g.segments.filter((s) => !(s.type === "code" && s.text === "")) }))
     // Keep tool + approval blocks (no text segments); drop empty text/code blocks.
     .filter((g) => g.kind === "tool" || g.isApproval || g.segments.some((s) => s.type === "code" || s.text.trim() !== ""))
-    .map((g) => ({ key: g.key, from: g.from, time: g.time, kind: g.kind, isApproval: g.isApproval, permId: g.permId, resolved: g.resolved, tool: g.tool, segments: g.segments.map((s) => ({ type: s.type, lang: s.lang, text: s.text })) }));
+    // NOTE: this projection is an explicit whitelist — a field added to a group
+    // above but forgotten here is silently dropped before it ever reaches the
+    // rail. Every per-kind payload must be listed.
+    .map((g) => ({
+      key: g.key, from: g.from, time: g.time, kind: g.kind,
+      isApproval: g.isApproval, permId: g.permId, resolved: g.resolved,
+      tool: g.tool,
+      fileOutput: g.fileOutput,
+      askId: g.askId, options: g.options, answered: g.answered,
+      verdict: g.verdict, confidence: g.confidence,
+      segments: g.segments.map((s) => ({ type: s.type, lang: s.lang, text: s.text })),
+    }));
 }
 
 // --- chat rail visual hierarchy ---------------------------------------------
@@ -86,6 +115,7 @@ export const CHAT_HIERARCHY = {
   systemDim: "#6B6B7B",
   userEdge: "#22D3EE33",
   approvalTint: "#FBBF2422",
+  askEdge: "#E879F9",
 };
 
 /**
@@ -103,6 +133,16 @@ export const CHAT_HIERARCHY = {
 export function messageStyle(kind, isApproval) {
   if (isApproval) {
     return { variant: "approval", bg: "#101017", borderLeft: "", borderRight: "", boxed: true, fontSize: 1, color: "", centered: false, wrapTint: CHAT_HIERARCHY.approvalTint, showMeta: true };
+  }
+  // A question is the one thing in the rail that blocks progress, so it gets the
+  // strongest treatment after an approval: boxed, tinted, in the ask accent.
+  // The outcome verdict reads as machinery, not conversation: dim, small, centred,
+  // green on pass and red on fail.
+  if (kind === "outcome") {
+    return { variant: "outcome", bg: "transparent", borderLeft: "", borderRight: "", boxed: false, fontSize: 0.85, color: CHAT_HIERARCHY.systemDim, centered: true, wrapTint: "", showMeta: false };
+  }
+  if (kind === "ask") {
+    return { variant: "ask", bg: "#101017", borderLeft: `2px solid ${CHAT_HIERARCHY.askEdge}`, borderRight: "", boxed: true, fontSize: 1, color: "", centered: false, wrapTint: "", showMeta: true };
   }
   if (kind === "tool") {
     return { variant: "tool", bg: CHAT_HIERARCHY.toolBg, borderLeft: `2px solid ${CHAT_HIERARCHY.toolRule}`, borderRight: "", boxed: false, fontSize: 0.9, color: "", centered: false, wrapTint: "", showMeta: false };

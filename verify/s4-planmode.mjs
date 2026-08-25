@@ -43,14 +43,17 @@ async function turn(name, args) {
   return results[0];
 }
 
-// --- plan mode advertises exactly the 4 read-only tools ------------------------
+// --- plan mode advertises exactly the 5 non-mutating tools ---------------------
+// read/glob/grep/http, plus ask_user: planning is when an ambiguous requirement
+// most deserves a question, and ask_user writes nothing.
 {
   const names = engine.availableToolNames();
-  ok("plan mode exposes exactly 4 tools", names.length === 4);
+  ok("plan mode exposes exactly 5 tools", names.length === 5);
   ok("...they are read/glob/grep/http (read-only)", ["read", "glob", "grep", "http"].every((n) => names.includes(n)));
+  ok("...plus ask_user, which mutates nothing", names.includes("ask_user"));
   ok("...write/edit/bash are absent from the tool list", !names.includes("write") && !names.includes("edit") && !names.includes("bash"));
   const defs = toolDefinitions(engine.availableToolNames()).map((d) => d.function.name);
-  ok("the API tool schema list also has only those 4", defs.length === 4 && !defs.includes("write"));
+  ok("the API tool schema list also has only those 5", defs.length === 5 && !defs.includes("write"));
   ok("the plan-mode directive is appended to the system prompt", /PLAN MODE/.test(engine.currentSystemPrompt()));
 }
 

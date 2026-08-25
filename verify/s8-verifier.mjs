@@ -75,7 +75,9 @@ await engine.run("improve both files", { onLine() {}, onPending() {}, onAssistan
   ok("a FAIL first line yields a fail verdict with specifics", v && v.verdict === "fail" && /incorrectly/.test(v.text));
 }
 
-// --- autoVerify runs automatically on a 2+ file turn ------------------------
+// --- the outcome check runs automatically on a file-touching turn -----------
+// `autoVerify` is the legacy switch; it must keep working after the rename to
+// `autoEval`, because existing configs on disk still say autoVerify.
 {
   await fs.writeFile(path.join(fake, ".dom", "config.json"), JSON.stringify({ autoVerify: true }));
   verdictText = "PASS all good.";
@@ -84,7 +86,8 @@ await engine.run("improve both files", { onLine() {}, onPending() {}, onAssistan
   const eng2 = new Engine({ apiKey: "test", cwd: repo, systemPrompt: "gen", models: [model], session: createSession(repo, "m", "yolo"), skills: [], autoCommit: false });
   const sys = [];
   await eng2.run("improve both again", { onLine() {}, onPending() {}, onAssistant() {}, onToolStart() {}, onToolResult() {}, onSystem(t) { sys.push(t); }, async requestPermission() { return "yes"; } });
-  ok("autoVerify runs the verifier on a 2+ file turn and reports the verdict", sys.some((t) => /verifier/.test(t) || /verifying the change/.test(t)));
+  ok("the legacy autoVerify config still triggers the check", sys.some((t) => /evaluating the outcome/.test(t)));
+  ok("...and the verdict is reported inline", sys.some((t) => /outcome:/.test(t)));
 }
 
 await fs.rm(repo, { recursive: true, force: true });

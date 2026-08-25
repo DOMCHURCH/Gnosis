@@ -152,7 +152,7 @@ async function main() {
     const { serveBlock } = await import("./serveprint.js");
     // LOCAL and LAN are both always printed (LAN needs no flag); the LAN line is
     // omitted only when the machine genuinely has no non-loopback address.
-    const links = [{ label: "LOCAL ", url: server.url }];
+    const links: { label: string; url: string; scannable?: boolean }[] = [{ label: "LOCAL ", url: server.url, scannable: false }];
     if (server.lanUrl) links.push({ label: "LAN   ", url: `${server.lanUrl}/?token=${server.token}` });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
     const scope = server.lanUrl ? "LAN + loopback" : "loopback only (no LAN address)";

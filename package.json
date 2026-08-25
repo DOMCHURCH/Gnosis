@@ -14,13 +14,13 @@
     "typescript",
     "windows"
   ],
-  "homepage": "https://github.com/DOMCHURCH/dom#readme",
+  "homepage": "https://github.com/DOMCHURCH/Gnosis#readme",
   "bugs": {
-    "url": "https://github.com/DOMCHURCH/dom/issues"
+    "url": "https://github.com/DOMCHURCH/Gnosis/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DOMCHURCH/dom"
+    "url": "https://github.com/DOMCHURCH/Gnosis"
   },
   "license": "MIT",
   "type": "module",

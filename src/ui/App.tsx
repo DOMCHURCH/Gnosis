@@ -9,17 +9,19 @@ import { SPINNER_FRAMES, ASCII_SPINNER, pickWord, formatElapsed } from "./thinki
 import { cycleApprovalMode } from "./modes.js";
 import { InputBar } from "./InputBar.js";
 import { Permission } from "./Permission.js";
+import { AskUser } from "./AskUser.js";
 import { Picker, type PickItem } from "./Picker.js";
 import { C } from "./theme.js";
 import { callParts, callLine, resultLines, resultBody, toolDetail } from "./toolrender.js";
 import { AllTabs } from "./AllTabsView.js";
 import { layoutAllTabs, gridColumns } from "./alltabs.js";
 import type { Caps } from "./terminal.js";
-import { Engine, type Callbacks } from "../engine.js";
+import { Engine, outcomeLine, outcomeFixPrompt, type Callbacks } from "../engine.js";
 import type { Msg } from "../messages.js";
 import { contextBreakdown, partitionAttachments } from "../messages.js";
 import { TabsController, type Tab } from "../tabs.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
+import type { AskUserAnswer } from "../tools/index.js";
 import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
 import { loadImage, isImagePath } from "../tools/viewimage.js";
@@ -47,6 +49,9 @@ import { EventBus, createBridge, type AppBridge } from "../events.js";
 import { startServer, type ServerHandle } from "../server.js";
 import { helpText } from "../commands.js";
 import { rankedFiles } from "../filesearch.js";
+import { recentTurns, applyRewind, applySummary, splitForSummary, summaryPrompt, type TurnMark } from "../rewind.js";
+import { DreamManager, formatDream, DREAM_MAX_ITERATIONS, DREAM_MAX_USD } from "../dreams.js";
+import { domDir } from "../config.js";
 
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
@@ -61,6 +66,7 @@ type Log =
 type Overlay =
   | { type: "none" }
   | { type: "permission"; preview: Preview }
+  | { type: "ask"; question: string; options: string[] }
   | { type: "model"; items: PickItem[]; initial?: string; save?: boolean }
   | { type: "file"; items: PickItem[]; prefix: string }
   | { type: "session"; items: PickItem[] }
@@ -547,6 +553,18 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       emitToTab(tab, { kind: "tool", tool, primary, secondary, ok: !result.isError, body, summary, detail });
     },
     onSystem: (text) => emitToTab(tab, { kind: "system", text }),
+    // The dim inline line is already emitted by the engine via onSystem; this
+    // carries the STRUCTURED verdict so the web rail can offer "fix it", and
+    // remembers the follow-up prompt for /fix.
+    onOutcome: (v) => {
+      lastOutcomeRef.current = v.verdict === "fail" ? outcomeFixPrompt(v) : null;
+      try {
+        bridgeRef.current?.bus.emit({
+          type: "turn.outcome", tabId: tab.id, verdict: v.verdict,
+          confidence: v.confidence, summary: v.summary, line: outcomeLine(v),
+        });
+      } catch { /* emit and forget */ }
+    },
     onTurnCost: (c) => {
       const uncached = Math.max(0, c.promptTokens - c.cachedTokens);
       const cached = c.cachedTokens > 0 ? ` (${c.cachedTokens} cached)` : "";
@@ -567,6 +585,21 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           controller.setPendingPermission(tab, { preview, resolve });
         }
       }),
+    askUser: (question, options) =>
+      new Promise<AskUserAnswer>((resolve) => {
+        // A question is always worth a notification: unlike a tool result, nothing
+        // moves until the user comes back to it.
+        notify("Gnosis", `needs input: ${question.slice(0, 80)}`, { enabled: notifyRef.current });
+        const settle = (text: string) => resolve({ text });
+        if (isActive(tab)) {
+          askResolveRef.current = settle;
+          setOverlay({ type: "ask", question, options });
+        } else {
+          // Background tab: don't steal focus. Answer nothing and let the agent
+          // proceed on its own judgement — the tool reads "" as "no steer given".
+          settle("");
+        }
+      }),
   });
 
   const stubCb = (): Callbacks => ({
@@ -582,6 +615,29 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // The controller runs a tab's turn through here (engine.run + per-tab callbacks).
   executorRef.current = (tab, text) => tab.engine.run(text, buildCb(tab));
   onChangeRef.current = () => setTabTick((t) => t + 1);
+
+  const askResolveRef = useRef<((text: string) => void) | null>(null);
+  // The last failed outcome's follow-up prompt, so /fix works even when
+  // autoFixOutcome is off (the engine only parks one when the config is on).
+  const lastOutcomeRef = useRef<string | null>(null);
+  // handleSubmit is defined further down; /fix needs it from the command switch.
+  const handleSubmitRef = useRef<((v: string) => void) | null>(null);
+  /** Names background tabs bg-1, bg-2, … independent of the tab numbering. */
+  const bgSeqRef = useRef(1);
+  /** Dreams live for the process, not the render. */
+  const dreamsRef = useRef<DreamManager | null>(null);
+  /** The last message the user actually sent, so ctrl+b works after the fact. */
+  const lastUserTextRef = useRef("");
+  /** Timestamp of the last bare Esc, for double-Esc detection. */
+  const lastEscRef = useRef(0);
+  /** The turn chosen in the rewind picker, awaiting rewind-vs-summarize. */
+  const rewindMarkRef = useRef<TurnMark | null>(null);
+  const resolveAsk = (text: string) => {
+    const r = askResolveRef.current;
+    askResolveRef.current = null;
+    setOverlay({ type: "none" });
+    r?.(text);
+  };
 
   const resolvePerm = (ans: PermissionAnswer) => {
     const r = permResolveRef.current;
@@ -1068,6 +1124,69 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     armOverlay("history", "reverse-search prompt history", items, null, (v) => setInput(v));
   };
 
+  /**
+   * The rewind picker: the last 20 turns, newest first (what you want to undo is
+   * almost always recent). Choosing one opens the second picker — rewind to it,
+   * or summarize everything before it.
+   */
+  const openRewindPicker = () => {
+    const marks = recentTurns(engine.messages, 20);
+    if (!marks.length) { sysLog("nothing to rewind to — no turns in this session yet"); return; }
+    const items: PickItem[] = [...marks].reverse().map((m) => ({
+      value: String(m.index),
+      label: `${String(m.number).padStart(3)}. ${m.summary}`,
+      search: m.summary,
+    }));
+    setOverlay({ type: "history", items });
+    armOverlay("rewind", "rewind — pick a turn", items, null, (v) => {
+      const mark = marks.find((m) => String(m.index) === v);
+      if (!mark) return;
+      rewindMarkRef.current = mark;
+      openRewindAction(mark);
+    });
+  };
+
+  /** Second step: what to do with the chosen turn. */
+  const openRewindAction = (mark: TurnMark) => {
+    const items: PickItem[] = [
+      { value: "rewind", label: `rewind to here — drop turn ${mark.number} and everything after`, search: "rewind" },
+      { value: "summarize", label: `summarize up to here — compress turns 1-${mark.number - 1}, keep the rest verbatim`, search: "summarize" },
+    ];
+    setOverlay({ type: "history", items });
+    armOverlay("rewind-action", `turn ${mark.number}: ${mark.summary}`, items, null, (v) => {
+      if (v === "rewind") doRewind(mark);
+      else void doSummarize(mark);
+    });
+  };
+
+  const doRewind = (mark: TurnMark) => {
+    const r = applyRewind(engine.messages, mark);
+    engine.messages.length = 0;
+    engine.messages.push(...r.messages);
+    void engine.persist();
+    sysLog(`↶ ${r.note}`);
+    setTabTick((t) => t + 1);
+  };
+
+  const doSummarize = async (mark: TurnMark) => {
+    const { head } = splitForSummary(engine.messages, mark.index);
+    if (!head.length) { sysLog("nothing before that turn to summarize"); return; }
+    sysLog(`⟳ summarizing ${head.length} message(s) with the oracle model…`);
+    try {
+      // The oracle model is the stronger one — a bad summary here silently
+      // poisons every turn that follows, so it is worth the better model.
+      const res = await engine.runOracle(summaryPrompt(head));
+      const r = applySummary(engine.messages, mark, res.text);
+      engine.messages.length = 0;
+      engine.messages.push(...r.messages);
+      void engine.persist();
+      sysLog(`⟳ ${r.note}`);
+      setTabTick((t) => t + 1);
+    } catch (e) {
+      sysLog(`summarize failed: ${(e as Error).message}`);
+    }
+  };
+
   // Repo-map file ranking for @-completion, memoized per cwd (the map is DB-cached
   // so the first build is cheap; later @ opens reuse this).
   const repoRankRef = useRef<{ cwd: string; rank: Map<string, number> } | null>(null);
@@ -1145,6 +1264,30 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       case "tools":
         sysLog("tools: " + TOOL_NAMES.join(", "));
         break;
+      // /dream <task> — run a long-horizon task in the background.
+      // /dream stop <id> — end one. /dreams — list them.
+      case "dream": {
+        const dm = ensureDreams();
+        if (parts[1] === "stop") {
+          const id = parts[2];
+          if (!id) { sysLog("usage: /dream stop <id>  (see /dreams)"); break; }
+          void dm.stop(id).then((okStop) => sysLog(okStop ? `dream ${id} stopped` : `no running dream "${id}"`));
+          break;
+        }
+        const task = parts.slice(1).join(" ").trim();
+        if (!task) { sysLog('usage: /dream "refactor the auth module"'); break; }
+        const rec = dm.start(task, controller.active().engine.cwd);
+        sysLog(`✨ dreaming ${rec.id}: ${task.slice(0, 70)}`);
+        sysLog(`   caps: ${DREAM_MAX_ITERATIONS} iterations · $${DREAM_MAX_USD} · 2h — /dreams to check, /dream stop ${rec.id} to end`);
+        break;
+      }
+      case "dreams": {
+        const all = ensureDreams().list();
+        if (!all.length) { sysLog('no dreams yet — /dream "<task>" starts one'); break; }
+        sysLog("id    status   cost      time  task");
+        for (const d of all) for (const line of formatDream(d).split("\n")) sysLog(line);
+        break;
+      }
       case "new":
         newTab(parts[1], parts.slice(2).join(" "));
         break;
@@ -1293,12 +1436,23 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         }
         break;
       }
-      case "verify": {
-        sysLog("⟳ verifying the last change…");
+      // /verify and /eval are the same check; /eval is the current name.
+      case "verify":
+      case "eval": {
+        sysLog("⟳ evaluating the last turn…");
         void engine.runVerifier().then((v) => {
-          if (!v) sysLog("nothing to verify (no file edits in the last turn, or no diff)");
-          else sysLog(v.verdict === "pass" ? `✓ verifier: ${v.text}` : `✗ verifier (${v.verdict}): ${v.text}`);
-        }).catch((e) => sysLog(`verify: ${(e as Error).message}`));
+          if (!v) { sysLog("nothing to evaluate (no file edits in the last turn, or no diff)"); return; }
+          sysLog(outcomeLine(v));
+          if (v.verdict === "fail") sysLog("  /fix feeds this critique back as the next turn");
+        }).catch((e) => sysLog(`eval: ${(e as Error).message}`));
+        break;
+      }
+      // Take the last failed outcome and submit its critique as a fresh turn.
+      case "fix": {
+        const p = engine.takeOutcomeFix() ?? lastOutcomeRef.current;
+        if (!p) { sysLog("nothing to fix — no failed outcome on the last turn"); break; }
+        lastOutcomeRef.current = null;
+        handleSubmitRef.current?.(p);
         break;
       }
       case "context": {
@@ -1371,6 +1525,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       }
       case "compact":
         engine.forceCompact(stubCb());
+        break;
+      case "rewind":
+        openRewindPicker();
         break;
       case "mode":
         void setModeCmd(arg);
@@ -1457,6 +1614,55 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     }
   };
 
+  /**
+   * Run `text` in a new background tab. The tab inherits this one's cwd and
+   * approval mode (a background agent that prompts less than the tab that spawned
+   * it would be a privilege escalation), and focus deliberately does NOT move —
+   * the whole point is to keep working here.
+   */
+  /**
+   * The dream manager, built on first use. Dangerous approvals and ask_user
+   * questions from a dream are routed into the SAME overlays a foreground turn
+   * uses, so answering one is the ordinary interaction rather than a new UI.
+   */
+  const ensureDreams = (): DreamManager => {
+    if (dreamsRef.current) return dreamsRef.current;
+    const dm = new DreamManager(domDir(), {
+      fork: (cwd) => engine.fork(cwd ? { cwd } : undefined),
+      bus: bridgeRef.current?.bus,
+      notifyEnabled: notifyRef.current,
+      requestApproval: (dreamId, preview) =>
+        new Promise((resolve) => {
+          sysLog(`dream ${dreamId} needs approval — answering below`);
+          permResolveRef.current = resolve;
+          permPreviewRef.current = preview;
+          permOwnerRef.current = controller.active().id;
+          setOverlay({ type: "permission", preview });
+        }),
+      askUser: (dreamId, question, options) =>
+        new Promise((resolve) => {
+          sysLog(`dream ${dreamId} asks: ${question}`);
+          askResolveRef.current = resolve;
+          setOverlay({ type: "ask", question, options });
+        }),
+    });
+    dreamsRef.current = dm;
+    void dm.init().then((records) => {
+      const orphans = records.filter((r) => /interrupted/.test(r.summary));
+      if (orphans.length) sysLog(`${orphans.length} dream(s) were interrupted by a restart — /dreams to review`);
+    });
+    return dm;
+  };
+
+  const launchBackground = (text: string) => {
+    const from = controller.active();
+    const tab = controller.create(`bg-${bgSeqRef.current++}`, text.slice(0, 60), from.engine.cwd);
+    tab.engine.mode = from.engine.mode;
+    tab.engine.autoApproveEdits = from.engine.autoApproveEdits;
+    controller.submitUser(tab, text);
+    sysLog(`→ background: ${tab.name} — ${text.slice(0, 60)}${text.length > 60 ? "…" : ""} (ctrl+${controller.tabs.length} to watch)`);
+  };
+
   const handleSubmit = (value: string) => {
     const v = value;
     setInput("");
@@ -1500,6 +1706,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
           tab.engine.setNextUserImages(imgs);
           sysLog(`${g.mid} attached ${imgs.length} image${imgs.length === 1 ? "" : "s"}`);
         }
+        lastUserTextRef.current = v;
         controller.submitUser(tab, v);
       })();
       return;
@@ -1544,6 +1751,8 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       handleCommand(command.startsWith("/") ? command.trim() : "/" + command.trim());
     };
     b.onCreateAgent = (name, purpose) => newTab(name, purpose ?? "");
+    // "Run in background" from the web chat rail: same launcher as ctrl+b.
+    b.onBackgroundAgent = (_fromTabId, text) => { if (text.trim()) launchBackground(text.trim()); };
     b.onCloseAgent = (tabId) => {
       const t = controller.byId(tabId);
       if (!t) return;
@@ -1637,7 +1846,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     setServe({ url: handle.url, handle, publicUrl, tunnel, lanUrl });
     // Print each URL with a scannable QR so a phone doesn't type the token.
     const { serveBlock } = await import("../serveprint.js");
-    const links = [{ label: "LOCAL ", url: handle.url }];
+    const links: { label: string; url: string; scannable?: boolean }[] = [{ label: "LOCAL ", url: handle.url, scannable: false }];
     if (lanUrl) links.push({ label: "LAN   ", url: lanUrl });
     if (publicUrl) links.push({ label: "PUBLIC", url: publicUrl });
     for (const line of (await serveBlock(links)).split("\n")) sysLog(line);
@@ -1715,9 +1924,32 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       clearQueue();
       return;
     }
+    // Double-Esc opens the rewind picker. Single Esc is left alone (it already
+    // clears the queue and closes overlays); only the SECOND press within the
+    // window means "take me back".
+    if (key.escape && overlayRef.current.type === "none" && !busyRef.current) {
+      const now = Date.now();
+      if (now - lastEscRef.current < 600) {
+        lastEscRef.current = 0;
+        openRewindPicker();
+      } else {
+        lastEscRef.current = now;
+      }
+      return;
+    }
     // Ctrl+R reverse-searches prompt history (this session + prior ones for this cwd).
     if (key.ctrl && inp === "r" && overlayRef.current.type === "none") {
       void openHistorySearch();
+      return;
+    }
+    // Ctrl+B launches the message you're holding as a BACKGROUND agent: a new tab
+    // runs it while focus stays here. Falls back to the last thing you sent, so
+    // "actually, run that in the background too" works after the fact.
+    if (key.ctrl && inp === "b" && overlayRef.current.type === "none") {
+      const text = (inputRef.current || lastUserTextRef.current || "").trim();
+      if (!text) { sysLog("ctrl+b: nothing to run — type a message first"); return; }
+      if (inputRef.current.trim()) setInput("");
+      launchBackground(text);
       return;
     }
     // Ctrl+1..9 switches tabs — always available, even while a turn is running so
@@ -1779,6 +2011,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const renderOverlay = (): ReactNode => {
     if (overlay.type === "permission") {
       return <Permission caps={caps} width={inner} preview={overlay.preview} onDecide={resolvePerm} />;
+    }
+    if (overlay.type === "ask") {
+      return <AskUser caps={caps} width={inner} question={overlay.question} options={overlay.options} onAnswer={resolveAsk} />;
     }
     if (overlay.type === "model") {
       const save = overlay.save ?? false;
@@ -1908,9 +2143,13 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // below. Read by the resize handler to erase the stale frame. Exact for the
   // steady region (status bar + input); overlays / the split grid use an at-or-
   // under estimate so the erase never reaches up into scrollback.
+  handleSubmitRef.current = handleSubmit;
+
   const tabbarShown = controller.tabs.length > 1 && !alt;
   const overlayRows =
-    overlay.type === "permission"
+    overlay.type === "ask"
+      ? Math.min(overlay.options.length, 5) + 9
+      : overlay.type === "permission"
       ? 8
       : overlay.type === "model" || overlay.type === "file" || overlay.type === "session" || overlay.type === "history"
         ? Math.min(overlay.items.length, 12) + 4

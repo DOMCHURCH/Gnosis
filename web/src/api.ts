@@ -33,3 +33,10 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T | null>
 export function tokenizedUrl(base: string): string {
   return `${base.replace(/\/$/, "")}/?token=${token()}`;
 }
+
+/** Token-gated URL for one file under a tab's root. `raw` fetches the bytes
+ *  (images, PDFs); otherwise the JSON text preview the file browser uses. */
+export function fileUrlFor(tabId: number, path: string, raw: boolean): string {
+  const q = new URLSearchParams({ token: token(), tabId: String(tabId), path });
+  return `${raw ? "/api/file/raw" : "/api/file"}?${q.toString()}`;
+}

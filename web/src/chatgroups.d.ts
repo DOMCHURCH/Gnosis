@@ -21,6 +21,15 @@ export interface ChatGroup {
   time: string;
   kind: string;
   isApproval: boolean;
+  /** Rich render descriptor for a file this tool call wrote (null when plain). */
+  fileOutput?: import("./filekind").FileOutput | null;
+  /** ask_user block: the pending question id, its options, and the reply once given. */
+  askId?: string;
+  options?: string[];
+  answered?: string;
+  /** outcome block: the post-turn verdict and how sure it was. */
+  verdict?: "pass" | "fail" | "unknown";
+  confidence?: number;
   permId?: string;
   /** For kind "approval": the answer once resolved ("yes"|"no"|"always"). */
   resolved?: string;

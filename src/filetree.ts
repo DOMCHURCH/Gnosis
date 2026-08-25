@@ -94,6 +94,30 @@ export async function buildTree(root: string, opts: Partial<WalkOpts> = {}): Pro
 /** Max bytes returned for a file preview; larger files are truncated with a note. */
 export const MAX_PREVIEW_BYTES = 256 * 1024;
 
+/**
+ * Resolve a client-supplied relative path against `root`, returning the absolute
+ * path only if it stays inside. This is THE traversal guard — every endpoint that
+ * turns a client string into a filesystem read must go through it.
+ *
+ * Compares with a trailing separator so a sibling directory sharing a prefix
+ * (…/foo-bar vs …/foo) can't sneak through a plain startsWith.
+ */
+export function resolveInRoot(root: string, rel: string): string | null {
+  const rootResolved = path.resolve(root);
+  const full = path.resolve(rootResolved, rel);
+  const withSep = rootResolved.endsWith(path.sep) ? rootResolved : rootResolved + path.sep;
+  if (full !== rootResolved && !full.startsWith(withSep)) return null;
+  return full;
+}
+
+/** Content types for the raw file endpoint. Anything unlisted is served as a
+ *  download (octet-stream) rather than rendered inline — never guess and let a
+ *  browser sniff an unknown file into script. */
+export const RAW_MIME: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+  ".webp": "image/webp", ".svg": "image/svg+xml", ".pdf": "application/pdf",
+};
+
 export interface FilePreview {
   path: string;
   content: string;
@@ -106,12 +130,8 @@ export interface FilePreview {
  * relative path. Returns null if it escapes root or can't be read.
  */
 export async function readFileInRoot(root: string, rel: string): Promise<FilePreview | null> {
-  const rootResolved = path.resolve(root);
-  const full = path.resolve(rootResolved, rel);
-  // Must stay within root (allow root itself). Compare with a trailing separator so
-  // a sibling dir sharing a prefix (…/foo-bar vs …/foo) can't sneak through.
-  const withSep = rootResolved.endsWith(path.sep) ? rootResolved : rootResolved + path.sep;
-  if (full !== rootResolved && !full.startsWith(withSep)) return null;
+  const full = resolveInRoot(root, rel);
+  if (!full) return null;
   try {
     const stat = await fs.stat(full);
     if (!stat.isFile()) return null;

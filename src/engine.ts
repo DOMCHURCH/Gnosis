@@ -27,7 +27,7 @@ export function limitPhrase(detail: string): string {
   while (end < msg.length && /\d/.test(msg[end]!)) end++;
   return msg.slice(0, end);
 }
-import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult, type CoordinatedResult, type EditStream } from "./tools/index.js";
+import { TOOLS, TOOL_NAMES, toolDefinitions, resolveTool, allToolNames, type ToolDef, type ToolResult, type ToolContext, type SubAgentResult, type CoordinatedResult, type EditStream, type AskUserAnswer } from "./tools/index.js";
 import { toJsonSchema } from "./tools/schemas.js";
 import { runBash } from "./tools/bash.js";
 import { planWrite } from "./tools/write.js";
@@ -101,8 +101,53 @@ const VERIFIER_DIRECTIVE =
   "You are a skeptical code reviewer. You are given a user's ORIGINAL request and the DIFF of changes another agent " +
   "made to satisfy it. You do NOT see that agent's reasoning. Judge ONLY from the request and the diff whether the " +
   "change actually and fully accomplishes the request and is correct. Assume nothing you can't see in the diff. " +
-  "Reply on the FIRST line with exactly `PASS` or `FAIL`, then on following lines the specifics: what's missing, " +
-  "wrong, risky, or incomplete (for FAIL), or a one-line confirmation (for PASS). Be concise and concrete.";
+  "Reply on the FIRST line with exactly `PASS <confidence>` or `FAIL <confidence>`, where confidence is an integer " +
+  "0-100 for how sure you are of that verdict — be honest, a diff you cannot fully judge deserves a low number. " +
+  "Then on the SECOND line one sentence of specifics: what is missing, wrong, risky, or incomplete (for FAIL), or " +
+  "what you confirmed (for PASS). Be concise and concrete. Never exceed one sentence.";
+
+/** A verifier verdict: the call, how sure it is, and one sentence of specifics. */
+export interface Verdict {
+  verdict: "pass" | "fail" | "unknown";
+  confidence: number | null;
+  /** The one-sentence summary shown inline in the rail. */
+  summary: string;
+  /** The verifier's full reply (what /eval and the fix-it follow-up quote). */
+  text: string;
+}
+
+/** Parse `PASS 94` / `FAIL 71` + a sentence. Tolerant: a verifier that forgets the
+ *  number still yields a usable verdict, just without a confidence. */
+export function parseVerdict(raw: string): Verdict {
+  const text = (raw ?? "").trim();
+  const [head = "", ...rest] = text.split(/\r?\n/);
+  const m = /^\s*(PASS|FAIL)\b\s*(\d{1,3})?/i.exec(head);
+  const verdict = m ? (m[1]!.toUpperCase() === "PASS" ? "pass" : "fail") : "unknown";
+  let confidence: number | null = m && m[2] != null ? Number(m[2]) : null;
+  if (confidence != null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 100)) confidence = null;
+  // Specifics may follow on the next line, or trail the verdict on the first one.
+  const trailing = head.replace(/^\s*(PASS|FAIL)\b\s*\d{0,3}\s*[:\-—]?\s*/i, "").trim();
+  const summary = (rest.join(" ").trim() || trailing || text).replace(/\s+/g, " ").slice(0, 300);
+  return { verdict, confidence, summary, text };
+}
+
+/** The dim one-liner the rail shows for an outcome: `✓ outcome: … (94% confidence)`. */
+export function outcomeLine(v: Verdict): string {
+  const mark = v.verdict === "pass" ? "✓" : v.verdict === "fail" ? "✗" : "?";
+  const conf = v.confidence != null ? ` (${v.confidence}% confidence)` : "";
+  return `${mark} outcome: ${v.summary}${conf}`;
+}
+
+/** The follow-up turn a failed outcome becomes when the user hits "fix it" (or
+ *  autoFixOutcome is on). Quotes the critique so the model fixes THAT, not the
+ *  original request over again. */
+export function outcomeFixPrompt(v: Verdict): string {
+  return (
+    "The automatic outcome check on your last change came back FAIL. Its finding:" +
+    "\n\n" + v.text.trim() + "\n\n" +
+    "Fix exactly what it names. Change nothing else. If you believe the check is wrong, say why instead of editing."
+  );
+}
 
 const SUBAGENT_DIRECTIVE =
   "\n\nYou are a READ-ONLY research sub-agent answering ONE question for another agent. You have only read, glob, " +
@@ -163,8 +208,14 @@ export interface Callbacks {
   onToolResult(call: ToolCall, result: ToolResult): void;
   onSystem(text: string): void;
   requestPermission(preview: Preview): Promise<PermissionAnswer>;
+  /** Put one question to the user (the `ask_user` tool). Absent where nothing can
+   * render a prompt — headless runs — and the tool refuses instead of blocking. */
+  askUser?(question: string, options: string[], signal?: AbortSignal): Promise<AskUserAnswer>;
   /** Fired once when a turn ends, with that turn's token/dollar cost (optional). */
   onTurnCost?(cost: TurnCost): void;
+  /** The automatic outcome evaluation for a file-touching turn. The UI renders it
+   * as a dim inline verdict (and, on a fail, offers to feed the critique back). */
+  onOutcome?(v: Verdict): void;
 }
 
 export interface EngineDeps {
@@ -562,11 +613,38 @@ export class Engine {
           void Promise.resolve(cb.requestPermission(preview)).then(finish); // the TUI overlay
         });
       },
+      // Same first-to-answer shape as permissions: the browser card and the TUI
+      // prompt race, the winner settles, the loser closes on ask.resolved.
+      askUser: cb.askUser
+        ? (question, options, signal) => {
+            if (!bridge) {
+              bus.emit({ type: "ask.request", tabId, id: `${tabId}:${++this.permSeq}`, question, options });
+              return cb.askUser!(question, options, signal);
+            }
+            const id = `ask:${tabId}:${++this.permSeq}`;
+            return new Promise<AskUserAnswer>((resolve) => {
+              let done = false;
+              const finish = (a: AskUserAnswer) => {
+                if (done) return;
+                done = true;
+                bridge.clearAsk(id);
+                bus.emit({ type: "ask.resolved", tabId, id, answer: a.text });
+                resolve(a);
+              };
+              bridge.registerAsk(id, (text) => finish({ text }));
+              bus.emit({ type: "ask.request", tabId, id, question, options });
+              void Promise.resolve(cb.askUser!(question, options, signal)).then(finish);
+            });
+          }
+        : undefined,
     };
   }
 
   async run(userText: string, cb: Callbacks): Promise<void> {
     cb = this.wrapCallbacks(cb);
+    // toolCtx() is built per tool call and has no view of `cb`, so hand it the
+    // (already bridged) asker for the length of this turn.
+    this.askUserFn = cb.askUser;
     // Snapshot cost so we can report this turn's delta (sub-agent cost included).
     const costAtStart = {
       prompt: this.cost.promptTokens,
@@ -807,13 +885,22 @@ export class Engine {
         this.capped ??= "iteration";
         cb.onSystem(`✗ hit ${this.maxIterations}-iteration cap for this turn`);
       }
-      // Auto-verify: on a turn that touched 2+ files, spawn a read-only verifier
-      // (config autoVerify) that judges the diff against the request, blind to the
-      // generator's reasoning, and reports its verdict.
-      if (!this.abortController.signal.aborted && this.turnEditedFiles.size >= 2 && (await loadConfig()).autoVerify) {
-        cb.onSystem("⟳ verifying the change…");
+      // Automatic outcome evaluation: after ANY turn that touched files, a
+      // read-only verifier judges the diff against the request, blind to the
+      // generator's reasoning. `autoEval` is the current switch; `autoVerify` is
+      // still honoured so existing configs keep working.
+      const cfg = await loadConfig();
+      const evalOn = cfg.autoEval ?? cfg.autoVerify ?? true;
+      if (!this.abortController.signal.aborted && this.turnEditedFiles.size >= 1 && evalOn) {
+        cb.onSystem("⟳ evaluating the outcome…");
         const v = await this.runVerifier();
-        if (v) cb.onSystem(v.verdict === "pass" ? `✓ verifier: ${v.text}` : `✗ verifier (${v.verdict}): ${v.text}`);
+        if (v) {
+          cb.onOutcome?.(v);
+          cb.onSystem(outcomeLine(v));
+          // autoFixOutcome (default off): a failed outcome feeds its own critique
+          // back as the next turn rather than waiting to be asked.
+          if (v.verdict === "fail" && cfg.autoFixOutcome) this.pendingOutcomeFix = outcomeFixPrompt(v);
+        }
       }
       // Stop hook (non-blocking): the turn has ended.
       const stopHook = await runNonBlockingHook(this.cwd, "Stop", { sessionId: this.sessionId(), model: this.modelId });
@@ -921,7 +1008,23 @@ export class Engine {
         this.pendingImages.push(img);
       },
       oracle: (q, sig) => this.runOracle(q, sig),
+      // Sub-agents get no askUser: they run unattended inside someone else's turn,
+      // so a question from one would stall a turn the user isn't even watching.
+      askUser: this.isSubAgent ? undefined : this.askUserFn,
     };
+  }
+
+  /** Set per-run from the turn's callbacks (see run()), so toolCtx can hand the
+   * tool a runner without threading callbacks through every call site. */
+  private askUserFn?: (question: string, options: string[], signal?: AbortSignal) => Promise<AskUserAnswer>;
+
+  /** Set when a failed outcome should be fed back as the next turn (autoFixOutcome).
+   *  The UI drains it after the turn ends and submits it as a fresh user turn. */
+  pendingOutcomeFix: string | null = null;
+  takeOutcomeFix(): string | null {
+    const p = this.pendingOutcomeFix;
+    this.pendingOutcomeFix = null;
+    return p;
   }
 
   /**
@@ -1185,7 +1288,7 @@ export class Engine {
    * skeptically whether the change is actually done. Returns the verdict + notes,
    * or null when there's nothing to verify (no edits / no diff). Cost folds in.
    */
-  async runVerifier(): Promise<{ verdict: "pass" | "fail" | "unknown"; text: string } | null> {
+  async runVerifier(): Promise<Verdict | null> {
     if (this.overBudget() || !this.turnEditedFiles.size) return null;
     const rel = [...this.turnEditedFiles].map((f) => path.relative(this.cwd, f).split(path.sep).join("/"));
     const diff = await gitDiff(this.cwd, this.turnBaseSha ?? null, rel);
@@ -1211,9 +1314,13 @@ export class Engine {
     const text =
       [...sub.messages].reverse().find((m): m is Extract<Msg, { role: "assistant" }> => m.role === "assistant" && !!m.text)?.text ??
       "(verifier produced no verdict)";
-    const first = text.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
-    const verdict = first.startsWith("PASS") ? "pass" : first.startsWith("FAIL") ? "fail" : "unknown";
-    return { verdict, text: text.trim() };
+    return parseVerdict(text);
+  }
+
+  /** Re-run the outcome check on the turn that just finished (`/eval`). Returns
+   *  null when this turn touched no files — there is nothing to judge. */
+  async evaluateLastTurn(): Promise<Verdict | null> {
+    return this.runVerifier();
   }
 
   /** Set (or update) the goal bar. Rounds reset to maxRounds unless the caller

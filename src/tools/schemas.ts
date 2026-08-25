@@ -160,6 +160,18 @@ export const taskSchema = z.object({
     ),
 });
 
+export const askUserSchema = z.object({
+  question: z
+    .string()
+    .describe("The single, specific question to put to the user. State the decision, not the whole situation."),
+  options: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "2-5 concrete choices. Omit for an open question — the user always gets a free-text box either way.",
+    ),
+});
+
 export const viewImageSchema = z.object({
   path: z.string().describe("Path to an image file (png, jpg, jpeg, gif, or webp) to load so you can see it."),
 });
@@ -199,6 +211,7 @@ export type SendMessageArgs = z.infer<typeof sendMessageSchema>;
 export type ListTabsArgs = z.infer<typeof listTabsSchema>;
 export type TaskArgs = z.infer<typeof taskSchema>;
 export type TodoArgs = z.infer<typeof todoSchema>;
+export type AskUserArgs = z.infer<typeof askUserSchema>;
 export type ViewImageArgs = z.infer<typeof viewImageSchema>;
 export type WebSearchArgs = z.infer<typeof webSearchSchema>;
 export type OracleArgs = z.infer<typeof oracleSchema>;

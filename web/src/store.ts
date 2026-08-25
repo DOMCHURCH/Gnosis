@@ -6,8 +6,13 @@ import type { Telemetry } from "./telemetry";
 import { planFromEvent, foldPlan } from "./taskplan.js";
 import type { TaskPlan } from "./taskplan";
 
+/** One dream as the floor and panel see it. */
+export interface DreamInfo { id: string; status: string; task: string; usd: number; summary: string; }
+
 export interface State {
   connected: boolean;
+  /** Long-horizon background tasks (/dream), keyed by id. */
+  dreams: Record<string, DreamInfo>;
   agents: Record<number, Agent>;
   order: number[];
   transcripts: Record<number, TranscriptItem[]>;
@@ -95,6 +100,10 @@ export interface RawLine {
   text?: string; rule?: "open" | "close"; lang?: string;
   // approval (kind "approval"): the previewed action, and the answer once resolved.
   permId?: string; label?: string; resolved?: string;
+  // ask_user (kind "ask"): the question, its suggested options, and the reply once given.
+  askId?: string; question?: string; options?: string[]; answered?: string;
+  // outcome (kind "outcome"): the automatic post-turn verdict.
+  verdict?: "pass" | "fail" | "unknown"; confidence?: number;
   // tool call (kind "tool"): the compact call parts + summary, and the full detail.
   tool?: string; primary?: string; secondary?: string; ok?: boolean; summary?: string; detail?: string;
 }
@@ -109,7 +118,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, dreams: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {} };
 
 /** Fold a tabId-bearing event into that tab's telemetry record. */
 function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
@@ -315,6 +324,35 @@ export function reducer(state: State, action: Action): State {
       const label = previewLabel(action.preview);
       const ln: RawLine = { key: `p${action.id}`, tabId: action.tabId, from, kind: "approval", epoch, time: clock(), text: `Needs approval: ${label}`, permId: action.id, label };
       return { ...pushLine(withFlag, ln), permission: { tabId: action.tabId, id: action.id, preview: action.preview, options: action.options } };
+    }
+    case "dream.state": {
+      const dreams = { ...state.dreams, [action.id]: { id: action.id, status: action.status, task: action.task, usd: action.usd, summary: action.summary } };
+      return { ...state, dreams };
+    }
+    case "turn.outcome": {
+      const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
+      const epoch = state.turnEpoch[action.tabId] ?? 0;
+      const ln: RawLine = {
+        key: `o${action.tabId}:${epoch}`, tabId: action.tabId, from, kind: "outcome", epoch, time: clock(),
+        text: action.line, verdict: action.verdict, confidence: action.confidence ?? undefined,
+      };
+      return pushLine(state, ln);
+    }
+    case "ask.request": {
+      const from = state.agents[action.tabId]?.name ?? `#${action.tabId}`;
+      const epoch = state.turnEpoch[action.tabId] ?? 0;
+      const ln: RawLine = {
+        key: `q${action.id}`, tabId: action.tabId, from, kind: "ask", epoch, time: clock(),
+        askId: action.id, question: action.question, options: action.options,
+      };
+      return pushLine(state, ln);
+    }
+    case "ask.resolved": {
+      // Whichever client answered, every card for this question settles.
+      const chatLines = state.chatLines.map((l) =>
+        l.askId === action.id ? { ...l, answered: action.answer || "(skipped — agent decided)" } : l,
+      );
+      return { ...state, chatLines };
     }
     case "permission.resolved": {
       const cleared = patchAgent(state, action.tabId, (a) => ({ ...a, awaitingPermission: false }));
