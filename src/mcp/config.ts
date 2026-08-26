@@ -17,6 +17,12 @@ export interface McpServerConfig {
   transport?: "stdio";
   /** Gate this server's tool calls through the permission system (default false). */
   mutating?: boolean;
+  /** This server drives the real desktop (mouse, keyboard, screen). Every tool it
+   * publishes is treated as DANGEROUS by the permission gate: it always prompts,
+   * and can never be waved through by yolo mode or a prior "always". Marking a
+   * server computer_use also forces `mutating`, since none of it is read-only in
+   * any meaningful sense — a screenshot reads the user's entire screen. */
+  computer_use?: boolean;
   /** Skip this server this session. */
   disabled?: boolean;
   /** One-line human description (shown in the CONNECTIONS tab). */

@@ -116,7 +116,25 @@ export function domTarget(cwd: string, tool: ToolDef, args: any): string | null 
   const target = resolveTarget(cwd, tool, args);
   if (target && isInside(target, dom) && !pockets.some((p) => isInside(target, p))) return target;
   if (tool.name === "bash" && bashTouchesBlockedDom(String(args?.command ?? ""))) return dom;
+  // A computer-use server publishes dozens of tools with arbitrary argument
+  // shapes — a filesystem tool, a script runner, a registry editor — so
+  // resolveTarget, which only understands the built-ins' `path`, cannot see where
+  // any of them is pointed. Without this, "never touch ~/.dom" would hold for
+  // `read` but not for mcp__<server>__filesystem reading the same file. Scan every
+  // string argument the same way a raw bash command is scanned: if any of them
+  // names a path inside ~/.dom outside the readable pockets, hard-block the call.
+  if (tool.computerUse && argStrings(args).some(bashTouchesBlockedDom)) return dom;
   return null;
+}
+
+/** Every string anywhere in a tool's arguments (bounded depth, so a pathological
+ * payload can't turn the permission gate into a hot loop). */
+function argStrings(args: unknown, depth = 0): string[] {
+  if (depth > 4 || args == null) return [];
+  if (typeof args === "string") return [args];
+  if (Array.isArray(args)) return args.flatMap((v) => argStrings(v, depth + 1));
+  if (typeof args === "object") return Object.values(args as Record<string, unknown>).flatMap((v) => argStrings(v, depth + 1));
+  return [];
 }
 
 /**
@@ -246,9 +264,18 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   // A call is dangerous if the command matches a dangerous pattern OR it lands
   // in a dangerous place (home dir / non-project git). Dangerous calls always
   // prompt and can never be waved through by yolo, approvals, or auto-accept.
-  const reason = dangerReason(ctx.cwd, tool, args) ?? undefined;
+  // Computer use — moving the real mouse, typing on the real keyboard, reading the
+  // whole screen — is dangerous by nature, not by argument: there is no safe subset
+  // to auto-approve and no undo. Marking it here (rather than as merely `mutating`)
+  // is what makes it prompt in yolo mode too, since only `dangerous` survives the
+  // yolo/approvals shortcut below.
+  const reason =
+    (tool.computerUse ? "computer use — controls the real mouse, keyboard, and screen" : null) ??
+    dangerReason(ctx.cwd, tool, args) ??
+    undefined;
   const cmd = String(args.command ?? "");
-  const dangerous = reason !== undefined || (tool.name === "bash" && (isDangerous(cmd) || hasHiddenChars(cmd)));
+  const dangerous =
+    !!tool.computerUse || reason !== undefined || (tool.name === "bash" && (isDangerous(cmd) || hasHiddenChars(cmd)));
 
   // Read-only tools run free — unless flagged dangerous by context.
   if (!tool.mutating && !dangerous) return { kind: "allow" };

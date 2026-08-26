@@ -5,9 +5,19 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { McpServerConfig } from "./config.js";
+import type { ImagePart } from "../messages.js";
 import { resolveServerEnv } from "./config.js";
 
 export type McpStatus = "disabled" | "connecting" | "connected" | "error";
+
+/** A tool call's result: dom's ToolResult shape plus any images the server
+ * returned (a screenshot, a cropped region), which the caller attaches to the
+ * next message so the model can actually see them. */
+export interface McpCallResult {
+  output: string;
+  isError: boolean;
+  images: ImagePart[];
+}
 
 export interface McpTool {
   name: string;
@@ -33,7 +43,11 @@ export class McpServer {
   }
 
   get mutating(): boolean {
-    return this.config.mutating ?? false;
+    // Desktop control is never read-only, whatever the config says.
+    return this.config.mutating ?? this.computerUse;
+  }
+  get computerUse(): boolean {
+    return this.config.computer_use ?? false;
   }
   get transport(): string {
     return this.config.transport ?? "stdio";
@@ -76,9 +90,9 @@ export class McpServer {
 
   /** Call one of this server's tools. Returns a text result + error flag, matching
    * dom's ToolResult shape. */
-  async callTool(toolName: string, args: unknown): Promise<{ output: string; isError: boolean }> {
+  async callTool(toolName: string, args: unknown): Promise<McpCallResult> {
     if (!this.client || this.status !== "connected") {
-      return { output: `MCP server "${this.name}" is not connected (${this.status}).`, isError: true };
+      return { output: `MCP server "${this.name}" is not connected (${this.status}).`, isError: true, images: [] };
     }
     try {
       // Browser ops (navigate, screenshot) can outlast the SDK's 60s default.
@@ -87,10 +101,14 @@ export class McpServer {
         undefined,
         { timeout: 120_000 },
       );
-      const text = flattenContent(res?.content);
-      return { output: text || (res?.isError ? "tool returned an error with no content" : "(no content)"), isError: !!res?.isError };
+      const { text, images } = splitContent(res?.content);
+      return {
+        output: text || (res?.isError ? "tool returned an error with no content" : images.length ? "" : "(no content)"),
+        isError: !!res?.isError,
+        images,
+      };
     } catch (e) {
-      return { output: `${this.name}.${toolName}: ${(e as Error).message}`, isError: true };
+      return { output: `${this.name}.${toolName}: ${(e as Error).message}`, isError: true, images: [] };
     }
   }
 
@@ -101,17 +119,28 @@ export class McpServer {
   }
 }
 
-/** Flatten MCP content blocks (text / image / resource) into a single string. */
-function flattenContent(content: unknown): string {
-  if (!Array.isArray(content)) return "";
+/**
+ * Split MCP content blocks into text and images.
+ *
+ * Image blocks used to flatten to the literal string "[image image/png]" and the
+ * bytes were dropped on the floor — so a screenshot tool returned a placeholder
+ * the model could not actually see. They now come back as ImageParts, which the
+ * tool layer hands to the same attach-to-next-message path `view_image` uses.
+ */
+export function splitContent(content: unknown): { text: string; images: ImagePart[] } {
+  if (!Array.isArray(content)) return { text: "", images: [] };
   const parts: string[] = [];
+  const images: ImagePart[] = [];
   for (const c of content as any[]) {
     if (c?.type === "text" && typeof c.text === "string") parts.push(c.text);
-    else if (c?.type === "image") parts.push(`[image ${c.mimeType ?? ""}]`);
+    else if (c?.type === "image" && typeof c.data === "string") {
+      images.push({ source: `mcp:image-${images.length + 1}`, mime: String(c.mimeType ?? "image/png"), data: c.data });
+      parts.push(`[image ${c.mimeType ?? ""} — attached to the next message]`);
+    } else if (c?.type === "image") parts.push(`[image ${c.mimeType ?? ""}]`);
     else if (c?.type === "resource") parts.push(`[resource ${c.resource?.uri ?? ""}]`);
     else parts.push(JSON.stringify(c));
   }
-  return parts.join("\n");
+  return { text: parts.join(String.fromCharCode(10)), images };
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {

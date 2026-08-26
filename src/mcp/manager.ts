@@ -16,6 +16,9 @@ export interface McpConnectionInfo {
   status: McpStatus;
   toolCount: number;
   mutating: boolean;
+  /** This server drives the real desktop — shown in CONNECTIONS so the flag is
+   * visible where the server is, not just in mcp.json. */
+  computerUse: boolean;
   disabled: boolean;
   error: string | null;
   description: string;
@@ -69,6 +72,7 @@ class McpManager {
       status: s.status,
       toolCount: s.tools.length,
       mutating: s.mutating,
+      computerUse: s.computerUse,
       disabled: s.config.disabled ?? false,
       error: s.error,
       description: s.config.description ?? "",
@@ -84,16 +88,29 @@ class McpManager {
       if (server.status !== "connected") continue;
       for (const tool of server.tools) {
         const name = mcpToolName(server.name, tool.name);
+        const computerUse = server.computerUse;
         defs[name] = {
           name,
-          description: `[MCP · ${server.name}] ${tool.description}`.trim(),
+          description: computerUse
+            ? `[MCP · ${server.name} · CONTROLS THE REAL DESKTOP] ${tool.description}`.trim()
+            : `[MCP · ${server.name}] ${tool.description}`.trim(),
           // MCP tools carry a JSON Schema, not a zod schema — accept anything at the
           // dom layer (the server validates) and hand the real schema to the model.
           schema: z.any(),
           jsonSchema: tool.inputSchema,
-          mutating: server.mutating,
+          // A computer_use server's tools are mutating no matter what the config
+          // says: none of them is read-only in any meaningful sense.
+          mutating: computerUse || server.mutating,
+          computerUse,
           source: "mcp",
-          run: (args) => server.callTool(tool.name, args),
+          // Images the server returns (a screenshot) are attached to the next
+          // message through the same channel view_image uses, so the model sees
+          // the picture instead of a "[image image/png]" placeholder.
+          run: async (args, _signal, ctx) => {
+            const r = await server.callTool(tool.name, args);
+            for (const img of r.images) ctx?.attachImage?.(img);
+            return { output: r.output, isError: r.isError };
+          },
         };
       }
     }

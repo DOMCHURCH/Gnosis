@@ -171,6 +171,11 @@ export interface ToolDef {
   /** MCP tools carry a raw JSON Schema (used verbatim for the model) instead of a
    * zod schema; `source` marks where the tool came from. */
   jsonSchema?: Record<string, unknown>;
+  /** This tool drives the real desktop (mouse, keyboard, screen). The permission
+   * gate treats it as dangerous unconditionally: it always prompts, and neither
+   * yolo mode nor a prior "always" can wave it through. Set by the MCP manager
+   * from a server's `computer_use` flag. */
+  computerUse?: boolean;
   source?: "builtin" | "mcp";
 }
 
