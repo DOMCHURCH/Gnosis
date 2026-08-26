@@ -19,6 +19,9 @@ export interface McpConnectionInfo {
   /** This server drives the real desktop — shown in CONNECTIONS so the flag is
    * visible where the server is, not just in mcp.json. */
   computerUse: boolean;
+  /** Tools an allowlist is holding back (0 when the server has no allowlist), so
+   * the tab shows "13 of 64" rather than implying 13 is all there is. */
+  withheld: number;
   disabled: boolean;
   error: string | null;
   description: string;
@@ -73,6 +76,7 @@ class McpManager {
       toolCount: s.tools.length,
       mutating: s.mutating,
       computerUse: s.computerUse,
+      withheld: s.withheld,
       disabled: s.config.disabled ?? false,
       error: s.error,
       description: s.config.description ?? "",

@@ -25,6 +25,14 @@ export interface McpServerConfig {
   computer_use?: boolean;
   /** Skip this server this session. */
   disabled?: boolean;
+  /** When present, ONLY these tool names are published to the model; everything
+   * else the server offers is never advertised and cannot be called. Absent (or
+   * empty) publishes everything, which stays the default for ordinary servers.
+   * The point is reach, not etiquette: a desktop-control server ships a script
+   * runner, a filesystem tool and a registry editor alongside the mouse, and an
+   * allowlist is what keeps those out of the model's hands entirely rather than
+   * relying on it to behave. */
+  allowTools?: string[];
   /** One-line human description (shown in the CONNECTIONS tab). */
   description?: string;
 }

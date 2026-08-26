@@ -19,6 +19,29 @@ export interface McpCallResult {
   images: ImagePart[];
 }
 
+/** Result of narrowing a server's tools to its allowlist. */
+export interface AllowlistResult {
+  tools: McpTool[];
+  /** How many the allowlist withheld (for the CONNECTIONS tab). */
+  withheld: number;
+  /** Allowlist entries that match no tool this server offers — almost always a
+   * typo or a name from a different server, and silently dropping a capability
+   * is worse than saying so. */
+  unmatched: string[];
+}
+
+/**
+ * Narrow a server's tools to its allowlist. No allowlist (or an empty one) means
+ * publish everything — the default for every server that had no such field.
+ */
+export function applyAllowlist(tools: McpTool[], allow?: string[]): AllowlistResult {
+  if (!allow || allow.length === 0) return { tools, withheld: 0, unmatched: [] };
+  const wanted = new Set(allow);
+  const kept = tools.filter((t) => wanted.has(t.name));
+  const offered = new Set(tools.map((t) => t.name));
+  return { tools: kept, withheld: tools.length - kept.length, unmatched: allow.filter((a) => !offered.has(a)) };
+}
+
 export interface McpTool {
   name: string;
   description: string;
@@ -32,7 +55,11 @@ export class McpServer {
   readonly name: string;
   readonly config: McpServerConfig;
   status: McpStatus;
+  /** The tools PUBLISHED to the model — already narrowed by allowTools. */
   tools: McpTool[] = [];
+  /** How many the allowlist held back, and which entries matched nothing. */
+  withheld = 0;
+  unmatchedAllow: string[] = [];
   error: string | null = null;
   private client: Client | null = null;
 
@@ -73,11 +100,24 @@ export class McpServer {
       const client = new Client({ name: "gnosis", version: "1.1.0" }, { capabilities: {} });
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, "connect timed out");
       const listed = await withTimeout(client.listTools(), CONNECT_TIMEOUT_MS, "listTools timed out");
-      this.tools = (listed.tools ?? []).map((t: any) => ({
+      const offered = (listed.tools ?? []).map((t: any) => ({
         name: String(t.name),
         description: String(t.description ?? ""),
         inputSchema: (t.inputSchema as Record<string, unknown>) ?? { type: "object", properties: {} },
       }));
+      const narrowed = applyAllowlist(offered, this.config.allowTools);
+      this.tools = narrowed.tools;
+      this.withheld = narrowed.withheld;
+      this.unmatchedAllow = narrowed.unmatched;
+      // An allowlist entry that matches nothing removes a capability the user
+      // thought they had granted. Say so rather than letting it fail silently at
+      // the moment the model reaches for it.
+      if (narrowed.unmatched.length) {
+        process.stderr.write(
+          `[33m! mcp ${this.name}: allowTools names no such tool: ${narrowed.unmatched.join(", ")}[0m
+`,
+        );
+      }
       this.client = client;
       this.status = "connected";
     } catch (e) {
