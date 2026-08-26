@@ -172,6 +172,50 @@ async function fetchGroqModels(force: boolean): Promise<ModelEntry[]> {
  * `force` bypasses the per-provider caches. Never throws — if both providers
  * yield nothing it returns the built-in fallback list.
  */
+/** True when the catalog says this model accepts image input. */
+export function isVisionModel(m: ModelEntry): boolean {
+  return m.input_modalities.includes("image");
+}
+
+/**
+ * The cheapest vision-capable model in the catalog, or null if it has none.
+ *
+ * Suggested to the user whenever they hit the "this model can't see images" wall,
+ * INSTEAD of naming a model in a string somewhere: a hardcoded suggestion is wrong
+ * the moment the catalog moves — the id gets retired, or something cheaper ships —
+ * and it silently recommends a model the user may not even have access to.
+ *
+ * Ranked on prompt price (that is what an image costs you), then completion price,
+ * then id so the choice is stable across calls rather than depending on catalog
+ * ordering. A zero prompt price is a free variant and legitimately ranks first.
+ */
+export function cheapestVisionModel(models: ModelEntry[]): ModelEntry | null {
+  const vision = models.filter(isVisionModel);
+  if (!vision.length) return null;
+  return vision.slice().sort((a, b) =>
+    a.pricing.prompt - b.pricing.prompt ||
+    a.pricing.completion - b.pricing.completion ||
+    a.id.localeCompare(b.id),
+  )[0]!;
+}
+
+/**
+ * One line telling the user how to get vision, naming the cheapest model the live
+ * catalog actually offers. Falls back to the generic advice if the catalog can't
+ * be reached, so this never blocks on the network.
+ */
+export async function suggestVisionModel(): Promise<string> {
+  try {
+    const pick = cheapestVisionModel(await fetchModels());
+    if (!pick) return "Switch to a vision model with /model.";
+    const usd = pick.pricing.prompt * 1e6;
+    const price = usd > 0 ? ` (cheapest vision model in the catalog, $${usd.toFixed(2)}/M input tokens)` : " (free vision model in the catalog)";
+    return `Switch to a vision model with \`/model ${pick.id}\`${price}.`;
+  } catch {
+    return "Switch to a vision model with /model.";
+  }
+}
+
 export async function fetchModels(force = false): Promise<ModelEntry[]> {
   const [openRouter, groq] = await Promise.all([fetchOpenRouterModels(force), fetchGroqModels(force)]);
   const merged = [...openRouter, ...groq];

@@ -26,7 +26,7 @@ import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
 import { loadImage, isImagePath } from "../tools/viewimage.js";
 import { gatherPromptHistory } from "../history.js";
-import { fetchModels, resolveModelQuery, parseModelCommand, type ModelEntry } from "../models.js";
+import { fetchModels, resolveModelQuery, parseModelCommand, suggestVisionModel, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
@@ -1245,7 +1245,10 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     const dataUrl = `data:${shot.mime};base64,${shot.data}`;
     engine.designMode = { url, lastShot: dataUrl };
     engine.addNextUserImage({ source: `design:${url}`, mime: shot.mime, data: shot.data });
-    if (!engine.supportsImageInput()) sysLog("design: note — the active model has no vision input, so it can't see the screenshot; switch to a vision model.");
+    if (!engine.supportsImageInput()) {
+      sysLog("design: note — the active model has no vision input, so it can't see the screenshot.");
+      void suggestVisionModel().then((s) => sysLog(`design: ${s}`));
+    }
     sysLog(`design: on for ${url}. Screenshot attached to your next message; edits to web files will auto-capture before/after.`);
     bridge?.bus.emit({ type: "design.shot", tabId: tab.id, path: "", before: null, after: dataUrl });
   };
@@ -1680,7 +1683,11 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       return;
     }
     if (imagePaths.length) {
-      sysLog(`current model (${tab.engine.modelId}) can't view images — switch to a vision model with /model. Sending as text.`);
+      // Name the cheapest vision model the catalog actually has, rather than a
+      // fixed id that goes stale. Async, so the line lands a beat later — the
+      // message still sends either way.
+      sysLog(`current model (${tab.engine.modelId}) can't view images — sending as text.`);
+      void suggestVisionModel().then((s) => sysLog(s));
     }
     emitToTab(tab, { kind: "user", text: v });
     controller.submitUser(tab, v);

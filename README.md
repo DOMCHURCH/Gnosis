@@ -22,7 +22,7 @@ npx @dominquechurch/gnosis
 ```
 
 [![CI](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@dominquechurch/gnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
+[![npm](https://img.shields.io/npm/v/@dominquechurch%2Fgnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
 
@@ -86,7 +86,7 @@ what the agent was doing instead of scrolling a wall of text and hoping.
   your screen, get a push notification when it needs you
 - **12× cheaper on cached turns** — measured live: $0.0252 → $0.0021 on
   identical tokens via prompt-cache breakpoints
-- **100 automated test suites** — offline, isolated, green on Windows CI every push
+- **101 automated test suites** — offline, isolated, green on Windows CI every push
 
 ![Gnosis model picker](docs/screenshot-model-picker.png)
 *Runtime model switching — the full OpenRouter catalog, in the browser*
@@ -144,7 +144,7 @@ secrets are referenced as `${VAR_NAME}` rather than inlined. Full details in
 
 ## Development
 
-Want to contribute? The codebase is well-tested — 100 suites, all offline and
+Want to contribute? The codebase is well-tested — 101 suites, all offline and
 isolated — and the architecture is documented in
 [CONTRIBUTING.md](CONTRIBUTING.md), along with test conventions and how to add
 a skill.
@@ -155,7 +155,7 @@ cd Gnosis
 npm install
 npm run build
 npm link
-npm run verify      # 100 test suites
+npm run verify      # 101 test suites
 npm run eval        # 10-task eval harness
 ```
 

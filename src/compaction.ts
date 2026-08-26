@@ -1,6 +1,6 @@
-// History compaction. When used tokens exceed 75% of the model's context length,
+// History compaction. When used tokens exceed 60% of the model's context length,
 // summarize the oldest 50% of history into a single note, keep the last 10
-// messages verbatim. That 75% reads the SAME used/window ratio the status-bar
+// messages verbatim. That 60% reads the SAME used/window ratio the status-bar
 // context meter shows, so the bar and compaction never disagree.
 
 import { type Msg, type ToolCall } from "./messages.js";
@@ -8,7 +8,7 @@ import { type Msg, type ToolCall } from "./messages.js";
 const KEEP_VERBATIM = 10;
 
 /** Fraction of the context window at which history is compacted. */
-export const COMPACT_THRESHOLD = 0.75;
+export const COMPACT_THRESHOLD = 0.6;
 
 /** `usedTokens` is the engine's single running estimate (contextTokens) — the
  * same numerator the status-bar meter divides by contextLength. */

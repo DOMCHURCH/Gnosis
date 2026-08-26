@@ -95,8 +95,10 @@ function compactArgs(args: unknown): string {
   }
 }
 const SUBAGENT_MAX_ITER = 15;
-const SUBAGENT_TOKEN_BUDGET = 50_000;
-// Coordinated sub-agents run many-at-once, so each gets a tighter isolated budget.
+const SUBAGENT_TOKEN_BUDGET = 8_000;
+// Coordinated sub-agents run many-at-once, each on its own isolated budget. NOTE
+// that budget is now LARGER than a single sub-agent's, so a coordinated fan-out
+// can spend several times what one delegated search may.
 const COORD_SUBAGENT_MAX_ITER = 8;
 const COORD_SUBAGENT_TOKEN_BUDGET = 15_000;
 // The verifier subagent is deliberately blind to the generator's reasoning: it

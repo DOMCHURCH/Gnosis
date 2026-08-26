@@ -9,6 +9,7 @@ import path from "node:path";
 import type { ImagePart } from "../messages.js";
 import type { ViewImageArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
+import { suggestVisionModel } from "../models.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -74,10 +75,10 @@ export async function loadImage(absPath: string, cwd: string = process.cwd()): P
 
 export async function runViewImage(args: ViewImageArgs, _signal?: AbortSignal, ctx?: ToolContext): Promise<ToolResult> {
   if (!ctx?.imageInput) {
+    // Name the cheapest vision model the live catalog actually offers rather than
+    // a fixed id that goes stale (see models.suggestVisionModel).
     return {
-      output:
-        "view_image: the active model can't view images (its input is text-only). Switch to a vision model with " +
-        "/model, then try again.",
+      output: `view_image: the active model can't view images (its input is text-only). ${await suggestVisionModel()} Then try again.`,
       isError: true,
     };
   }
