@@ -12,7 +12,7 @@ import { App } from "./ui/App.js";
 import { detectCaps, termWidth } from "./ui/terminal.js";
 import { getGhAuth, getRepoInfo } from "./gitinfo.js";
 
-const VERSION = "0.1.0";
+const VERSION = "1.1.0";
 
 const HELP = `Gnosis — terminal coding agent (OpenRouter)
 

@@ -56,7 +56,7 @@ export class McpServer {
         env,
         stderr: "ignore",
       });
-      const client = new Client({ name: "dom", version: "0.1.0" }, { capabilities: {} });
+      const client = new Client({ name: "gnosis", version: "1.1.0" }, { capabilities: {} });
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, "connect timed out");
       const listed = await withTimeout(client.listTools(), CONNECT_TIMEOUT_MS, "listTools timed out");
       this.tools = (listed.tools ?? []).map((t: any) => ({
