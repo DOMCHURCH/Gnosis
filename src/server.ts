@@ -36,6 +36,8 @@ import { panelSummary, clearSessionMemory } from "./sessionmemory.js";
 import { webhooks } from "./webhooks.js";
 import { lanIp, isPrivateIpv4 } from "./netip.js";
 import { loadEnv, loadConfig } from "./config.js";
+import { isScreenshotName } from "./screenshots.js";
+import { screenshotsDir } from "./config.js";
 
 /** Read a request body to a string, capped at maxBytes (excess is drained, not stored). */
 function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {
@@ -293,6 +295,32 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
     }
     return true;
   }
+  // Images tools handed back (MCP screenshots), which live in ~/.dom/screenshots —
+  // outside every session root, so /api/file/raw correctly refuses them. This
+  // serves that ONE directory, by basename only: no tabId, no relative path, and
+  // nothing that could walk out of it. Same token gate as everything else.
+  if (url.pathname === "/api/screenshot") {
+    const name = url.searchParams.get("name") ?? "";
+    if (!isScreenshotName(name)) { sendJson(res, 400, { error: "bad name" }); return true; }
+    const full = path.join(screenshotsDir(), name);
+    try {
+      const stat = await fsp.stat(full);
+      if (!stat.isFile()) { sendJson(res, 404, { error: "not a file" }); return true; }
+      if (stat.size > MAX_RAW_BYTES) { sendJson(res, 413, { error: "too large" }); return true; }
+      const body = await fsp.readFile(full);
+      res.writeHead(200, {
+        "content-type": RAW_MIME[path.extname(full).toLowerCase()] ?? "application/octet-stream",
+        "content-length": String(body.length),
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      });
+      res.end(body);
+    } catch {
+      sendJson(res, 404, { error: "not found" });
+    }
+    return true;
+  }
+
   // Background jobs: the whole live list (pid/port/status/runtime source), and one
   // job's captured output for the "view output" modal. Kill is a WS action, not a
   // GET, so it can't be triggered by a stray navigation.

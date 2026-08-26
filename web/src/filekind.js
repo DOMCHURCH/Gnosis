@@ -58,8 +58,11 @@ export function langOf(p) {
 export function candidatePaths(text) {
   const out = [];
   const seen = new Set();
-  // A path-ish token ending in an extension we know how to render.
-  const re = /[A-Za-z0-9_./\\-]+\.[A-Za-z0-9]{1,5}/g;
+  // A path-ish token ending in an extension we know how to render. The optional
+  // drive prefix matters on Windows: without it a path like C:\\Users\\me\\shot.png
+  // matched from the backslash onward and yielded \\Users\\me\\shot.png — a path that
+  // resolves nowhere, so the artefact silently failed to render.
+  const re = /(?:[A-Za-z]:)?[A-Za-z0-9_./\\-]+\.[A-Za-z0-9]{1,5}/g;
   let m;
   while ((m = re.exec(String(text || ""))) !== null) {
     let p = m[0].replace(/^[.]{1,2}[/\\]/, "");
@@ -89,7 +92,13 @@ export function fileOutputFor(toolName, primary, output) {
     if (!kind) return null;
     return { path, kind, ext: extOf(path), lang: langOf(path), name: path.split(/[\\/]/).pop() || path, verify: false };
   }
-  if (name === "bash") {
+  // An MCP tool names its artefacts in its result text the same way a shell
+  // command does — a screenshot it saved, a file it wrote, a report it generated
+  // — so it gets the same treatment: pull the candidate paths out of the output
+  // and render the first one worth showing. `verify: true` means the renderer
+  // HEAD-checks the file before drawing anything, so a path in prose that is not
+  // really a file costs nothing.
+  if (name === "bash" || name.startsWith("mcp__")) {
     // Prefer the first image: if a command emitted both a chart and a csv, the
     // chart is what someone wants to see.
     const cands = candidatePaths(`${primary || ""} ${output || ""}`);

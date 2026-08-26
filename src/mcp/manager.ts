@@ -8,6 +8,7 @@ import type { ToolDef } from "../tools/index.js";
 import { setMcpToolDefs } from "../tools/index.js";
 import { loadMcpConfig, saveMcpConfig, type McpConfig } from "./config.js";
 import { McpServer, type McpStatus } from "./client.js";
+import { saveScreenshot } from "../screenshots.js";
 
 /** One server's state, as shown in the CONNECTIONS tab. */
 export interface McpConnectionInfo {
@@ -112,8 +113,22 @@ class McpManager {
           // the picture instead of a "[image image/png]" placeholder.
           run: async (args, _signal, ctx) => {
             const r = await server.callTool(tool.name, args);
-            for (const img of r.images) ctx?.attachImage?.(img);
-            return { output: r.output, isError: r.isError };
+            const saved: string[] = [];
+            for (const [i, img] of r.images.entries()) {
+              // The model sees the bytes directly (same channel view_image uses);
+              // the file is what the user opens later and what the browser draws
+              // a thumbnail from.
+              ctx?.attachImage?.(img);
+              const at = new Date();
+              const file = await saveScreenshot(img.data, img.mime, at, r.images.length > 1 ? `-${i + 1}` : "").catch(() => null);
+              if (file) saved.push(file);
+            }
+            // Naming the path in the RESULT TEXT is what carries it downstream:
+            // the TUI prints it, and the browser's fileOutputFor picks it out to
+            // render the thumbnail. No extra event, no second copy of the bytes.
+            const note = saved.length ? saved.map((f) => `screenshot saved ${f}`).join("\n") : "";
+            const output = [r.output, note].filter(Boolean).join("\n");
+            return { output: output || r.output, isError: r.isError };
           },
         };
       }
