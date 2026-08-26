@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { TreeNode, TreeResult, FilePreview } from "./filetypes";
 import { apiGet } from "./api";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -89,7 +90,7 @@ export function TreeList(props: { nodes: TreeNode[]; depth: number; expanded: Re
 function FilePreviewModal(props: { preview: FilePreview; loading: boolean; onClose: () => void; onAttach: () => void }) {
   const { preview } = props;
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40 }}>
+    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#101017", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
           <span style={{ fontSize: 11, letterSpacing: 1, color: "#22D3EE", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview.path}</span>

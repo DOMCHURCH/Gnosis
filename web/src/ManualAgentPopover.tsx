@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FigState, ManualAgent, ZoneId } from "./sessions";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const STATES: FigState[] = ["idle", "thinking", "awaiting", "speaking"];
@@ -29,7 +30,7 @@ export function ManualAgentPopover(props: {
   };
 
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55 }}>
+    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.permission }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(300px, 92vw)", background: "#101017", border: "2px solid #2A2A38", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 11px", borderBottom: "2px solid #2A2A38" }}>
           <span style={{ fontSize: 11, letterSpacing: 2, color: "#C9C9D6" }}>{props.mode === "add" ? "PLACE AGENT" : "EDIT AGENT"}</span>

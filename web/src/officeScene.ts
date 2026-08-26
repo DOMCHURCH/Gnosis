@@ -587,6 +587,11 @@ export function createOfficeScene(container: HTMLElement) {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     labelRenderer.setSize(w, h);
+    // The scene shrinks with the container but its DOM labels (zone names, agent
+    // nameplates) do not, so on a narrow floor they grow into each other until
+    // "01 COORDINATOR" runs into "02 PLANNING". Scale their type with the floor:
+    // full size once there is room for it, never below 70% (unreadable).
+    container.style.setProperty("--floor-label", String(Math.min(1, Math.max(0.7, w / 900))));
   }
   resize();
   const ro = new ResizeObserver(resize);

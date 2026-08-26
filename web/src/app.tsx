@@ -20,12 +20,13 @@ import { TerminalDock } from "./Terminal";
 import { apiGet } from "./api";
 import type { VaultTree } from "./filetypes";
 import type { ConnectionsData, MemoryData } from "./types";
-import { floorFigures, sessionsModel, STATE_COLOR } from "./sessions.js";
+import { floorFigures, sessionsModel, planOfficePlacement, STATE_COLOR } from "./sessions.js";
 import { toolList, toolStats, sparkline } from "./telemetry.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
 import type { FigState, ManualAgent, ZoneId } from "./sessions";
 import { ManualAgentPopover } from "./ManualAgentPopover";
+import { Z } from "./layers";
 
 // Manual agents live only in this browser session: mirrored to localStorage so
 // they survive React churn, but cleared on a real page refresh.
@@ -110,6 +111,10 @@ export function App() {
 
   const activeId = state.selected != null && state.agents[state.selected] ? state.selected : state.order[0] ?? null;
   const model = sessionsModel(state, activeId, selFig, debugRef.current.byFloor, manuals);
+  // The freshest layout, readable from callbacks/effects that must not re-bind on
+  // every manual-agent change (window.gnosisOffice, the office.place handler).
+  const layoutRef = useRef(model.layout);
+  layoutRef.current = model.layout;
 
   // Design-mode before/after panel: dismissable per shot (a new capture reappears).
   const [dismissedShot, setDismissedShot] = useState<string | null>(null);
@@ -127,6 +132,27 @@ export function App() {
     setManuals((ms) => [...ms, { id: `manual:${Date.now()}-${Math.round(Math.random() * 1e6)}`, name, zone, slot, state: figState }]);
   const updateManual = (id: string, patch: Partial<ManualAgent>) => setManuals((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   const removeManual = (id: string) => setManuals((ms) => ms.filter((m) => m.id !== id));
+  // Seat a placement request on whatever desks are free. The bus (and the console
+  // helpers) carry the request unresolved — zone null = every zone, count null =
+  // fill to capacity — because only the floor knows which desks are taken.
+  const placeAgents = (req: { zone: string | null; count: number | null; names: string[]; state: string }) =>
+    setManuals((ms) => [...ms, ...planOfficePlacement(req, layoutRef.current.placed, ms, Date.now())]);
+
+  // The model staffing the floor from chat: the `office` tool emits office.place /
+  // office.clear and the store stamps each with a seq. Drain every request past the
+  // last one applied — a fresh connect replays the ring, so they arrive in bursts
+  // and taking only the newest would silently drop the rest.
+  const officeSeqRef = useRef(0);
+  useEffect(() => {
+    const pending = state.officeQueue.filter((r) => r.seq > officeSeqRef.current);
+    if (!pending.length) return;
+    officeSeqRef.current = pending[pending.length - 1]!.seq;
+    for (const req of pending) {
+      if (req.action === "clear") setManuals([]);
+      else placeAgents(req);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.officeQueue]);
   // Clicking a manual figure edits it; any other figure selects it as before.
   const onSelectFig = (id: string | null) => {
     if (id && id.startsWith("manual:")) { const m = manuals.find((x) => x.id === id); if (m) setManualEditor({ mode: "edit", agent: m }); return; }
@@ -151,6 +177,14 @@ export function App() {
       setFloor: (id: number) => { select(id); setSelFig(null); },
       addFloor: () => send({ type: "agent.create" }),
       floors: () => state.order.map((id) => ({ id, name: state.agents[id]?.name })),
+      // The same placement the `office` tool drives, from the console:
+      //   gnosisOffice.fill()            — every zone to capacity
+      //   gnosisOffice.fill("coding")    — one zone to capacity
+      //   gnosisOffice.place("coding", 5, { names: [...], state: "thinking" })
+      place: (zone?: string | null, count?: number | null, opts?: { names?: string[]; state?: string }) =>
+        placeAgents({ zone: zone ?? null, count: count ?? null, names: opts?.names ?? [], state: opts?.state ?? "mixed" }),
+      fill: (zone?: string | null) => placeAgents({ zone: zone ?? null, count: null, names: [], state: "mixed" }),
+      clearFloor: () => setManuals([]),
       onUserMessage: (cb: any) => { debugRef.current.userCb = cb; },
       onApproval: (cb: any) => { debugRef.current.approvalCb = cb; },
     };
@@ -319,6 +353,9 @@ ${text}` });
   const publicTokenUrl = publicBase ? `${publicBase.replace(/\/$/, "")}/?token=${token()}` : null;
   const lanTokenUrl = serveInfo?.lan ? `${serveInfo.lan.replace(/\/$/, "")}/?token=${token()}` : null;
   const [serveMenu, setServeMenu] = useState(false);
+  // The terminal dock's open state lives here so its toggle can sit in the chrome
+  // band with FLOOR/KANBAN/SERVE instead of floating over the page's bottom-left.
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [qr, setQr] = useState<{ title: string; codes: QrCode[] } | null>(null);
   // Every reachable URL, in one list. LOCAL and LAN are both always available (LAN
   // needs no flag — the token is the gate); PUBLIC appears only with a live tunnel.
@@ -328,18 +365,19 @@ ${text}` });
     ...(publicTokenUrl ? [{ title: "PUBLIC · tunnel", url: publicTokenUrl, color: "#4ADE80" }] : []),
   ];
   const chip = (label: string, active: boolean, onClick: () => void, leftEdge: boolean) => (
-    <button type="button" onClick={onClick} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: active ? "#1D1D27" : "#101017", color: active ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: leftEdge ? "2px solid #2A2A38" : 0 }}>{label}</button>
+    <button type="button" data-testid={`chip-${label.replace(/[^A-Za-z]/g, "").toLowerCase()}`} onClick={onClick} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: active ? "#1D1D27" : "#101017", color: active ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: leftEdge ? "2px solid #2A2A38" : 0 }}>{label}</button>
   );
   const qrItem = (label: string, color: string, codes: QrCode[], title: string, last: boolean) => (
     <button type="button" onClick={() => { setQr({ title, codes }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color, border: 0, borderBottom: last ? 0 : "1px solid #2A2A38" }}>{label}</button>
   );
 
   const viewToggle = (
-    <div style={{ position: "fixed", top: 10, right: 14, zIndex: 70, display: "flex", flexDirection: "column", alignItems: "flex-end", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+    <div data-testid="view-toggle" style={{ position: "fixed", top: 10, right: 14, zIndex: Z.chrome, display: "flex", flexDirection: "column", alignItems: "flex-end", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
       <div style={{ display: "flex" }}>
         {chip("FLOOR", view === "floor", () => setView("floor"), true)}
         {chip("KANBAN", view === "kanban", () => setView("kanban"), false)}
         {chip("◆ SERVE", serveMenu, () => setServeMenu((o) => !o), false)}
+        {view === "floor" && !isMobile && chip("▸_ TERMINAL", terminalOpen, () => setTerminalOpen((o) => !o), false)}
       </div>
       {serveMenu && (
         <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", minWidth: 132 }}>
@@ -447,7 +485,7 @@ ${text}` });
           onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })}
         />
       )}
-      {!isMobile && <TerminalDock tabId={activeId} />}
+      {!isMobile && <TerminalDock tabId={activeId} open={terminalOpen} onClose={() => setTerminalOpen(false)} />}
     </>
   );
 }

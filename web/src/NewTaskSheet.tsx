@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Z } from "./layers";
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
@@ -43,7 +44,7 @@ export function NewTaskSheet(props: {
   return (
     // Above the app's view switcher (z 70): a full-screen sheet that something
     // else draws on top of is not full-screen.
-    <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "#0D0D12", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: Z.overlay, background: "#0D0D12", display: "flex", flexDirection: "column", fontFamily: MONO }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 14px 10px", borderBottom: "2px solid #2A2A38" }}>
         <span style={{ fontSize: 12, letterSpacing: 2, color: "#C9C9D6" }}>NEW TASK</span>
         <button

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -31,7 +32,7 @@ export function VaultSaveModal(props: {
   const input = { fontFamily: MONO, fontSize: 12, background: "#0D0D12", color: "#C9C9D6", border: "1px solid #2A2A38", padding: "7px 9px", width: "100%", boxSizing: "border-box" as const };
 
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 92vw)", background: "#101017", border: "2px solid #2A2A38", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
           <span style={{ fontSize: 11, letterSpacing: 2, color: "#A78BFA" }}>SAVE TO VAULT</span>

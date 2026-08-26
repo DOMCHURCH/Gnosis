@@ -59,7 +59,10 @@ const MAX_FIX_ITERATIONS = 3;
 // model can't write, run shell commands, hand work to other tabs, or track
 // execution — it can only read/search/fetch to research, then produce a written
 // plan. Leaves {read, glob, grep, http}.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle", "memory"]);
+// Plan mode is for reading and proposing, so everything that acts is excluded —
+// `office` included: staffing the floor is a change to what the user sees, not part
+// of planning.
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle", "memory", "office"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
@@ -1009,6 +1012,15 @@ export class Engine {
         this.pendingImages.push(img);
       },
       oracle: (q, sig) => this.runOracle(q, sig),
+      // The office floor lives in the browser, so the tool is only wired when
+      // something is listening to the bus (i.e. `dom serve` is up).
+      office: this.bus
+        ? {
+            place: (zone, count, names, state) =>
+              this.bus!.emit({ type: "office.place", tabId: this.agentId, zone, count, names, state }),
+            clear: () => this.bus!.emit({ type: "office.clear", tabId: this.agentId }),
+          }
+        : undefined,
       // Sub-agents get no askUser: they run unattended inside someone else's turn,
       // so a question from one would stall a turn the user isn't even watching.
       askUser: this.isSubAgent ? undefined : this.askUserFn,

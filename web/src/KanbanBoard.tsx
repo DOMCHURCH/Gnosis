@@ -4,6 +4,7 @@ import type { KanbanColumn } from "./kanban";
 import { COLUMNS, COLUMN_LABEL, COLUMN_COLOR, boardColumns, lastAssistant } from "./kanban.js";
 import { floorFigures } from "./sessions.js";
 import { elapsedLabel } from "./telemetry.js";
+import { GUTTER } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -36,7 +37,9 @@ export function KanbanBoard(props: {
   const drop = (col: KanbanColumn) => { if (dragId != null) props.onMove(dragId, col); setDragId(null); setOver(null); };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box" }}>
+    // Same top gutter as the floor view: the fixed view/serve toggle gets its own
+    // band instead of landing on the board's header.
+    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px 24px`, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, borderBottom: "2px solid #2A2A38", paddingBottom: 12, marginBottom: 16 }}>
         <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
         <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2 }}>KANBAN · {state.order.length} SESSIONS</span>

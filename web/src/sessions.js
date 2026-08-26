@@ -388,3 +388,60 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals
     tokenBar: tokenBar(tab ? tab.tokens : 0, tab ? tab.contextLimit : 0),
   };
 }
+
+// --- office.place: the model staffing the floor from chat ---------------------
+
+/** The states a "mixed" placement rotates through, in order. */
+export const PLACEMENT_STATES = ["thinking", "speaking", "idle", "awaiting"];
+
+/**
+ * Resolve an office.place request (the `office` tool, or window.gnosisOffice.fill)
+ * against the desks that are actually free, and return the manual agents to add.
+ *
+ * The bus carries the REQUEST, not the seating: `zone: null` means every zone in
+ * ZONES order and `count: null` means fill to capacity, because only the browser
+ * knows which desks real figures already hold. A desk is free when neither a placed
+ * figure nor an existing manual sits on it — which also keeps every new manual past
+ * the real figures' slots, so layoutFloor never has to take one over.
+ *
+ * Pure: `seed` supplies the id prefix so the caller owns the clock.
+ */
+export function planOfficePlacement(req, placed, manuals, seed) {
+  const taken = {};
+  ZONES.forEach((z) => { taken[z.id] = new Set(); });
+  for (const p of placed || []) if (taken[p.zone]) taken[p.zone].add(p.slot);
+  for (const m of manuals || []) if (taken[m.zone]) taken[m.zone].add(m.slot);
+
+  const zones = req.zone && ZONE_BY_ID[req.zone] ? [ZONE_BY_ID[req.zone]] : ZONES;
+  const free = [];
+  for (const z of zones) for (let i = 0; i < z.slots.length; i++) if (!taken[z.id].has(i)) free.push({ zone: z.id, slot: i });
+
+  const want = req.count == null ? free.length : Math.max(0, Math.min(req.count, free.length));
+  const names = req.names || [];
+  const fixed = PLACEMENT_STATES.indexOf(req.state) !== -1 ? req.state : null;
+  return free.slice(0, want).map((d, i) => ({
+    id: `manual:${seed}-${i}`,
+    name: String(names[i] || "").trim() || `${d.zone}-${d.slot + 1}`,
+    zone: d.zone,
+    slot: d.slot,
+    state: fixed || PLACEMENT_STATES[i % PLACEMENT_STATES.length],
+  }));
+}
+
+/** Queue depth for office placement requests: enough to replay a reconnect's
+ * buffered burst, bounded so a long session can't accumulate them. */
+export const OFFICE_QUEUE_MAX = 20;
+
+/**
+ * Append an office placement request to the queue with the next seq.
+ *
+ * A queue rather than a "latest request" slot because a fresh connect replays the
+ * server's whole event ring: several office.place events land back-to-back, and a
+ * client that kept only the newest would silently drop every earlier one. The seq
+ * is what lets the consumer drain exactly the requests it has not seated yet.
+ */
+export function pushOfficeRequest(queue, req) {
+  const q = queue || [];
+  const seq = (q.length ? q[q.length - 1].seq : 0) + 1;
+  return [...q, { ...req, seq }].slice(-OFFICE_QUEUE_MAX);
+}

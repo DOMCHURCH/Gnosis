@@ -200,6 +200,37 @@ export const memorySchema = z.object({
     .describe("For action=add: the fact to remember (one durable insight — a convention, gotcha, or decision)."),
 });
 
+export const officeSchema = z.object({
+  action: z
+    .enum(["add", "fill", "clear"])
+    .describe(
+      "add: place `count` agents in one zone; fill: fill a zone (or the whole office when no zone is given) to " +
+        "capacity; clear: remove every manually-placed agent from the floor.",
+    ),
+  zone: z
+    .enum(["coordinator", "planning", "application", "coding", "subagents"])
+    .optional()
+    .describe(
+      "Which room to place them in: coordinator (1 desk), planning (2), application (2), coding (8), subagents (6). " +
+        "Omit with action=fill to fill every zone; omit with action=add to spread them across the free desks.",
+    ),
+  count: z.number().int().positive().optional().describe("For action=add: how many agents to place (default 1)."),
+  names: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Names for the agents, in placement order. Make them read like real teammates on that floor " +
+        '(e.g. "refactor-bot", "test-runner"). Any desk past the end of this list gets an auto-generated name.',
+    ),
+  state: z
+    .enum(["thinking", "awaiting", "speaking", "idle", "mixed"])
+    .optional()
+    .describe(
+      "The state each figure shows: thinking (working), awaiting (blocked on you), speaking (just replied), idle, " +
+        "or mixed (default) to vary them across the placed agents.",
+    ),
+});
+
 export type ReadArgs = z.infer<typeof readSchema>;
 export type WriteArgs = z.infer<typeof writeSchema>;
 export type EditArgs = z.infer<typeof editSchema>;
@@ -216,6 +247,7 @@ export type ViewImageArgs = z.infer<typeof viewImageSchema>;
 export type WebSearchArgs = z.infer<typeof webSearchSchema>;
 export type OracleArgs = z.infer<typeof oracleSchema>;
 export type MemoryArgs = z.infer<typeof memorySchema>;
+export type OfficeArgs = z.infer<typeof officeSchema>;
 
 export interface ToolJsonSchema {
   type: "object";

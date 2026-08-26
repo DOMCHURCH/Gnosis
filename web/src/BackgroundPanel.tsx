@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientMessage, JobInfo } from "./types";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -72,14 +73,14 @@ export function BackgroundPanel(props: { jobEpoch: number; send: (m: ClientMessa
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} title="show background jobs"
-        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", background: "#101017", color: running ? "#4ADE80" : "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
+        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", position: "relative", zIndex: Z.panel, background: "#101017", color: running ? "#4ADE80" : "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
         ◂ JOBS{running ? ` ${running}` : ""}
       </button>
     );
   }
 
   return (
-    <div style={{ flex: "0 0 244px", width: 244, alignSelf: "stretch", minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+    <div data-testid="right-panel" style={{ flex: "0 0 244px", width: 244, alignSelf: "stretch", position: "relative", zIndex: Z.panel, minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>JOBS{running ? ` · ${running} RUNNING` : ""}</span>
         <div style={{ display: "flex", gap: 8 }}>
@@ -126,7 +127,7 @@ function JobRow(props: { job: JobInfo; now: number; onView: () => void; onKill: 
 
 function OutputModal(props: { id: string; output: string; loading: boolean; onClose: () => void }) {
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40 }}>
+    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#101017", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
           <span style={{ fontSize: 11, letterSpacing: 1, color: "#4ADE80" }}>job {props.id} · output</span>

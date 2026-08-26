@@ -2,6 +2,7 @@ import type { FloorLayout, ZoneId } from "./sessions";
 import { ZONE_DEPTH } from "./sessions.js";
 import type { TaskPlan } from "./taskplan";
 import { TaskPlanView } from "./TaskPlanView";
+import { Z } from "./layers";
 
 /**
  * The office-floor SVG (desks, agents, zones) plus its absolutely-positioned label
@@ -262,7 +263,7 @@ export function FloorGraphic(props: {
         ))}
         {/* Coordinated-task plan floating above the coordinator desk (zone 01). */}
         {props.plan && (
-          <div style={{ position: "absolute", left: "2.8%", top: "1.5%", pointerEvents: "auto", zIndex: 4 }}>
+          <div style={{ position: "absolute", left: "2.8%", top: "1.5%", pointerEvents: "auto", zIndex: Z.floorCard }}>
             <TaskPlanView plan={props.plan} compact />
           </div>
         )}

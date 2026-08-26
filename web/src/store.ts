@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { Agent, ClientMessage, DomEvent, GoalReview, GoalState, MessageLink, OverlayState, PermissionRequest, SubAgent, TranscriptItem } from "./types";
 import { resolveApproval } from "./chatgroups.js";
 import { foldTelemetry } from "./telemetry.js";
+import { pushOfficeRequest } from "./sessions.js";
 import type { Telemetry } from "./telemetry";
 import { planFromEvent, foldPlan } from "./taskplan.js";
 import type { TaskPlan } from "./taskplan";
@@ -67,9 +68,29 @@ export interface State {
   webhookEpoch: number;
   /** The public tunnel URL (base, no token) when `/serve --public` is up, else null. */
   publicUrl: string | null;
+  /** Office-floor placement requests from the model (the `office` tool), each
+   * stamped with a monotonic seq so App applies it exactly once. A QUEUE, not a
+   * single latest: a fresh connect replays the whole event ring, so several
+   * requests can land back-to-back and every one of them has to be seated. The
+   * requests are deliberately unresolved — only the floor knows which desks are
+   * free. Capped, since a long session must not accumulate them forever. */
+  officeQueue: OfficeRequest[];
   /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
    * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
   streamEdits: Record<number, StreamEdit | null>;
+}
+
+/** An office.place / office.clear request, as App consumes it. */
+export interface OfficeRequest {
+  seq: number;
+  action: "place" | "clear";
+  /** null = every zone. */
+  zone: string | null;
+  /** null = fill to capacity. */
+  count: number | null;
+  names: string[];
+  /** thinking | awaiting | speaking | idle | mixed. */
+  state: string;
 }
 
 /** An in-flight (or just-committed) streaming edit, driving the live diff viewer. */
@@ -114,7 +135,7 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {} };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {}, officeQueue: [] };
 
 /** Fold a tabId-bearing event into that tab's telemetry record. */
 function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
@@ -357,6 +378,10 @@ export function reducer(state: State, action: Action): State {
       return { ...state, overlay: { id: action.id, tabId: action.tabId, kind: action.kind, title: action.title, items: action.items, selected: action.selected } };
     case "overlay.resolved":
       return state.overlay?.id === action.id ? { ...state, overlay: null } : state;
+    case "office.place":
+      return { ...state, officeQueue: pushOfficeRequest<Omit<OfficeRequest, "seq">>(state.officeQueue, { action: "place", zone: action.zone, count: action.count, names: action.names, state: action.state }) };
+    case "office.clear":
+      return { ...state, officeQueue: pushOfficeRequest<Omit<OfficeRequest, "seq">>(state.officeQueue, { action: "clear", zone: null, count: null, names: [], state: "idle" }) };
     case "vault.changed":
       return { ...state, vaultEpoch: state.vaultEpoch + 1 };
     case "connections.changed":

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import hljs from "highlight.js/lib/common";
 import type { FileOutput as FileOut } from "./filekind";
 import { parseCsv } from "./filekind.js";
+import { Z } from "./layers";
 
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 /** Code preview cap. Past this the block collapses behind "show full file". */
@@ -122,7 +123,7 @@ export function FileOutputView(props: {
         {lightbox && (
           <div
             onClick={() => setLightbox(false)}
-            style={{ position: "fixed", inset: 0, background: "#0D0D12EE", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, cursor: "zoom-out" }}
+            style={{ position: "fixed", inset: 0, background: "#0D0D12EE", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay, cursor: "zoom-out" }}
           >
             <img src={src} alt={out.name} style={{ maxWidth: "92vw", maxHeight: "92vh", border: "1px solid #2A2A38" }} />
           </div>

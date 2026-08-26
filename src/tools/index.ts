@@ -13,6 +13,7 @@ import {
   sendMessageSchema,
   oracleSchema,
   memorySchema,
+  officeSchema,
   taskSchema,
   todoSchema,
   viewImageSchema,
@@ -35,6 +36,7 @@ import { runViewImage } from "./viewimage.js";
 import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
 import { runMemory } from "./memory.js";
+import { runOffice } from "./office.js";
 import { runAskUser } from "./askuser.js";
 
 /** Progressive-write channel for the edit tool. Set by the engine (after the
@@ -110,6 +112,15 @@ export interface AskUserAnswer {
  * answer wins) and resolves with their reply. */
 export type AskUserRunner = (question: string, options: string[], signal?: AbortSignal) => Promise<AskUserAnswer>;
 
+/** The web office floor, as the `office` tool sees it. Both calls are emit-and-
+ * forget onto the event bus: the browser owns the desk layout, so it resolves
+ * `zone: null` (every zone) and `count: null` (fill to capacity) against the desks
+ * it actually has free. Absent when no bus is attached (headless / no `dom serve`). */
+export interface OfficeFloor {
+  place(zone: string | null, count: number | null, names: string[], state: string): void;
+  clear(): void;
+}
+
 /** Per-turn context passed to tool.run. Carries the working directory paths are
  * resolved against (each engine owns its own — tabs and sub-agents pass theirs);
  * the multi-tab tools use `tab`; the `task` tool uses `subagent`; the `todo` tool
@@ -138,6 +149,10 @@ export interface ToolContext {
   /** Set (post-approval) when a large edit should stream its write line-by-line.
    * Absent → the edit tool writes atomically (small edits, headless, sub-agents). */
   editStream?: EditStream;
+  /** Place decorative agents on the `dom serve` office floor (`office`). Absent
+   * when nothing is listening to the bus — the tool then says so rather than
+   * reporting a placement nobody can see. */
+  office?: OfficeFloor;
   /** Put one question to the user and wait for the answer (`ask_user`). Absent
    * where there is nobody to ask — headless runs and sub-agents — and the tool
    * refuses rather than blocking. */
@@ -312,6 +327,21 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: memorySchema,
     mutating: false,
     run: runMemory,
+  },
+  office: {
+    name: "office",
+    description:
+      "Place agents on the office floor the browser UI draws (`dom serve`): five zones — coordinator (1 desk), " +
+      "planning (2), application (2), coding (8), sub-agents (6). Call it the moment the user asks to add, place, " +
+      "or fill agents on the floor (\"add 5 agents to the coding floor\", \"fill the office\", \"clear the floor\") — " +
+      "they appear immediately, so do it instead of explaining how. action=add places `count` agents in `zone`; " +
+      "action=fill fills a zone (or the whole office) to capacity; action=clear empties it. Pass names that read " +
+      "like teammates. These figures are decoration — they have no session and run nothing — so never use them " +
+      "for real work and never create real tabs to satisfy this request.",
+    schema: officeSchema,
+    // Changes nothing on disk — only what the browser draws — so no permission gate.
+    mutating: false,
+    run: runOffice,
   },
 };
 

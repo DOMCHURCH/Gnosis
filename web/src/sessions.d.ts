@@ -121,6 +121,14 @@ export function minimapViewport(scrollLeft: number, clientWidth: number, scrollW
 export function centerScrollLeft(cxFloor: number, clientWidth: number, scrollWidth: number): number;
 export function tokenBar(tokens: number, limit: number): TokenBar;
 
+/** One office.place request as it reaches the browser: `zone: null` = every zone,
+ * `count: null` = fill to capacity, `state: "mixed"` = rotate through the states. */
+export interface PlacementRequest { zone: ZoneId | string | null; count: number | null; names: string[]; state: string }
+export const PLACEMENT_STATES: FigState[];
+export const OFFICE_QUEUE_MAX: number;
+export function pushOfficeRequest<T extends object>(queue: (T & { seq: number })[], req: T): (T & { seq: number })[];
+export function planOfficePlacement(req: PlacementRequest, placed: Placed[], manuals: ManualAgent[], seed: number | string): ManualAgent[];
+
 export function figureState(tab: { awaitingPermission?: boolean; busy?: boolean; speaking?: boolean }): FigState;
 export function zoneForTab(tab: { mode?: string }, ctx: { ownsSub?: boolean }): ZoneId;
 export function floorFigures(state: any, tabId: number): Figure[];

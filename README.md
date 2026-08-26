@@ -33,7 +33,8 @@ npx @dominquechurch/gnosis
 *Five lit rooms — coordinator, planning, coding, application, sub-agents.
 Every agent, background job, and sub-agent is a figure at a desk, and the room
 lights up when work lands there. Orbit it, zoom it, click a desk to read the
-session.*
+session. The floor above was staffed by typing "fill the office" into the chat
+rail on the right — ask for agents and they walk in.*
 
 **(GIF coming soon — run it yourself to see it live.)**
 
@@ -66,7 +67,8 @@ what the agent was doing instead of scrolling a wall of text and hoping.
 - **Any model via OpenRouter, switched at runtime** — `/model` mid-session, no
   restart, conversation history carries over intact
 - **A 3D office floor** — a Three.js scene of five lit rooms you can orbit,
-  showing every agent and sub-agent working in real time
+  showing every agent and sub-agent working in real time. Staff it from the chat:
+  "add 5 agents to the coding floor", "fill the office", "clear the floor"
 - **MCP client** — connect Context7, Playwright, Chrome DevTools, or any MCP server
 - **Obsidian vault memory** — browse your vault and auto-save by intent into
   `Code/`, `Decisions/`, and `Research/`
@@ -84,7 +86,7 @@ what the agent was doing instead of scrolling a wall of text and hoping.
   your screen, get a push notification when it needs you
 - **12× cheaper on cached turns** — measured live: $0.0252 → $0.0021 on
   identical tokens via prompt-cache breakpoints
-- **99 automated test suites** — offline, isolated, green on Windows CI every push
+- **100 automated test suites** — offline, isolated, green on Windows CI every push
 
 ![Gnosis model picker](docs/screenshot-model-picker.png)
 *Runtime model switching — the full OpenRouter catalog, in the browser*
@@ -142,7 +144,7 @@ secrets are referenced as `${VAR_NAME}` rather than inlined. Full details in
 
 ## Development
 
-Want to contribute? The codebase is well-tested — 99 suites, all offline and
+Want to contribute? The codebase is well-tested — 100 suites, all offline and
 isolated — and the architecture is documented in
 [CONTRIBUTING.md](CONTRIBUTING.md), along with test conventions and how to add
 a skill.
@@ -153,7 +155,7 @@ cd Gnosis
 npm install
 npm run build
 npm link
-npm run verify      # 99 test suites
+npm run verify      # 100 test suites
 npm run eval        # 10-task eval harness
 ```
 

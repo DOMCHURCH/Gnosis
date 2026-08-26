@@ -5,6 +5,7 @@ import { FilesBody } from "./FileBrowser";
 import { ObsidianBody } from "./ObsidianPanel";
 import { ConnectionsBody } from "./ConnectionsPanel";
 import { WebhooksBody } from "./WebhooksPanel";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -38,8 +39,8 @@ export function LeftPanel(props: {
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} title="show panel"
-        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", background: "#101017", color: "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
+      <button type="button" data-testid="left-panel" onClick={() => setOpen(true)} title="show panel"
+        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", position: "relative", zIndex: Z.panel, background: "#101017", color: "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
         {active.toUpperCase()} ▸
       </button>
     );
@@ -56,15 +57,17 @@ export function LeftPanel(props: {
   const [webhookBump, setWebhookBump] = useState(0);
 
   return (
-    <div style={{ flex: "0 0 232px", width: 232, alignSelf: "stretch", minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: "2px solid #2A2A38" }}>
-        <div style={{ display: "flex", gap: 12 }}>
+    <div data-testid="left-panel" style={{ flex: "0 0 232px", width: 232, alignSelf: "stretch", position: "relative", zIndex: Z.panel, minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Four tab labels are wider than 232px, so the row WRAPS. Without this the
+          buttons overflow the panel and are drawn across the session selector. */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, padding: "8px 12px", borderBottom: "2px solid #2A2A38" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, minWidth: 0, flex: "1 1 auto" }}>
           {tabBtn("files", "FILES", "#22D3EE")}
           {hasVault && tabBtn("obsidian", "OBSIDIAN", "#A78BFA")}
           {tabBtn("connections", "CONNECTIONS", "#EC4899")}
           {tabBtn("webhooks", "WEBHOOKS", "#4ADE80")}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
           <button type="button" onClick={refresh} title="refresh" style={{ fontFamily: MONO, fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>↻</button>
           <button type="button" onClick={() => setOpen(false)} title="hide" style={{ fontFamily: MONO, fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>◂</button>
         </div>

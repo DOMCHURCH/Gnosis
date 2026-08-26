@@ -1,6 +1,7 @@
 import { useState, type RefObject } from "react";
 import type { FloorLayout, ZoneId } from "./sessions";
 import { MINIMAP_W, MINIMAP_H, minimapModel, minimapViewport, centerScrollLeft } from "./sessions.js";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -10,6 +11,11 @@ const MONO = "'JetBrains Mono', ui-monospace, monospace";
  * bright when it holds agents — so all five stay visible even when the floor is
  * zoomed past the viewport. A white outline marks what is currently on screen, and
  * clicking a square scrolls the floor to centre that zone.
+ *
+ * It opens itself only when the floor actually scrolls (zoomed in, or too narrow to
+ * fit). At FIT the whole floor is already on screen, so a map of it would be a panel
+ * sitting on top of the desks it is describing — it stays a 26px icon until either
+ * the floor scrolls or the user opens it, and an explicit choice then sticks.
  *
  * `scrollRef` is the horizontally-scrolling wrapper around the floor SVG; the
  * viewport outline and the click-to-centre scroll both read/write it directly (it
@@ -24,12 +30,16 @@ export function FloorMinimap(props: {
   /** Phones start collapsed to a single icon — the floor is small enough already. */
   mobile?: boolean;
 }) {
-  const [open, setOpen] = useState(!props.mobile);
+  // null = follow the floor; true/false = the user said so, and that sticks.
+  const [open, setOpen] = useState<boolean | null>(null);
   const cells = minimapModel(props.L);
   const el = props.scrollRef.current;
   // props.epoch is read purely to re-run this on scroll/zoom.
   void props.epoch;
+  // Non-null only while the floor is scrollable — which is exactly when a map of
+  // it is worth the space it takes over the desks.
   const view = el ? minimapViewport(el.scrollLeft, el.clientWidth, el.scrollWidth) : null;
+  const isOpen = open ?? (!props.mobile && !!view);
 
   const goto = (cx: number) => {
     const node = props.scrollRef.current;
@@ -37,15 +47,15 @@ export function FloorMinimap(props: {
     node.scrollTo({ left: centerScrollLeft(cx, node.clientWidth, node.scrollWidth), behavior: "smooth" });
   };
 
-  if (!open) {
+  if (!isOpen) {
     return (
       <button type="button" title="show the floor minimap" onClick={() => setOpen(true)}
-        style={{ position: "absolute", left: 8, bottom: 14, zIndex: 3, fontFamily: MONO, fontSize: 12, lineHeight: 1, width: 26, height: 26, background: "#15151C", color: "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer" }}>◫</button>
+        style={{ position: "absolute", left: 8, bottom: 14, zIndex: Z.floorMinimap, fontFamily: MONO, fontSize: 12, lineHeight: 1, width: 26, height: 26, background: "#15151C", color: "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer" }}>◫</button>
     );
   }
 
   return (
-    <div style={{ position: "absolute", left: 8, bottom: 14, zIndex: 3, background: "#15151C", border: "2px solid #2A2A38", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "absolute", left: 8, bottom: 14, zIndex: Z.floorMinimap, background: "#15151C", border: "2px solid #2A2A38", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px", borderBottom: "2px solid #2A2A38" }}>
         <span style={{ fontSize: 8, letterSpacing: 1, color: "#6B6B7B" }}>MAP</span>
         {/* Dismissible everywhere: the panel sits over the bottom-left desks, so the

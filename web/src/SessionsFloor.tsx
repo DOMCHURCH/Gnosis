@@ -16,6 +16,7 @@ import { FileOutputView } from "./FileOutput";
 import type { FileOutput } from "./filekind";
 import { messageStyle } from "./chatgroups.js";
 import { centerScrollLeft } from "./sessions.js";
+import { Z, GUTTER } from "./layers";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; fileOutput?: FileOutput | null; autoSaved?: string; askId?: string; options?: string[]; answered?: string; verdict?: "pass" | "fail" | "unknown"; confidence?: number; }
 export interface SelDetail {
@@ -274,7 +275,7 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         {/* bottom navigation */}
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: 40, display: "flex", background: "#15151C", borderTop: "2px solid #2A2A38" }}>
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: Z.dock, display: "flex", background: "#15151C", borderTop: "2px solid #2A2A38" }}>
           {nav.map(([id, icon, label]) => {
             const active = mobileTab === id;
             return (
@@ -296,7 +297,7 @@ export function SessionsFloor(props: SessionsProps) {
 
         {/* agent detail bottom sheet (tap an agent on the FLOOR tab) */}
         {sel && (
-          <div onClick={props.onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "flex-end" }}>
+          <div onClick={props.onClose} style={{ position: "fixed", inset: 0, zIndex: Z.overlay, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "flex-end" }}>
             <div className="dom-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "72vh", overflow: "auto", background: "#0D0D12", borderTop: "2px solid #2A2A38", display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}><div style={{ width: 40, height: 4, background: "#2A2A38" }} /></div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 14px 10px" }}>
@@ -319,7 +320,7 @@ export function SessionsFloor(props: SessionsProps) {
 
         {/* permission prompt as a bottom sheet (not a modal) */}
         {pendingPerm && (
-          <div style={{ position: "fixed", inset: 0, zIndex: 55, background: "rgba(5,5,8,0.7)", display: "flex", alignItems: "flex-end" }}>
+          <div style={{ position: "fixed", inset: 0, zIndex: Z.permission, background: "rgba(5,5,8,0.7)", display: "flex", alignItems: "flex-end" }}>
             <div className="dom-sheet" style={{ width: "100%", background: "#0D0D12", borderTop: "2px solid #FBBF24", display: "flex", flexDirection: "column", padding: 14, gap: 12 }}>
               <div style={{ fontSize: 10, letterSpacing: 2, color: "#FBBF24" }}>APPROVAL NEEDED</div>
               <div style={{ fontSize: 12, lineHeight: 1.5, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 10, maxHeight: "40vh", overflow: "auto", whiteSpace: "pre-wrap" }}>
@@ -337,10 +338,13 @@ export function SessionsFloor(props: SessionsProps) {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: 24, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
+    // The page reserves a band at the top for the fixed view/serve toggle and one
+    // at the bottom for the TERMINAL / FILES / JOBS buttons, so none of that fixed
+    // chrome is ever drawn on top of the header, the floor, or the chat.
+    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px calc(${GUTTER.bottom}px + var(--dom-dock-h, 0px))`, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 1560, display: "flex", flexDirection: "column", gap: 16 }}>
         {/* header */}
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2A2A38", paddingBottom: 12, flexWrap: "wrap" }}>
+        <div data-testid="page-header" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2A2A38", paddingBottom: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
             <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
             <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2, whiteSpace: "nowrap" }}>TERMINAL SESSIONS · ONE FLOOR EACH</span>
@@ -357,7 +361,7 @@ export function SessionsFloor(props: SessionsProps) {
           {!narrow && props.leftPanel}
           <div style={{ flex: "1 1 640px", minWidth: 0, display: mobile ? "none" : "flex", gap: 16, alignItems: "stretch" }}>
             {/* left rail — session selector (becomes a bottom tab bar on mobile) */}
-            <div style={{ flex: "0 0 64px", width: 64, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div data-testid="session-selector" style={{ flex: "0 0 64px", width: 64, position: "relative", zIndex: Z.sessionSelector, display: "flex", flexDirection: "column", gap: 8 }}>
               {model.floorTabs.map((f) => (
                 <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} title={f.name} style={{ fontFamily: "inherit", width: 64, height: 62, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderLeft: `5px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: "0 3px", overflow: "hidden" }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1.15, textAlign: "center", wordBreak: "break-word", overflow: "hidden", maxHeight: 34 }}>{f.label || f.num}</span>
@@ -370,7 +374,7 @@ export function SessionsFloor(props: SessionsProps) {
 
             {/* center column */}
             <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div data-testid="session-title" style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {model.sessionNum && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "#4A4A58", whiteSpace: "nowrap" }}>{model.sessionNum}</span>}
                 <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "60%" }}>{model.sessionTitle}</span>
                 <span style={{ fontSize: 13, color: "#6B6B7B", letterSpacing: 1, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTask}</span>
@@ -380,8 +384,8 @@ export function SessionsFloor(props: SessionsProps) {
               {narrow && !floorOpen && (
                 <ZoneStrip zones={L.zoneLabels} onExpand={() => setFloorOpen(true)} />
               )}
-              <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div data-testid="floor-container" style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, position: "relative", zIndex: Z.floor, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
+                <div data-testid="floor-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>
                     {/* Live system state at a glance: green = idle, cyan = working,
                         amber = blocked on an approval. Replaces the static LIVE tag. */}
@@ -405,7 +409,7 @@ export function SessionsFloor(props: SessionsProps) {
                   {/* A 2px context meter across the very top of the floor: cumulative
                       session tokens against the model's context limit. */}
                   {model.tokenBar.known && (
-                    <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, zIndex: 2, background: "#101017" }}>
+                    <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, zIndex: Z.floorMeter, background: "#101017" }}>
                       <div style={{ width: `${model.tokenBar.pct}%`, height: "100%", background: model.tokenBar.color }} />
                     </div>
                   )}
@@ -472,7 +476,7 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2A2A38", paddingTop: 10 }}>
-          <span>window.gnosisOffice · add · update · think · remove · list · say · setFloor · addFloor · onUserMessage · onApproval</span>
+          <span>window.gnosisOffice · place · fill · clearFloor · add · update · think · remove · list · say · setFloor · addFloor</span>
           <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
         </div>
 
@@ -480,10 +484,10 @@ export function SessionsFloor(props: SessionsProps) {
 
         {/* Detached chat: a floating, draggable, resizable panel. Snap back with ⊟. */}
         {floating && (
-          <div style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: 60, background: "#15151C", border: "2px solid #2A2A38", boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
+          <div style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: Z.float, background: "#15151C", border: "2px solid #2A2A38", boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
             <ChatPanel {...props} detached canDetach onToggleDetach={snapBack} onHeaderMouseDown={startFloatDrag} />
             {EDGES.map((edge) => (
-              <div key={edge} onMouseDown={startFloatResize(edge)} style={{ position: "absolute", cursor: RESIZE_CURSOR[edge], zIndex: 2, ...RESIZE_POS[edge] }} />
+              <div key={edge} onMouseDown={startFloatResize(edge)} style={{ position: "absolute", cursor: RESIZE_CURSOR[edge], zIndex: Z.floorMeter, ...RESIZE_POS[edge] }} />
             ))}
           </div>
         )}
@@ -491,10 +495,10 @@ export function SessionsFloor(props: SessionsProps) {
 
       {/* Narrow/mobile: a FILES button that opens the file browser as a bottom sheet. */}
       {narrow && props.leftPanel && (
-        <button type="button" onClick={() => setFilesOpen(true)} title="files" style={{ position: "fixed", right: 14, bottom: mobile ? 68 : 14, zIndex: 30, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>≡ FILES</button>
+        <button type="button" onClick={() => setFilesOpen(true)} title="files" style={{ position: "fixed", right: 14, bottom: mobile ? 68 : 14, zIndex: Z.chrome, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>≡ FILES</button>
       )}
       {narrow && filesOpen && props.leftPanel && (
-        <div onClick={() => setFilesOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: 45, display: "flex", alignItems: "flex-end" }}>
+        <div onClick={() => setFilesOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: Z.overlay, display: "flex", alignItems: "flex-end" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2A2A38" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}>
               <button type="button" onClick={() => setFilesOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
@@ -506,10 +510,10 @@ export function SessionsFloor(props: SessionsProps) {
 
       {/* Narrow/mobile: a JOBS button that opens the background panel as a bottom sheet. */}
       {narrow && props.rightPanel && (
-        <button type="button" onClick={() => setJobsOpen(true)} title="background jobs" style={{ position: "fixed", right: 14, bottom: mobile ? 112 : 58, zIndex: 30, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#4ADE80", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>⎈ JOBS</button>
+        <button type="button" onClick={() => setJobsOpen(true)} title="background jobs" style={{ position: "fixed", right: 14, bottom: mobile ? 112 : 58, zIndex: Z.chrome, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#4ADE80", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>⎈ JOBS</button>
       )}
       {narrow && jobsOpen && props.rightPanel && (
-        <div onClick={() => setJobsOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: 45, display: "flex", alignItems: "flex-end" }}>
+        <div onClick={() => setJobsOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: Z.overlay, display: "flex", alignItems: "flex-end" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2A2A38" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}>
               <button type="button" onClick={() => setJobsOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
@@ -521,7 +525,7 @@ export function SessionsFloor(props: SessionsProps) {
 
       {/* Mobile: session selector as a fixed bottom tab bar with per-session activity dots. */}
       {mobile && (
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 30, display: "flex", gap: 6, padding: "8px 10px", background: "#0D0D12", borderTop: "2px solid #2A2A38", overflowX: "auto" }}>
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: Z.sessionSelector, display: "flex", gap: 6, padding: "8px 10px", background: "#0D0D12", borderTop: "2px solid #2A2A38", overflowX: "auto" }}>
           {model.floorTabs.map((f) => (
             <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} title={f.name} style={{ fontFamily: MONO, flex: "0 0 auto", minWidth: 44, maxWidth: 96, height: 40, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderBottom: `4px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "0 8px" }}>
               <span style={{ fontSize: 10, fontWeight: 700, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label || f.num}</span>
@@ -565,7 +569,7 @@ function AgentTelemetryPanel(props: {
   const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
   return (
-    <div style={{ position: "absolute", right: 12, bottom: 12, width: "min(340px, 94%)", maxHeight: "94%", overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: Z.floorCard, width: "min(340px, 94%)", maxHeight: "94%", overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: "2px solid #2A2A38" }}>
         <span style={{ width: 8, height: 8, background: sel.stateColor }} />
         <span style={{ fontSize: 12, letterSpacing: 2, color: sel.color }}>{sel.name}</span>
@@ -747,7 +751,7 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
   return (
     <div style={{ position: "relative" }}>
       {open && (
-        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, maxHeight: 220, overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 -8px 24px rgba(0,0,0,0.6)", zIndex: 5 }}>
+        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, maxHeight: 220, overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 -8px 24px rgba(0,0,0,0.6)", zIndex: Z.inlinePopup }}>
           {items.map((it, i) => (
             <div key={it.label} onMouseDown={(e) => { e.preventDefault(); complete(it.label); }} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "6px 9px", cursor: "pointer", background: i === pick ? "#1D1D27" : "transparent" }}>
               <span style={{ fontSize: 11, color: "#22D3EE", whiteSpace: "nowrap" }}>{it.label}</span>

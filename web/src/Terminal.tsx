@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -65,9 +66,10 @@ function TerminalInstance(props: { tabId: number | null; active: boolean }) {
 }
 
 // Resizable bottom terminal dock with multiple tabs, each its own pty in the active
-// session's cwd. Collapsed to a slim bar by default so it never steals screen.
-export function TerminalDock(props: { tabId: number | null }) {
-  const [open, setOpen] = useState(false);
+// session's cwd. Opened from the page's chrome band (App owns `open`) rather than a
+// floating corner button, so nothing of it sits on top of the page while closed.
+export function TerminalDock(props: { tabId: number | null; open: boolean; onClose: () => void }) {
+  const open = props.open;
   const [height, setHeight] = useState(300);
   const [tabs, setTabs] = useState<number[]>([0]);
   const [activeTab, setActiveTab] = useState(0);
@@ -82,22 +84,24 @@ export function TerminalDock(props: { tabId: number | null }) {
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
   }, []);
 
+  // While the dock is open the page reserves its height, so a docked terminal
+  // pushes the layout up instead of covering the bottom of it. Cleared on close.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (open) root.style.setProperty("--dom-dock-h", `${height}px`);
+    else root.style.removeProperty("--dom-dock-h");
+    return () => { root.style.removeProperty("--dom-dock-h"); };
+  }, [open, height]);
+
   const addTab = () => { const id = seq; setSeq(seq + 1); setTabs((t) => [...t, id]); setActiveTab(id); };
   const closeTab = (id: number) => {
     setTabs((t) => { const next = t.filter((x) => x !== id); if (activeTab === id && next.length) setActiveTab(next[next.length - 1]!); return next; });
   };
 
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} title="open terminal"
-        style={{ position: "fixed", left: 14, bottom: 14, zIndex: 25, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>
-        ▸_ TERMINAL
-      </button>
-    );
-  }
+  if (!open) return null;
 
   return (
-    <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height, zIndex: 35, background: "#0B0B10", borderTop: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+    <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height, zIndex: Z.dock, background: "#0B0B10", borderTop: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
       <div onMouseDown={(e) => { dragRef.current = { y: e.clientY, h: height }; }} style={{ height: 6, cursor: "ns-resize", background: "#15151C", borderBottom: "1px solid #2A2A38" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderBottom: "2px solid #2A2A38" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B", marginRight: 6 }}>TERMINAL</span>
@@ -108,7 +112,7 @@ export function TerminalDock(props: { tabId: number | null }) {
           </div>
         ))}
         <button type="button" onClick={addTab} title="new terminal" style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 6px" }}>+</button>
-        <button type="button" onClick={() => setOpen(false)} title="hide" style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>▾ hide</button>
+        <button type="button" onClick={props.onClose} title="hide" style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>▾ hide</button>
       </div>
       <div style={{ flex: "1 1 auto", minHeight: 0, position: "relative" }}>
         {tabs.map((id) => (

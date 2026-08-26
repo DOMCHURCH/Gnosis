@@ -4,6 +4,7 @@ import type { TaskPlan } from "./taskplan";
 import { TaskPlanView } from "./TaskPlanView";
 import { FloorGraphic } from "./FloorGraphic";
 import { createOfficeScene, hasWebGL, type SceneAgent } from "./officeScene";
+import { Z } from "./layers";
 
 /**
  * The 3D office floor: a React shell around the framework-free officeScene engine.
@@ -72,7 +73,7 @@ export function ThreeFloor(props: {
     <div style={{ position: "relative", width: "100%", aspectRatio: "1440 / 900", background: "#0D0D12" }}>
       <div ref={host} data-testid="three-floor" style={{ position: "absolute", inset: 0, overflow: "hidden" }} />
       {props.plan && (
-        <div style={{ position: "absolute", left: "2.8%", top: "1.5%", pointerEvents: "auto", zIndex: 4 }}>
+        <div style={{ position: "absolute", left: "2.8%", top: "1.5%", pointerEvents: "auto", zIndex: Z.floorCard }}>
           <TaskPlanView plan={props.plan} compact />
         </div>
       )}

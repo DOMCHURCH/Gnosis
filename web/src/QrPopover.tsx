@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { Z } from "./layers";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -39,7 +40,7 @@ function QrTile(props: { code: QrCode; compact: boolean }) {
 export function QrPopover(props: { title: string; codes: QrCode[]; onClose: () => void }) {
   const many = props.codes.length > 1;
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, zIndex: Z.overlay, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "#0D0D12", border: "2px solid #2A2A38", fontFamily: MONO, width: many ? "min(660px, 96vw)" : "min(320px, 92vw)", maxHeight: "94vh", overflowY: "auto", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 11px", borderBottom: "2px solid #2A2A38" }}>
           <span style={{ fontSize: 10, letterSpacing: 2, color: "#22D3EE" }}>{props.title}</span>

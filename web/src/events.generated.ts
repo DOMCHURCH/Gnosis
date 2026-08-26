@@ -47,6 +47,14 @@ export type DomEvent =
   | { type: "goal.review"; tabId: number; verdict: string; text: string; roundsLeft: number; active: boolean }
   // A secret scan blocked a file's auto-commit.
   | { type: "security.blocked"; tabId: number; path: string; findings: { kind: string; line: number; sample: string }[] }
+  // Manual office-floor agents. The model places decorative figures on the web
+  // floor ("add 5 agents to the coding floor", "fill the office") via the office
+  // tool. They have no Engine and no history, so they ride the bus as a placement
+  // REQUEST rather than becoming real tabs: `zone: null` means every zone and
+  // `count: null` means fill to capacity — the browser owns the desk layout, so it
+  // resolves both against the free desks it actually has.
+  | { type: "office.place"; tabId: number; zone: string | null; count: number | null; names: string[]; state: string }
+  | { type: "office.clear"; tabId: number }
   | { type: "vault.changed" }
   | { type: "connections.changed" }
   // A webhook was captured (POST /webhook/:label) — clients re-read /api/webhooks.

@@ -36,6 +36,7 @@ misdirected, so it is worth being explicit about what they are.
 | **Shell** | `bash` runs real commands on your machine, with your user's privileges. |
 | **Network** | The `http` tool fetches URLs. Loopback, private-network, and cloud-metadata addresses are refused, so it cannot be turned into an SSRF pivot into your LAN. |
 | **Sub-agents** | Spawned agents get a restricted tool set. `write`, `edit`, `bash`, `send_message`, `list_tabs`, and `task` are hard-blocked and cannot be granted back. |
+| **The browser floor** | The `office` tool places decorative figures on the web UI's office floor. It writes nothing, runs nothing, and has no session behind it — it only changes what the browser draws — so it is ungated, and it is excluded from `plan` mode along with every other tool that acts. |
 
 ### The permission model
 

@@ -73,6 +73,11 @@ export function callParts(name: string, args: any): CallParts {
       primary = `${count} task${count === 1 ? "" : "s"}`;
       break;
     }
+    case "office": {
+      const action = String(a.action ?? "add");
+      primary = action === "clear" ? "clear" : `${action} ${a.zone ?? "all zones"}`;
+      break;
+    }
     default: {
       const first = Object.values(a).find((v) => typeof v === "string");
       primary = first ? String(first) : "";

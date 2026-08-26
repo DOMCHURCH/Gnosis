@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OverlayState } from "./types";
+import { Z } from "./layers";
 
 // The web mirror of a TUI selection picker (/model, /resume, @-file, Ctrl+R
 // history). It renders whatever list the server sent via `overlay.open`, filters
@@ -67,7 +68,7 @@ export function OverlayModal(props: { overlay: OverlayState; onSelect: (value: s
   return (
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) cancel(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(6,6,10,0.72)", backdropFilter: "blur(2px)" }}
+      style={{ position: "fixed", inset: 0, zIndex: Z.overlay, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(6,6,10,0.72)", backdropFilter: "blur(2px)" }}
     >
       <div onKeyDown={onKeyDown} style={{ width: "min(680px, 92vw)", maxHeight: "72vh", display: "flex", flexDirection: "column", background: "#101018", border: "1px solid #2A2A38", borderRadius: 10, boxShadow: "0 24px 64px rgba(0,0,0,0.6)", overflow: "hidden", font: "13px ui-monospace, 'SF Mono', Menlo, monospace" }}>
         <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #1E1E28" }}>
