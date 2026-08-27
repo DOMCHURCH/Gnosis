@@ -174,6 +174,6 @@ export interface OverlayState {
   tabId: number;
   kind: string;
   title: string;
-  items: { value: string; label: string }[];
+  items: { value: string; label: string; hint?: string; tier?: string }[];
   selected: string | null;
 }

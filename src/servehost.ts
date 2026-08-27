@@ -10,7 +10,7 @@ import { Engine, type Callbacks } from "./engine.js";
 import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
 import { partitionAttachments } from "./messages.js";
-import { fetchModels, parseModelCommand } from "./models.js";
+import { fetchModels, parseModelCommand, buildModelPickItems } from "./models.js";
 import { listSessions, loadSession, domDir, saveConfig } from "./config.js";
 import { saveVaultNote } from "./vault.js";
 import { callParts, resultBody, toolDetail } from "./ui/toolrender.js";
@@ -100,7 +100,9 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
         break;
       }
       void fetchModels().then((models) => {
-        const items = models.map((m) => ({ value: m.id, label: m.id }));
+        // Price + context window travel with each row: headless serve has no TUI
+        // picker, so the browser overlay is the ONLY place these are ever shown.
+        const items = buildModelPickItems(models);
         openOverlay(bridge, tab.id, "model", "select model", items, tab.engine.modelId, (v) => {
           tab.engine.setModel(v);
           void tab.engine.persist();

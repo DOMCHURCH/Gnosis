@@ -26,6 +26,11 @@ export interface ModelEntry {
    * the provider accepts explicit cache_control breakpoints (Anthropic, Gemini). */
   pricing: { prompt: number; completion: number; cacheRead: number; cacheWrite: number };
   context_length: number;
+  /** True only when the provider actually published prices. Groq's /models does
+   * not, and the offline fallback list has none — without this flag their zeroed
+   * pricing is indistinguishable from a genuinely free model, and the picker
+   * would advertise a paid model as free. */
+  pricingKnown?: boolean;
   /** OpenRouter capability flags; a tool-capable model includes "tools". */
   supported_parameters: string[];
   /** Accepted input types from architecture.input_modalities; a vision model
@@ -85,6 +90,7 @@ function parse(raw: unknown): ModelEntry[] {
         cacheWrite: toNum(m.pricing?.input_cache_write),
       },
       context_length: toNum(m.context_length ?? m.top_provider?.context_length),
+      pricingKnown: true,
       supported_parameters: supported,
       input_modalities: inputModalities,
     });
@@ -295,4 +301,91 @@ export function resolveModelQuery(models: ModelEntry[], query: string): ModelRes
   if (sub.length) return { kind: "matches", ids: sub };
 
   return { kind: "none" };
+}
+
+// ---------------------------------------------------------------------------
+// Price presentation (shared by the TUI picker and the browser overlay)
+// ---------------------------------------------------------------------------
+
+/**
+ * A model's tier for the picker.
+ *   free    — the provider publishes a price and it is zero (":free" variants)
+ *   paid    — the provider publishes a non-zero price
+ *   unknown — the provider publishes no prices at all (Groq, offline fallback)
+ *
+ * The unknown tier exists so a Groq model, whose pricing this catalog zero-fills
+ * because Groq's /models never reports it, is not advertised as free.
+ */
+export type ModelTier = "free" | "paid" | "unknown";
+
+export function modelTier(m: ModelEntry): ModelTier {
+  if (!m.pricingKnown) return "unknown";
+  return m.pricing.prompt === 0 && m.pricing.completion === 0 ? "free" : "paid";
+}
+
+export function isFreeModel(m: ModelEntry): boolean {
+  return modelTier(m) === "free";
+}
+
+/** Per-1M-token USD, trimmed: sub-cent prices keep enough digits to stay distinct. */
+function per1M(n: number): string {
+  const v = n * 1e6;
+  if (v === 0) return "0";
+  if (v < 0.01) return v.toFixed(4).replace(/0+$/, "");
+  if (v < 1) return v.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  return v.toFixed(2);
+}
+
+/**
+ * The price line shown next to a model in every picker: "$3/$15 per 1M in/out",
+ * "free", or "price n/a". One function so the TUI and the browser can never drift
+ * into quoting different numbers for the same model.
+ */
+export function priceLabel(m: ModelEntry): string {
+  const tier = modelTier(m);
+  if (tier === "unknown") return "price n/a";
+  if (tier === "free") return "free";
+  return `$${per1M(m.pricing.prompt)}/$${per1M(m.pricing.completion)} per 1M in/out`;
+}
+
+/** Context window as a short "200K" / "1M" token count, or "" when unknown. */
+export function contextLabel(m: ModelEntry): string {
+  const n = m.context_length;
+  if (!n) return "";
+  if (n >= 1e6) return `${+(n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1)}M ctx`;
+  if (n >= 1000) return `${Math.round(n / 1000)}K ctx`;
+  return `${n} ctx`;
+}
+
+/** The full right-hand hint for a picker row: price, then context window. */
+export function modelHint(m: ModelEntry): string {
+  const ctx = contextLabel(m);
+  return ctx ? `${priceLabel(m)} · ${ctx}` : priceLabel(m);
+}
+
+/** One picker row for a model. Shaped to satisfy the TUI's PickItem, and carried
+ * verbatim over `overlay.open` to the browser overlay. */
+export interface ModelPickItem {
+  value: string;
+  label: string;
+  hint: string;
+  tier: ModelTier;
+  search: string;
+}
+
+/**
+ * The model picker's rows, built ONCE for both surfaces. The TUI and the headless
+ * serve host each used to assemble their own list, which is how the browser ended
+ * up showing bare model ids while the terminal showed prices — the browser's list
+ * simply never had a price in it.
+ */
+export function buildModelPickItems(models: ModelEntry[]): ModelPickItem[] {
+  return models.map((m) => ({
+    value: m.id,
+    label: m.id,
+    hint: modelHint(m),
+    tier: modelTier(m),
+    // Typing in either picker narrows by id, name, or tier ("free" / "paid").
+    search: `${m.id} ${m.name} ${modelTier(m)}`,
+  }));
 }

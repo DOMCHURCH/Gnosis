@@ -12,6 +12,9 @@ export interface PickItem {
   search?: string;
   /** Base ranking (lower = better), used as the fuzzy tiebreaker (e.g. repo-map order). */
   rank?: number;
+  /** Model picker only: "free" | "paid" | "unknown". Carried over the wire so the
+   * browser overlay can group the catalog into tabs; the TUI ignores it. */
+  tier?: string;
 }
 
 interface Props {

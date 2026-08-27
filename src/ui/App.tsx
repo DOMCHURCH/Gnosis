@@ -26,7 +26,7 @@ import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
 import { loadImage, isImagePath } from "../tools/viewimage.js";
 import { gatherPromptHistory } from "../history.js";
-import { fetchModels, resolveModelQuery, parseModelCommand, suggestVisionModel, type ModelEntry } from "../models.js";
+import { fetchModels, resolveModelQuery, parseModelCommand, suggestVisionModel, priceLabel, buildModelPickItems, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
@@ -106,24 +106,10 @@ function imageRefsIn(text: string, cwd: string): string[] {
   return out;
 }
 
-// Per-1M-token price, from OpenRouter's per-token figures.
-function priceLabel(m: ModelEntry): string {
-  const per1M = (n: number) => (n * 1e6).toFixed(2);
-  return `$${per1M(m.pricing.prompt)}/$${per1M(m.pricing.completion)} per 1M in/out`;
-}
-
-function priceHint(m: ModelEntry): string {
-  return `—  ${priceLabel(m)}`;
-}
-
+// Rows come from models.ts so this picker and the browser overlay quote the same
+// price for the same model — see buildModelPickItems.
 function buildModelItems(models: ModelEntry[]): PickItem[] {
-  return models.map((m) => ({
-    value: m.id,
-    label: m.id,
-    hint: priceHint(m),
-    // Typing in the picker narrows by id or name substring.
-    search: `${m.id} ${m.name}`,
-  }));
+  return buildModelPickItems(models);
 }
 
 // Live terminal width, re-measured on SIGWINCH (terminal resize). Every element
@@ -972,7 +958,9 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
         id,
         kind,
         title,
-        items: items.map((it) => ({ value: it.value, label: it.label })),
+        // The hint carries the price/context line. Stripping it here was why the
+        // browser overlay showed bare ids while the TUI picker showed prices.
+        items: items.map((it) => ({ value: it.value, label: it.label, hint: it.hint, tier: it.tier })),
         selected,
       });
     }

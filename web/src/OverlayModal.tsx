@@ -37,7 +37,13 @@ export function OverlayModal(props: { overlay: OverlayState; onSelect: (value: s
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return overlay.items;
-    return overlay.items.filter((it) => it.label.toLowerCase().includes(q) || it.value.toLowerCase().includes(q));
+    return overlay.items.filter(
+      (it) =>
+        it.label.toLowerCase().includes(q) ||
+        it.value.toLowerCase().includes(q) ||
+        // The hint carries the price/context line, so "free" and "1M" filter too.
+        (it.hint ?? "").toLowerCase().includes(q),
+    );
   }, [overlay.items, filter]);
 
   // Focus the filter on open; start the cursor on the current selection if any.
@@ -102,6 +108,13 @@ export function OverlayModal(props: { overlay: OverlayState; onSelect: (value: s
                   </span>
                 )}
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span>
+                {it.hint ? (
+                  // What a model costs, next to its id. A free model is called out
+                  // in green because that is the thing people scan this list for.
+                  <span style={{ fontSize: 11, flexShrink: 0, whiteSpace: "nowrap", color: it.tier === "free" ? "#4ADE80" : it.tier === "unknown" ? "#5A5A68" : "#7C7C8E" }}>
+                    {it.hint}
+                  </span>
+                ) : null}
                 {it.value === overlay.selected ? <span style={{ color: "#22D3EE", fontSize: 11, flexShrink: 0 }}>current</span> : null}
               </div>
             ))

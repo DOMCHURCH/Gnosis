@@ -38,7 +38,7 @@ export type DomEvent =
   | { type: "ask.request"; tabId: number; id: string; question: string; options: string[] }
   | { type: "ask.resolved"; tabId: number; id: string; answer: string }
   | { type: "permission.resolved"; tabId: number; id: string; answer: string }
-  | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string }[]; selected: string | null }
+  | { type: "overlay.open"; tabId: number; id: string; kind: string; title: string; items: { value: string; label: string; hint?: string; tier?: string }[]; selected: string | null }
   | { type: "overlay.resolved"; id: string }
   | { type: "job.start"; tabId: number | null; jobId: string; command: string }
   | { type: "job.end"; tabId: number | null; jobId: string; status: string; exitCode: number | null }
