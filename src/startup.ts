@@ -199,7 +199,13 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // first run), then connect servers in the background so tools publish into the
   // registry once ready. Non-blocking — never delays boot. Skipped for one-shot
   // pipe/headless runs (spawning servers for a single turn isn't worth it).
-  if (!flags.headless) {
+  // GNOSIS_SKIP_MCP short-circuits this entirely. The verify harness sets it: a
+  // suite that spawns the real binary under an isolated $USERPROFILE finds no
+  // mcp.json, so this would WRITE the default registry and then npx-fetch three
+  // servers from the network — inside suites that are meant to be offline and
+  // deterministic. That is what made the serve suites take ~26s and fail
+  // intermittently under load, waiting on a startup that was busy downloading.
+  if (!flags.headless && process.env.GNOSIS_SKIP_MCP !== "1") {
     void ensureMcpConfig().then(() => mcp.init()).catch(() => {});
   }
 
