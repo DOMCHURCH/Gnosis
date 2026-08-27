@@ -55,6 +55,13 @@ export type DomEvent =
   // resolves both against the free desks it actually has.
   | { type: "office.place"; tabId: number; zone: string | null; count: number | null; names: string[]; state: string }
   | { type: "office.clear"; tabId: number }
+  // Total wipe of everything a client is drawing: session tabs, transcripts, the
+  // chat rail, every figure (real, manual, and sub-agent) and therefore the zone
+  // counts. Sent when serve is shutting down, and applied by a client that finds
+  // itself talking to a restarted server. `agent.closed` retires ONE agent and
+  // leaves that tab's transcript behind for a reconnect to reuse; this retires the
+  // whole picture, which is the only correct response to "the session is gone".
+  | { type: "floor.reset"; reason: string }
   | { type: "vault.changed" }
   | { type: "connections.changed" }
   // A webhook was captured (POST /webhook/:label) — clients re-read /api/webhooks.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useDomSocket } from "./store";
+import { useDomSocket, GLOBAL_TAB } from "./store";
 import { SessionsFloor, zoneLabel, type ChatMsg, type SelDetail } from "./SessionsFloor";
 import { StreamDiff } from "./StreamDiff";
 import { DesignPanel } from "./DesignPanel";
@@ -153,6 +153,22 @@ export function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.officeQueue]);
+  // The store threw the whole picture away (serve stopped, or we reconnected to a
+  // different server). Everything it does not own has to go with it, or the floor
+  // keeps drawing figures — manual and debug ones outlive any agent event — for a
+  // session that is gone. officeSeqRef is rewound too: a fresh server's seq starts
+  // at 0 again, so a cursor left at the old server's high-water mark would swallow
+  // every placement the new one asks for.
+  useEffect(() => {
+    if (state.floorEpoch === 0) return; // no reset has happened yet
+    setManuals([]);
+    debugRef.current.byFloor = {};
+    officeSeqRef.current = 0;
+    setSelFig(null);
+    setDismissedShot(null);
+    try { localStorage.removeItem(MANUAL_KEY); } catch { /* private mode */ }
+  }, [state.floorEpoch]);
+
   // Clicking a manual figure edits it; any other figure selects it as before.
   const onSelectFig = (id: string | null) => {
     if (id && id.startsWith("manual:")) { const m = manuals.find((x) => x.id === id); if (m) setManualEditor({ mode: "edit", agent: m }); return; }
@@ -248,7 +264,9 @@ export function App() {
   // Chat = this floor's feed, grouped into per-speaker/per-turn message blocks
   // (line events + code fences + approval requests).
   const tabColor = (activeId != null ? model.layout.colorById[`tab:${activeId}`] : undefined) ?? "#6B6B7B";
-  const rawLines = activeId != null ? state.chatLines.filter((l) => l.tabId === activeId) : [];
+  // GLOBAL_TAB lines (the reconnect notice) belong to no session, so they show
+  // alongside whichever one is selected — and still show when none is.
+  const rawLines = state.chatLines.filter((l) => l.tabId === GLOBAL_TAB || (activeId != null && l.tabId === activeId));
   const epochByKey: Record<string, number> = {};
   for (const l of rawLines) epochByKey[l.key] = l.epoch;
   const chat: ChatMsg[] = groupChat(rawLines)

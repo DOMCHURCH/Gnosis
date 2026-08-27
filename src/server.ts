@@ -560,6 +560,13 @@ const SHUTDOWN_SIGNALS = Object.keys(SIGNAL_NUMBERS) as (keyof typeof SIGNAL_NUM
 
 export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
+  // Identity of THIS server instance, announced to every client as it connects. A
+  // browser that reconnects and sees a different instance knows its whole picture
+  // belongs to a server that no longer exists, and starts over. `instance` is what
+  // the comparison uses — two servers really can start within the same millisecond,
+  // and an identity check that is only probably unique is not an identity check.
+  const startedAt = Date.now();
+  const instance = crypto.randomBytes(12).toString("base64url");
   // The public tunnel URL (base, no token), set by /serve --public via setPublicUrl.
   let publicUrl: string | null = null;
   // LAN is always on: bind every interface and accept private-LAN Hosts so a phone
@@ -664,6 +671,11 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       }
     };
 
+    // Who this client just reached. FIRST frame on every connection, before the
+    // snapshot or any replay, so a client resuming against a restarted server can
+    // throw away the old picture before the new one starts arriving.
+    send({ type: "server.hello", instance, startedAt });
+
     // First connect → snapshot current agents. Reconnect (?since=N) → replay the
     // events missed since seq N; if the gap exceeds the buffer, resync state first.
     // The connect handler is synchronous, so no event can slip in between reading
@@ -671,7 +683,15 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     const cutoff = seq;
     const sinceRaw = url.searchParams.get("since");
     const since = sinceRaw != null && sinceRaw !== "" ? Number(sinceRaw) : null;
-    if (since != null && Number.isFinite(since)) {
+    // A cursor only means something against the instance that issued it. The client
+    // echoes the instance its `since` was counted against; if that is not us, these
+    // are another process's seq numbers and replaying against them is nonsense —
+    // most visibly on a restart, where a fresh ring is empty and a `since`-only
+    // reconnect would leave the browser showing a whole roster that no longer
+    // exists. `since > seq` catches the same thing for a client too old to echo it.
+    const cursorInstance = url.searchParams.get("instance");
+    const foreignCursor = (cursorInstance != null && cursorInstance !== instance) || (since != null && since > seq);
+    if (since != null && Number.isFinite(since) && !foreignCursor) {
       if (ring.length && since < ring[0]!.seq - 1) sendSnapshot();
       for (const w of ring) if (w.seq > since) send(w);
     } else {
@@ -730,8 +750,14 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   // server replays from an empty ring, so the old figures would stand there
   // forever. Tell every client the roster is gone BEFORE the bus is unsubscribed
   // and the sockets are torn down.
-  const clearFloor = () => {
+  //
+  // agent.closed retires each session tab and its figure one by one (so a client
+  // that only understands that event still empties its roster); floor.reset then
+  // wipes what no per-agent event covers — manual figures, sub-agents, the chat
+  // rail, and the transcripts agent.closed deliberately leaves behind.
+  const clearFloor = (reason: string) => {
     for (const a of bridge.getAgents()) bridge.bus.emit({ type: "agent.closed", tabId: a.id, name: a.name });
+    bridge.bus.emit({ type: "floor.reset", reason });
   };
 
   let closed = false;
@@ -748,7 +774,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
         closed = true;
         process.off("exit", onExit);
         for (const sig of SHUTDOWN_SIGNALS) { const fn = onSignal[sig]; if (fn) process.off(sig, fn); }
-        clearFloor();
+        clearFloor("serve stopped");
         busUnsub();
         jobsUnsub();
         killAllPtys();

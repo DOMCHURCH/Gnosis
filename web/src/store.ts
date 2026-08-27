@@ -5,6 +5,7 @@ import { foldTelemetry } from "./telemetry.js";
 import { pushOfficeRequest } from "./sessions.js";
 import type { Telemetry } from "./telemetry";
 import { planFromEvent, foldPlan } from "./taskplan.js";
+import { tokenRejected } from "./api";
 import type { TaskPlan } from "./taskplan";
 
 
@@ -78,7 +79,15 @@ export interface State {
   /** Live streaming edit per tab (edit.start/line/commit): the right pane of the
    * diff viewer fills in from `lines` until `done`; null when no edit is streaming. */
   streamEdits: Record<number, StreamEdit | null>;
+  /** Bumped every time the whole picture is thrown away (floor.reset, or a
+   * detected server restart). State the store does not own — manual figures, the
+   * debug overlay's figures, the desk selection — is cleared by App off this. */
+  floorEpoch: number;
 }
+
+/** Chat lines that belong to no single session (the reconnect notice). Shown in
+ * the rail whichever session is selected, including when there is none. */
+export const GLOBAL_TAB = -1;
 
 /** An office.place / office.clear request, as App consumes it. */
 export interface OfficeRequest {
@@ -135,7 +144,35 @@ function previewLabel(p: unknown): string {
   return "";
 }
 
-const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {}, officeQueue: [] };
+const initial: State = { connected: false, agents: {}, order: [], transcripts: {}, running: {}, jobs: {}, subagents: [], links: [], actions: {}, speaking: {}, chatLines: [], turnEpoch: {}, inCode: {}, commands: [], selected: null, permission: null, overlay: null, fileEpoch: 0, jobEpoch: 0, vaultEpoch: 0, connectionsEpoch: 0, goals: {}, reviews: {}, telemetry: {}, plans: {}, designShots: {}, webhookEpoch: 0, publicUrl: null, streamEdits: {}, officeQueue: [], floorEpoch: 0 };
+
+/** Throw the whole picture away: every session tab, transcript, chat line, figure,
+ * and pending prompt. Deliberately a reset to `initial` rather than a list of
+ * fields to clear — a field added later is then wiped by default, which is the
+ * safe direction for "the server this state described is gone".
+ *
+ * Four things survive, because they describe the CONNECTION rather than the dead
+ * session: whether the socket is up, the slash-command registry and tunnel URL the
+ * new server re-sends anyway, and the epoch counters that panels watch for changes
+ * (rewinding those would leave a panel showing the old server's files or jobs).
+ * `notice` adds the dim reconnect line — set on a detected restart, not on the
+ * server's own shutdown broadcast, where there is nothing left to read it. */
+function resetAll(state: State, notice: string | null): State {
+  const next: State = {
+    ...initial,
+    connected: state.connected,
+    commands: state.commands,
+    publicUrl: state.publicUrl,
+    fileEpoch: state.fileEpoch + 1,
+    jobEpoch: state.jobEpoch + 1,
+    vaultEpoch: state.vaultEpoch + 1,
+    connectionsEpoch: state.connectionsEpoch + 1,
+    webhookEpoch: state.webhookEpoch + 1,
+    floorEpoch: state.floorEpoch + 1,
+  };
+  if (!notice) return next;
+  return { ...next, chatLines: [{ key: `reset:${state.floorEpoch + 1}`, tabId: GLOBAL_TAB, from: "system", kind: "system", epoch: 0, time: clock(), text: notice }] };
+}
 
 /** Fold a tabId-bearing event into that tab's telemetry record. */
 function foldTel(state: State, action: { tabId: number } & Parameters<typeof foldTelemetry>[1]): Record<number, Telemetry> {
@@ -153,7 +190,7 @@ function pushLine(state: State, ln: RawLine): State {
   return { ...state, chatLines: chatLines.filter((l) => !dropKeys.has(l.key)) };
 }
 
-type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number } | { type: "@commands"; list: CommandItem[] };
+type Action = DomEvent | { type: "@connected"; value: boolean } | { type: "@select"; id: number } | { type: "@clearLink"; key: string } | { type: "@clearSpeaking"; tabId: number } | { type: "@commands"; list: CommandItem[] } | { type: "@restarted"; notice: string };
 
 function clock(): string {
   const d = new Date();
@@ -189,6 +226,14 @@ export function reducer(state: State, action: Action): State {
       return { ...state, connected: action.value };
     case "@select":
       return { ...state, selected: action.id };
+    // The server told us it is going away — nothing it described is live any more.
+    case "floor.reset":
+      return resetAll(state, null);
+    // We found a different server on the port — either by reconnecting to it, or by
+    // being turned away by it. Same wipe, plus a line in the rail so the emptiness
+    // reads as an event rather than a glitch.
+    case "@restarted":
+      return resetAll(state, action.notice);
     case "agent.created": {
       if (state.agents[action.tabId]) return state; // snapshot may duplicate
       const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: 0, tokens: 0, awaitingPermission: false, imageInput: !!action.imageInput, documentInput: !!action.documentInput, contextLimit: action.contextLimit ?? 0 };
@@ -409,6 +454,11 @@ export function useDomSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   // Highest server seq seen; sent as ?since on reconnect to replay missed events.
   const lastSeqRef = useRef<number | null>(null);
+  /** The server instance this page is currently in sync with (from server.hello). */
+  const instanceRef = useRef<string | null>(null);
+  /** Latched once the token has been found stale, so the notice is not repeated on
+   * every retry of a reconnect that can never succeed. */
+  const staleRef = useRef(false);
   // Pending @-file requests keyed by reqId (resolved when the server replies).
   const filesRef = useRef<{ seq: number; pending: Map<number, (list: string[]) => void> }>({ seq: 0, pending: new Map() });
   // Pending vault.save requests keyed by reqId (resolved by the vault.saved ack).
@@ -422,8 +472,11 @@ export function useDomSocket() {
     const connect = () => {
       const token = new URLSearchParams(location.search).get("token") ?? "";
       const proto = location.protocol === "https:" ? "wss" : "ws";
+      // The cursor travels with the instance it was counted against, so the server
+      // can tell "resume where I left off" from "that was a different server".
       const since = lastSeqRef.current != null ? `&since=${lastSeqRef.current}` : "";
-      const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}${since}`);
+      const inst = instanceRef.current != null ? `&instance=${encodeURIComponent(instanceRef.current)}` : "";
+      const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}${since}${inst}`);
       wsRef.current = ws;
       ws.onopen = () => {
         retry = 0;
@@ -433,6 +486,20 @@ export function useDomSocket() {
         dispatch({ type: "@connected", value: false });
         if (closed) return;
         retry = Math.min(retry + 1, 6);
+        // The other way a restart reaches an already-open tab. `serve` mints a new
+        // token every run, so the link in this tab's address bar is dead and the
+        // socket will be refused forever — the reconnect that would have carried
+        // server.hello never happens. A rejected upgrade looks exactly like an
+        // unreachable host from here, so ask over HTTP which it is, once the retries
+        // suggest this is not a blip. A 401 means someone else is on the port and
+        // the session we are drawing is gone.
+        if (retry === 3 && !staleRef.current) {
+          void tokenRejected().then((rejected) => {
+            if (closed || !rejected || staleRef.current) return;
+            staleRef.current = true;
+            dispatch({ type: "@restarted", notice: "server restarted — open the new link to reconnect" });
+          });
+        }
         timer = setTimeout(connect, Math.min(200 * 2 ** retry, 5000)); // capped backoff
       };
       ws.onerror = () => {
@@ -451,6 +518,21 @@ export function useDomSocket() {
         }
         if (typeof ev.seq === "number") lastSeqRef.current = ev.seq;
         if (ev.type === "@sync") return; // control frame: only advances lastSeq
+        // First frame of every connection: which server instance this is. A change
+        // means the session we were drawing died with the old process, so the whole
+        // picture goes before the new server's snapshot arrives behind this frame.
+        // The very first hello only records the identity — a page load has nothing
+        // to throw away, and announcing a "restart" for it would be a lie.
+        if ((ev as any).type === "server.hello") {
+          const seen = (ev as any).instance;
+          const prev = instanceRef.current;
+          instanceRef.current = seen;
+          if (prev != null && prev !== seen) {
+            lastSeqRef.current = null; // the old cursor counts events this server never sent
+            dispatch({ type: "@restarted", notice: "server restarted — reconnected" });
+          }
+          return;
+        }
         if ((ev as any).type === "commands") { dispatch({ type: "@commands", list: (ev as any).list ?? [] }); return; }
         if ((ev as any).type === "files") { const r = filesRef.current.pending.get((ev as any).reqId); if (r) { filesRef.current.pending.delete((ev as any).reqId); r((ev as any).list ?? []); } return; }
         if ((ev as any).type === "vault.saved") { const r = vaultRef.current.pending.get((ev as any).reqId); if (r) { vaultRef.current.pending.delete((ev as any).reqId); r({ ok: !!(ev as any).ok, path: (ev as any).path, error: (ev as any).error }); } return; }

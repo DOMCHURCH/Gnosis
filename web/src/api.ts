@@ -29,6 +29,20 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T | null>
   }
 }
 
+/** Is the server up but refusing our token? A restarted `serve` mints a fresh
+ * token, so an already-open tab's link is dead — which is indistinguishable from
+ * "server down" at the WebSocket layer (a rejected upgrade and an unreachable host
+ * both surface as a 1006 close). One cheap HTTP probe tells them apart: 401 means
+ * a different server answered, null means nothing answered at all. */
+export async function tokenRejected(): Promise<boolean | null> {
+  try {
+    const res = await fetch(`/api/serveinfo?token=${encodeURIComponent(token())}`);
+    return res.status === 401;
+  } catch {
+    return null; // nothing listening — keep waiting, the session may still come back
+  }
+}
+
 /** The full tokenized URL for a base origin (e.g. for a QR code). */
 export function tokenizedUrl(base: string): string {
   return `${base.replace(/\/$/, "")}/?token=${token()}`;

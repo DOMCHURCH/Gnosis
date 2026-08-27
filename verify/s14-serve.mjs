@@ -98,6 +98,12 @@ ok("WS connect without a token is refused (no 101)", (await wsConnect(null)).ok 
 const client = await wsConnect(server.token);
 ok("WS connect with the token upgrades (101)", client.ok === true);
 
+// Every connection opens with server.hello — which server instance this is, so a
+// client resuming against a restarted one can drop the old picture BEFORE the new
+// snapshot arrives behind it. It has to be first for that ordering to hold.
+const hello = JSON.parse(await client.api.next());
+ok("a connection opens with server.hello identifying the instance", hello.type === "server.hello" && typeof hello.instance === "string" && hello.instance.length > 0);
+
 // snapshot on connect: the current agent(s)
 const snapshot = JSON.parse(await client.api.next());
 ok("a fresh client receives the agent snapshot", snapshot.type === "agent.created" && snapshot.name === "main");

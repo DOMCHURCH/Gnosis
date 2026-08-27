@@ -29,25 +29,31 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 
 // --- the server child: real dist/server.js, three agents on the floor ---------
 const AGENTS = [1, 2, 3];
+// argv: <port> <comma-separated agent ids>. A fixed port lets a second run of this
+// child impersonate a RESTART of the first — same address, different process.
 const harness = path.join(fake, "serve-child.mjs");
 await fs.writeFile(harness, `
 import { startServer } from ${JSON.stringify(pathToFileURL(path.join(root, "dist", "server.js")).href)};
 import { EventBus, createBridge } from ${JSON.stringify(pathToFileURL(path.join(root, "dist", "events.js")).href)};
 
+const port = Number(process.argv[2] ?? 0);
+const ids = String(process.argv[3] ?? "1,2,3").split(",").map(Number);
 const bridge = createBridge(new EventBus());
-bridge.getAgents = () => ${JSON.stringify(AGENTS)}.map((id) => ({
+bridge.getAgents = () => ids.map((id) => ({
   id, name: "agent" + id, cwd: process.cwd(), model: "test/model", mode: "code",
   busy: false, imageInput: false, documentInput: false, contextLimit: 0,
 }));
-const handle = await startServer(bridge, { port: 0 });
+const handle = await startServer(bridge, { port });
 process.stdout.write("URL " + handle.url + "\\n");
 
 // The parent asks for one of the two teardown paths. "signal" is what a user's
 // Ctrl+C does (on Windows, Node's console handler raises exactly this event);
-// "stop" is what the /serve stop command does.
+// "stop" is what the /serve stop command does. "emit" puts one event on the bus,
+// to advance the seq that a reconnecting client will quote back.
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", async (line) => {
   if (line.includes("signal")) process.emit("SIGINT", "SIGINT");
+  if (line.includes("emit")) bridge.bus.emit({ type: "agent.busy", tabId: ids[0], busy: true });
   if (line.includes("stop")) { await handle.close(); process.stdout.write("STOPPED\\n"); }
 });
 setInterval(() => {}, 1 << 30);
@@ -68,11 +74,14 @@ function decodeServer(buf, onText) {
   }
   return buf.subarray(off);
 }
-function wsConnect(port, token) {
+/** `resume` reconnects like the real client does: the cursor it reached, and the
+ * instance that cursor was counted against. */
+function wsConnect(port, token, resume) {
   return new Promise((resolve) => {
     const socket = net.connect(port, "127.0.0.1", () => {
       const key = crypto.randomBytes(16).toString("base64");
-      socket.write(`GET /ws?token=${token} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+      const q = resume ? `&since=${resume.since}&instance=${encodeURIComponent(resume.instance)}` : "";
+      socket.write(`GET /ws?token=${token}${q} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`);
     });
     let buf = Buffer.alloc(0), up = false;
     const seen = [];
@@ -103,8 +112,8 @@ function wsConnect(port, token) {
   });
 }
 
-async function boot() {
-  const child = spawn(process.execPath, [harness], { env, cwd: root });
+async function boot(port = 0, ids = AGENTS) {
+  const child = spawn(process.execPath, [harness, String(port), ids.join(",")], { env, cwd: root });
   let out = "", err = "";
   child.stdout.on("data", (d) => (out += d));
   child.stderr.on("data", (d) => (err += d));
@@ -142,6 +151,10 @@ async function floorAfter(label, teardown) {
   const closedSince = () => new Set(api.seen.slice(mark).filter((m) => m.type === "agent.closed").map((m) => m.tabId));
   const cleared = await api.until(() => AGENTS.every((id) => closedSince().has(id)), 10000);
   ok(`[${label}] every agent is closed out before the socket dies (got ${closedSince().size}/${AGENTS.length})`, cleared);
+  // agent.closed empties the roster; floor.reset is what clears everything no
+  // per-agent event covers — manual figures, sub-agents, and the chat rail.
+  const reset = await api.until(() => api.seen.slice(mark).some((m) => m.type === "floor.reset"), 5000);
+  ok(`[${label}] floor.reset follows, wiping what agent.closed does not`, reset);
   api.close();
   return { s };
 }
@@ -171,6 +184,58 @@ async function floorAfter(label, teardown) {
   })();
   ok("[/serve stop] close() resolves (no hang on the socket teardown)", stopped);
   try { s.child.kill(); } catch { /* already gone */ }
+}
+
+// --- 3. restart, missed by the browser ---------------------------------------
+// The case no shutdown broadcast can reach: the server dies without warning (here
+// a hard kill — on Windows that is TerminateProcess, so no handler runs at all)
+// and something else comes up on the same port. The client reconnects quoting a
+// cursor from a server that no longer exists. It must be told this is a different
+// instance, and be handed the NEW roster rather than a replay of nothing — which
+// is what would leave three dead agents standing on the floor.
+{
+  const a = await boot(0, AGENTS);
+  ok("[restart] the first server came up", !!a.info);
+  if (a.info) {
+    const c1 = await wsConnect(a.info.port, a.info.token);
+    ok("[restart] a browser-like client connected", c1.ok === true);
+    if (c1.ok) {
+      await c1.api.until(() => c1.api.seen.some((m) => m.type === "@sync"));
+      const hello1 = c1.api.seen.find((m) => m.type === "server.hello");
+      ok("[restart] the connection opens with server.hello", !!hello1?.instance && typeof hello1.startedAt === "number");
+      ok("[restart] server.hello is the FIRST frame, before any agent", c1.api.seen[0]?.type === "server.hello");
+
+      // Advance the cursor, so the reconnect quotes a seq this server really issued.
+      a.child.stdin.write("emit\n");
+      await c1.api.until(() => c1.api.seen.some((m) => m.type === "agent.busy"));
+      const cursor = Math.max(...c1.api.seen.filter((m) => typeof m.seq === "number").map((m) => m.seq));
+      c1.api.close();
+
+      // Kill it outright: no shutdown broadcast, nothing for the browser to hear.
+      a.child.kill();
+      await Promise.race([a.exited, new Promise((r) => setTimeout(r, 10000))]);
+
+      // A different process, same port, a different roster.
+      const b = await boot(a.info.port, [9]);
+      ok("[restart] a replacement server came up on the same port", !!b.info);
+      if (b.info) {
+        const c2 = await wsConnect(b.info.port, b.info.token, { since: cursor, instance: hello1.instance });
+        ok("[restart] the client reconnects to the replacement", c2.ok === true);
+        if (c2.ok) {
+          await c2.api.until(() => c2.api.seen.some((m) => m.type === "@sync"));
+          const hello2 = c2.api.seen.find((m) => m.type === "server.hello");
+          ok("[restart] server.hello reports a DIFFERENT instance", !!hello2 && hello2.instance !== hello1.instance);
+          const created = new Set(c2.api.seen.filter((m) => m.type === "agent.created").map((m) => m.tabId));
+          ok(`[restart] the new roster is sent outright, not replayed (got [${[...created]}])`, created.has(9));
+          ok("[restart] and carries none of the dead server's agents", !AGENTS.some((id) => created.has(id)));
+          c2.api.close();
+        }
+        b.child.kill();
+      }
+    } else {
+      a.child.kill();
+    }
+  }
 }
 
 try { await fs.rm(fake, { recursive: true, force: true }); } catch { /* best effort */ }
