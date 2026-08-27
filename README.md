@@ -1,16 +1,3 @@
-<!--
-  banner gradient: cyan (#22d3ee) → indigo (#6366f1) → magenta (#d946ef),
-  left-to-right across the wordmark
--->
-```
-  ██████╗ ███╗   ██╗ ██████╗ ███████╗██╗███████╗
- ██╔════╝ ████╗  ██║██╔═══██╗██╔════╝██║██╔════╝
- ██║  ███╗██╔██╗ ██║██║   ██║███████╗██║███████╗
- ██║   ██║██║╚██╗██║██║   ██║╚════██║██║╚════██║
- ╚██████╔╝██║ ╚████║╚██████╔╝███████║██║███████║
-  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝
-```
-
 # Your AI agents needed an office. So I built one.
 
 Gnosis is a terminal coding agent that runs on any model, switches models
@@ -30,7 +17,9 @@ npx @dominquechurch/gnosis
 
 ## See it
 
-![Gnosis](docs/banner.png)
+<p align="center">
+  <img src="docs/gnosis-wordmark.png" alt="Gnosis" width="420">
+</p>
 
 ![Gnosis — terminal coding agent with live 3D office floor](docs/demo.gif)
 
@@ -123,6 +112,19 @@ what the agent was doing instead of scrolling a wall of text and hoping.
 *Runtime model switching — the full OpenRouter catalog, in the browser*
 
 ## The story
+
+<!--
+  banner gradient: cyan (#22d3ee) → indigo (#6366f1) → magenta (#d946ef),
+  left-to-right across the wordmark
+-->
+```
+  ██████╗ ███╗   ██╗ ██████╗ ███████╗██╗███████╗
+ ██╔════╝ ████╗  ██║██╔═══██╗██╔════╝██║██╔════╝
+ ██║  ███╗██╔██╗ ██║██║   ██║███████╗██║███████╗
+ ██║   ██║██║╚██╗██║██║   ██║╚════██║██║╚════██║
+ ╚██████╔╝██║ ╚████║╚██████╔╝███████║██║███████║
+  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝
+```
 
 I'm Dominique Church, I'm 16, and I built Gnosis over the summer before Grade 12
 in Ottawa. I wanted Claude Code without the vendor lock-in, and a
