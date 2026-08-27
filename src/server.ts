@@ -553,6 +553,11 @@ export interface ServerHandle {
   close(): Promise<void>;
 }
 
+/** Signals that mean "the user is stopping the server" (SIGBREAK is Windows Ctrl+Break),
+ * with the number each one contributes to the conventional 128+n exit code. */
+const SIGNAL_NUMBERS = { SIGINT: 2, SIGTERM: 15, SIGBREAK: 21 } as const;
+const SHUTDOWN_SIGNALS = Object.keys(SIGNAL_NUMBERS) as (keyof typeof SIGNAL_NUMBERS)[];
+
 export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
   // The public tunnel URL (base, no token), set by /serve --public via setPublicUrl.
@@ -720,7 +725,17 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   });
   const port = (server.address() as net.AddressInfo).port;
 
-  return {
+  // Shutdown broadcast: the browser's office floor is built from agent.created
+  // events and is NOT cleared when the socket drops — a reconnect to a fresh
+  // server replays from an empty ring, so the old figures would stand there
+  // forever. Tell every client the roster is gone BEFORE the bus is unsubscribed
+  // and the sockets are torn down.
+  const clearFloor = () => {
+    for (const a of bridge.getAgents()) bridge.bus.emit({ type: "agent.closed", tabId: a.id, name: a.name });
+  };
+
+  let closed = false;
+  const handle: ServerHandle = {
     url: `http://127.0.0.1:${port}/?token=${token}`,
     token,
     port,
@@ -729,6 +744,11 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     setPublicUrl: (u) => { publicUrl = u; },
     close: () =>
       new Promise<void>((resolve) => {
+        if (closed) return resolve();
+        closed = true;
+        process.off("exit", onExit);
+        for (const sig of SHUTDOWN_SIGNALS) { const fn = onSignal[sig]; if (fn) process.off(sig, fn); }
+        clearFloor();
         busUnsub();
         jobsUnsub();
         killAllPtys();
@@ -742,4 +762,26 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
         server.close(() => resolve());
       }),
   };
+
+  // Process teardown runs the SAME cleanup as `/serve stop`. close() is async, but
+  // everything that matters here — the agent.closed broadcast and the socket
+  // writes it triggers — happens synchronously, so it still lands under
+  // process.on("exit"), where no async continuation would ever run. The listeners
+  // are removed by close() so a restarted server doesn't leak them.
+  const onExit = () => void handle.close();
+  // One bound listener per signal rather than one shared handler: the signal name
+  // is then closed over, not read from the emitted argument, so the exit code is
+  // right no matter who raised it.
+  const onSignal: Partial<Record<NodeJS.Signals, () => void>> = {};
+  process.on("exit", onExit);
+  for (const sig of SHUTDOWN_SIGNALS) {
+    const fn = () => {
+      void handle.close();
+      process.exit(128 + SIGNAL_NUMBERS[sig]);
+    };
+    onSignal[sig] = fn;
+    process.on(sig, fn);
+  }
+
+  return handle;
 }
