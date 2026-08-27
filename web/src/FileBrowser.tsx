@@ -16,32 +16,53 @@ export function FilesBody(props: { tabId: number | null; fileEpoch: number; onAt
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [preview, setPreview] = useState<FilePreview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  // Which root the tree shows. ~/Gnosis is pinned: the agent's own output lands
+  // there regardless of where the session is, so it must be reachable without
+  // navigating out of the session's cwd (which the tree cannot do anyway — every
+  // path is confined to its root).
+  const [root, setRoot] = useState<"session" | "gnosis">("session");
+  const rootParam: Record<string, string> = root === "gnosis" ? { root: "gnosis" } : {};
 
   const refresh = useCallback(() => {
-    if (tabId == null) { setData(null); return; }
-    void apiGet<TreeResult>("/api/tree", { tabId }).then((r) => setData(r));
-  }, [tabId]);
+    if (tabId == null && root !== "gnosis") { setData(null); return; }
+    void apiGet<TreeResult>("/api/tree", { tabId: tabId ?? 0, ...(root === "gnosis" ? { root: "gnosis" } : {}) }).then((r) => setData(r));
+  }, [tabId, root]);
 
-  useEffect(() => { refresh(); }, [refresh, fileEpoch]);
+  useEffect(() => { refresh(); setExpanded({}); }, [refresh, fileEpoch]);
 
   const openFile = (node: TreeNode) => {
-    if (tabId == null) return;
     setLoadingPreview(true);
     setPreview({ path: node.path, content: "", truncated: false });
-    void apiGet<FilePreview>("/api/file", { tabId, path: node.path }).then((r) => {
+    void apiGet<FilePreview>("/api/file", { tabId: tabId ?? 0, path: node.path, ...rootParam }).then((r) => {
       setLoadingPreview(false);
       setPreview(r ?? { path: node.path, content: "(could not read file)", truncated: false });
     });
   };
 
+  const rootTab = (id: "session" | "gnosis", label: string, title: string) => (
+    <button type="button" title={title} onClick={() => setRoot(id)}
+      style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, padding: "3px 7px", cursor: "pointer",
+        background: root === id ? "#1D1D27" : "transparent", color: root === id ? "#22D3EE" : "#6B6B7B",
+        border: `1px solid ${root === id ? "#22D3EE" : "#2A2A38"}` }}>{label}</button>
+  );
+  const switcher = (
+    <div style={{ display: "flex", gap: 4, padding: "0 2px 6px" }}>
+      {rootTab("session", "SESSION", "files under the session's working directory")}
+      {rootTab("gnosis", "~/Gnosis", "the agent's own output: screenshots and files written without a path")}
+    </div>
+  );
+
   return (
     <>
-      {tabId == null ? (
+      {switcher}
+      {tabId == null && root !== "gnosis" ? (
         <div style={{ fontSize: 10, color: "#4A4A58", padding: 8 }}>no session</div>
       ) : data == null ? (
         <div style={{ fontSize: 10, color: "#4A4A58", padding: 8 }}>loading…</div>
       ) : data.tree.length === 0 ? (
-        <div style={{ fontSize: 10, color: "#4A4A58", padding: 8 }}>empty</div>
+        <div style={{ fontSize: 10, color: "#4A4A58", padding: 8 }}>
+          {root === "gnosis" ? "~/Gnosis is empty — screenshots and files written without a path land here" : "empty"}
+        </div>
       ) : (
         <TreeList nodes={data.tree} depth={0} expanded={expanded} setExpanded={setExpanded} onFile={openFile} onAttach={props.onAttach} />
       )}

@@ -4,7 +4,7 @@
 // history: the user can open the actual picture afterwards, and the browser can
 // show a thumbnail without the bytes riding the websocket a second time.
 //
-// They land in ~/.dom/screenshots, which is outside every session root — so
+// They land in ~/Gnosis/screenshots, which is outside every session root — so
 // /api/file/raw will not serve them (it refuses anything outside the root, and
 // that guard should stay exactly as strict as it is). The dedicated
 // /api/screenshot endpoint serves this directory and nothing else, by basename
@@ -12,7 +12,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { screenshotsDir } from "./config.js";
+import { screenshotsDir } from "./workspace.js";
 
 /** Extension for a content type; unknown types are refused rather than guessed. */
 const EXT_FOR_MIME: Record<string, string> = {
@@ -43,7 +43,7 @@ export function isScreenshotName(name: string): boolean {
 }
 
 /**
- * Write one base64 image into ~/.dom/screenshots and return its absolute path.
+ * Write one base64 image into ~/Gnosis/screenshots and return its absolute path.
  * Returns null for a content type we do not serve, rather than writing bytes the
  * browser would then refuse to display.
  */

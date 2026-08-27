@@ -23,7 +23,7 @@ process.env.HOME = home;
 const { groupChat } = await imp("../web/src/chatgroups.js");
 const { fileOutputFor } = await imp("../web/src/filekind.js");
 const { saveScreenshot, screenshotName, isScreenshotName, extForMime } = await imp("../dist/screenshots.js");
-const { screenshotsDir } = await imp("../dist/config.js");
+const { screenshotsDir } = await imp("../dist/workspace.js");
 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
@@ -84,7 +84,7 @@ const line = (o) => ({ key: "k" + Math.random(), tabId: 1, from: "dom", kind: "t
   // 1x1 png
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
   const saved = await saveScreenshot(png, "image/png", at);
-  ok("the file is written under ~/.dom/screenshots", saved !== null && saved.startsWith(screenshotsDir()));
+  ok("the file is written under ~/Gnosis/screenshots", saved !== null && saved.startsWith(screenshotsDir()));
   const bytes = await fs.readFile(saved);
   ok("...with the real decoded bytes", bytes.length === Buffer.from(png, "base64").length);
   ok("...a genuine PNG header", bytes.subarray(0, 4).toString("hex") === "89504e47");
@@ -97,6 +97,27 @@ const line = (o) => ({ key: "k" + Math.random(), tabId: 1, from: "dom", kind: "t
   for (const bad of ["../../.dom/.env", "a/b.png", "a\\b.png", "..\\x.png", "notes.txt", "", "shot.png.exe"]) {
     ok(`traversal/junk rejected: ${JSON.stringify(bad)}`, !isScreenshotName(bad));
   }
+}
+
+// --- 5. the browser's URL matcher must track the server's directory ---------
+{
+  // The server defines the directory once (config.screenshotsDir) and everything
+  // server-side calls it. The browser cannot import that — it recognises the path
+  // inside a string — so the two can drift, and when they do the thumbnail just
+  // silently stops loading. Pin them together.
+  const apiSrc = await fs.readFile(path.resolve(here, "../web/src/api.ts"), "utf8");
+  const m = /exec\(norm\)/.test(apiSrc) && /const m = \/(.+?)\/\.exec/.exec(apiSrc);
+  ok("the browser has a screenshot-path matcher", !!m);
+  // Every path segment below domDir() must appear in the browser's regex.
+  const segments = screenshotsDir().split(String.fromCharCode(92)).join("/").split("/").slice(-2); // ["gnosis", "screenshots"]
+  for (const seg of segments) {
+    ok(`the browser matcher knows the "${seg}" segment`, m && m[1].includes(seg));
+  }
+  // And the matcher actually matches a path the server would produce.
+  const produced = screenshotsDir() + "/2026-08-26T21-40-05-123Z.png";
+  const norm = produced.split(String.fromCharCode(92)).join("/");
+  const re = new RegExp(m[1].split(String.fromCharCode(92) + "/").join("/").split("//").join("/"));
+  ok("...and matches a real produced path", re.test(norm) || new RegExp(m[1]).test(norm));
 }
 
 await fs.rm(home, { recursive: true, force: true }).catch(() => {});

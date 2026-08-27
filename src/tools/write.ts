@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { loadConfig } from "../config.js";
+import { redirectWrite } from "../workspace.js";
 import { recordCheckpoint } from "../checkpoint.js";
 import type { WriteArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
@@ -22,7 +23,16 @@ export interface WritePlan {
 /** Resolve what a write would do (path .md/vault handling + current content),
  * without applying it (drives the diff preview). Paths resolve against `cwd`. */
 export async function planWrite(args: WriteArgs, cwd: string = process.cwd()): Promise<WritePlan> {
-  let abs = path.resolve(cwd, args.path);
+  // A bare filename written from a directory with no project in it (the home
+  // directory, or the ~/dom checkout) has nowhere sensible to land, so it goes to
+  // today's ~/Gnosis/workspace folder instead of wherever the shell happened to
+  // be. Anything with a separator in it was an explicit choice and is untouched.
+  //
+  // This happens HERE, in the shared planner, so the permission preview, the diff
+  // the user approves, and the bytes on disk are all the same path — a redirect
+  // applied later would prompt for one file and write another.
+  const redirected = redirectWrite(cwd, args.path);
+  let abs = redirected ?? path.resolve(cwd, args.path);
   // Vault mode only: a note written without an extension defaults to .md. Outside
   // the configured vault, paths are left exactly as given (no silent .md).
   if (path.extname(abs) === "") {
@@ -42,7 +52,9 @@ export async function planWrite(args: WriteArgs, cwd: string = process.cwd()): P
   }
 
   return {
-    relPath: path.relative(cwd, abs).split(path.sep).join("/"),
+    // A redirected file is reported by absolute path: "../../Gnosis/workspace/..."
+    // relative to a cwd it was deliberately moved out of tells the user nothing.
+    relPath: redirected ? abs : path.relative(cwd, abs).split(path.sep).join("/"),
     absPath: abs,
     oldContent,
     newContent: args.content,

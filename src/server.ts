@@ -37,7 +37,7 @@ import { webhooks } from "./webhooks.js";
 import { lanIp, isPrivateIpv4 } from "./netip.js";
 import { loadEnv, loadConfig } from "./config.js";
 import { isScreenshotName } from "./screenshots.js";
-import { screenshotsDir } from "./config.js";
+import { screenshotsDir, gnosisDir } from "./workspace.js";
 
 /** Read a request body to a string, capped at maxBytes (excess is drained, not stored). */
 function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string> {
@@ -204,6 +204,24 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
 }
 
 /** Resolve the cwd of a given tab from the live agent snapshot, or null. */
+/**
+ * Which directory a browse request is rooted at: the session's cwd by default, or
+ * the ~/Gnosis workspace when the client asks for `root=gnosis`.
+ *
+ * The traversal guards downstream (resolveInRoot / readFileInRoot) are unchanged
+ * and still confine every path to whichever root this returns — swapping the root
+ * does not widen them, it only chooses which one applies. ~/Gnosis is created on
+ * demand so a fresh install browses an empty folder rather than a 404.
+ */
+async function rootForRequest(bridge: AppBridge, url: URL): Promise<string | null> {
+  if (url.searchParams.get("root") === "gnosis") {
+    const dir = gnosisDir();
+    await fsp.mkdir(dir, { recursive: true }).catch(() => {});
+    return dir;
+  }
+  return cwdForTab(bridge, Number(url.searchParams.get("tabId")));
+}
+
 function cwdForTab(bridge: AppBridge, tabId: number): string | null {
   const a = bridge.getAgents().find((x) => x.id === tabId);
   return a ? a.cwd : null;
@@ -245,17 +263,15 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
     return true;
   }
   if (url.pathname === "/api/tree") {
-    const tabId = Number(url.searchParams.get("tabId"));
-    const cwd = cwdForTab(bridge, tabId);
-    if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
+    const root = await rootForRequest(bridge, url);
+    if (root == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
     // Hide temp/noise files (.gitignore/.domignore + auto-excludes) from the browser.
-    sendJson(res, 200, await buildTree(cwd, { ignore: buildIgnorer(cwd, false) }));
+    sendJson(res, 200, await buildTree(root, { ignore: buildIgnorer(root, false) }));
     return true;
   }
   if (url.pathname === "/api/file") {
-    const tabId = Number(url.searchParams.get("tabId"));
     const rel = url.searchParams.get("path") ?? "";
-    const cwd = cwdForTab(bridge, tabId);
+    const cwd = await rootForRequest(bridge, url);
     if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
     const preview = await readFileInRoot(cwd, rel);
     if (!preview) { sendJson(res, 404, { error: "not found" }); return true; }
@@ -266,9 +282,8 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
   // Same token gate and same traversal guard as the file browser; the only
   // difference is that this one answers with bytes instead of a utf8 preview.
   if (url.pathname === "/api/file/raw") {
-    const tabId = Number(url.searchParams.get("tabId"));
     const rel = url.searchParams.get("path") ?? "";
-    const cwd = cwdForTab(bridge, tabId);
+    const cwd = await rootForRequest(bridge, url);
     if (cwd == null) { sendJson(res, 404, { error: "unknown tab" }); return true; }
     const full = resolveInRoot(cwd, rel);
     if (!full) { sendJson(res, 403, { error: "outside the session root" }); return true; }
@@ -295,7 +310,7 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
     }
     return true;
   }
-  // Images tools handed back (MCP screenshots), which live in ~/.dom/screenshots —
+  // Images tools handed back (MCP screenshots), which live in ~/Gnosis/screenshots —
   // outside every session root, so /api/file/raw correctly refuses them. This
   // serves that ONE directory, by basename only: no tabId, no relative path, and
   // nothing that could walk out of it. Same token gate as everything else.

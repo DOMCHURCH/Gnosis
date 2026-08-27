@@ -37,7 +37,7 @@ export function tokenizedUrl(base: string): string {
 /** Token-gated URL for one file under a tab's root. `raw` fetches the bytes
  *  (images, PDFs); otherwise the JSON text preview the file browser uses. */
 export function fileUrlFor(tabId: number, path: string, raw: boolean): string {
-  // Tool screenshots live in ~/.dom/screenshots, which is outside every session
+  // Tool screenshots live in ~/Gnosis/screenshots, which is outside every session
   // root — /api/file/raw refuses those by design, and that guard should stay as
   // strict as it is. They have their own basename-only endpoint instead.
   const shot = screenshotName(path);
@@ -46,10 +46,10 @@ export function fileUrlFor(tabId: number, path: string, raw: boolean): string {
   return `${raw ? "/api/file/raw" : "/api/file"}?${q.toString()}`;
 }
 
-/** The basename when `p` points into ~/.dom/screenshots, else null. Matches both
+/** The basename when `p` points into ~/Gnosis/screenshots, else null. Matches both
  * separators, since the path is produced server-side on whatever OS is running. */
 export function screenshotName(p: string): string | null {
   const norm = String(p || "").split("\\").join("/");
-  const m = /\/\.dom\/screenshots\/([^/]+)$/.exec(norm);
+  const m = /\/Gnosis\/screenshots\/([^/]+)$/.exec(norm);
   return m ? m[1] : null;
 }

@@ -128,14 +128,6 @@ export function cacheDir(): string {
  * branches (see worktree.ts). Like cache/ and skills/ it is a tool-accessible
  * pocket of ~/.dom: the agent has to edit the files it checked out in there, and
  * has to be able to tear the worktree down again afterwards. */
-/** Where images returned by tools are persisted (MCP screenshots today). Inside
- * ~/.dom so they never land in the user's repo, and served to the browser only by
- * the dedicated /api/screenshot endpoint — /api/file/raw refuses anything outside
- * the session root, and that guard is not worth widening for this. */
-export function screenshotsDir(): string {
-  return path.join(domDir(), "screenshots");
-}
-
 export function worktreesDir(): string {
   return path.join(domDir(), "worktrees");
 }
