@@ -1,32 +1,21 @@
-<!--
-  banner gradient: cyan (#22d3ee) → indigo (#6366f1) → magenta (#d946ef),
-  left-to-right across the wordmark
--->
-```
-  ██████╗ ███╗   ██╗ ██████╗ ███████╗██╗███████╗
- ██╔════╝ ████╗  ██║██╔═══██╗██╔════╝██║██╔════╝
- ██║  ███╗██╔██╗ ██║██║   ██║███████╗██║███████╗
- ██║   ██║██║╚██╗██║██║   ██║╚════██║██║╚════██║
- ╚██████╔╝██║ ╚████║╚██████╔╝███████║██║███████║
-  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝
-```
+# Gnosis
 
-# Your AI agents needed an office. So I built one.
+[![CI](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@dominquechurch%2Fgnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
+[![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
+[![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
+
+**Your AI agents needed an office. So I built one.**
+
+```sh
+npx @dominquechurch/gnosis
+```
 
 Gnosis is a terminal coding agent that runs on any model, switches models
 mid-session without losing your history, and ships with a browser UI where you
 watch your agents work as blocky figures moving around a 3D office floor.
 
 **v1.1.0**
-
-```sh
-npx @dominquechurch/gnosis
-```
-
-[![CI](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@dominquechurch%2Fgnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
-[![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
-[![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
 
 ## See it
 
