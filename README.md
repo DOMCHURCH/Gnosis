@@ -1,3 +1,16 @@
+<!--
+  banner gradient: cyan (#22d3ee) → indigo (#6366f1) → magenta (#d946ef),
+  left-to-right across the wordmark
+-->
+```
+  ██████╗ ███╗   ██╗ ██████╗ ███████╗██╗███████╗
+ ██╔════╝ ████╗  ██║██╔═══██╗██╔════╝██║██╔════╝
+ ██║  ███╗██╔██╗ ██║██║   ██║███████╗██║███████╗
+ ██║   ██║██║╚██╗██║██║   ██║╚════██║██║╚════██║
+ ╚██████╔╝██║ ╚████║╚██████╔╝███████║██║███████║
+  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝
+```
+
 # Your AI agents needed an office. So I built one.
 
 Gnosis is a terminal coding agent that runs on any model, switches models
