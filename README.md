@@ -30,7 +30,7 @@ npx @dominquechurch/gnosis
 
 ## See it
 
-https://github.com/DOMCHURCH/Gnosis/raw/master/docs/demo.mp4
+![Gnosis — terminal coding agent with live 3D office floor](docs/demo.gif)
 
 *Five lit rooms — coordinator, planning, coding, application, sub-agents.
 Every agent, background job, and sub-agent is a figure at a desk, and the room
