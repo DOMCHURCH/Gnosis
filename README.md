@@ -1,11 +1,13 @@
+<div align="center">
+
 # Gnosis
+
+**Your AI agents needed an office. So I built one.**
 
 [![CI](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml/badge.svg)](https://github.com/DOMCHURCH/Gnosis/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@dominquechurch%2Fgnosis)](https://www.npmjs.com/package/@dominquechurch%2Fgnosis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg)](LICENSE)
 [![OpenRouter](https://img.shields.io/badge/powered%20by-OpenRouter-blueviolet)](https://openrouter.ai)
-
-**Your AI agents needed an office. So I built one.**
 
 ```sh
 npx @dominquechurch/gnosis
@@ -15,17 +17,21 @@ Gnosis is a terminal coding agent that runs on any model, switches models
 mid-session without losing your history, and ships with a browser UI where you
 watch your agents work as blocky figures moving around a 3D office floor.
 
-**v1.1.0**
+</div>
 
 ## See it
 
+<div align="center">
+
 ![Gnosis — terminal coding agent with live 3D office floor](docs/demo.gif)
 
-*Five lit rooms — coordinator, planning, coding, application, sub-agents.
-Every agent, background job, and sub-agent is a figure at a desk, and the room
-lights up when work lands there. Orbit it, zoom it, click a desk to read the
-session. The floor above was staffed by typing "fill the office" into the chat
-rail on the right — ask for agents and they walk in.*
+*Five lit rooms — coordinator, planning, coding, application, sub-agents. Every
+agent, background job, and sub-agent is a figure at a desk, and the room lights
+up when work lands there. Orbit it, zoom it, click a desk to read the session.
+The floor above was staffed by typing "fill the office" into the chat rail on
+the right — ask for agents and they walk in.*
+
+</div>
 
 ## Why this exists
 
@@ -106,8 +112,13 @@ what the agent was doing instead of scrolling a wall of text and hoping.
   and only lands on disk at commit
 - **101 automated test suites** — offline, isolated, green on Windows CI every push
 
+<div align="center">
+
 ![Gnosis model picker](docs/screenshot-model-picker.png)
+
 *Runtime model switching — the full OpenRouter catalog, in the browser*
+
+</div>
 
 ## The story
 
