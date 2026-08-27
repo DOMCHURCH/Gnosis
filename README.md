@@ -30,15 +30,13 @@ npx @dominquechurch/gnosis
 
 ## See it
 
-![Gnosis office floor](docs/screenshot.png)
+https://github.com/DOMCHURCH/Gnosis/raw/master/docs/demo.mp4
 
 *Five lit rooms — coordinator, planning, coding, application, sub-agents.
 Every agent, background job, and sub-agent is a figure at a desk, and the room
 lights up when work lands there. Orbit it, zoom it, click a desk to read the
 session. The floor above was staffed by typing "fill the office" into the chat
 rail on the right — ask for agents and they walk in.*
-
-**(GIF coming soon — run it yourself to see it live.)**
 
 ## Why this exists
 
