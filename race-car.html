@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>APEX RACER</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0A0E14; overflow: hidden; }
+  body { font-family: Impact, "Arial Black", "Helvetica Neue", sans-serif; }
+  canvas { display: block; margin: 0 auto; background: #0A0E14; image-rendering: optimizeQuality; }
+  #wrap { display: flex; align-items: center; justify-content: center; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="1280" height="720"></canvas></div>
+<script>
+"use strict";
+
+// ===========================================================================
+// APEX RACER - top-down arcade racing
+// Self-contained: pure canvas, no assets, no network. Double-click to play.
+// ===========================================================================
+
+const C = document.getElementById("game");
+const X = C.getContext("2d");
+const W = C.width, H = C.height;
+
+// ---------------------------------------------------------------------------
+// CONSTANTS
+// ---------------------------------------------------------------------------
+const PLAYER_MAX_SPEED = 320;        // px/s
+const ACCEL = 260;                   // forward thrust
+const BRAKE = 360;                   // brake decel
+const REVERSE_ACCEL = 140;
+const FRICTION = 0.6;                // rolling friction per second
+const OFFTRACK_FRICTION = 4.0;
+const TURN_RATE = 3.2;               // rad/s at full lock
+const LAPS_TO_WIN = 3;
+const CAR_LEN = 36, CAR_WID = 20;
+
+// ---------------------------------------------------------------------------
+// TRACK - closed loop as centerline waypoints; width interpolated per segment
+// ---------------------------------------------------------------------------
+const TRACK = {
+  startIndex: 2,
+  lapLength: 0,
+  targetSpeed: null,
+  waypoints: [
+    { x: 1050, y: 480, width: 80 },
+    { x:  980, y: 380, width: 80 },
+    { x:  860, y: 320, width: 80 },
+    { x:  720, y: 300, width: 80 },
+    { x:  560, y: 310, width: 80 },
+    { x:  410, y: 350, width: 80 },
+    { x:  290, y: 430, width: 80 },
+    { x:  240, y: 540, width: 70 },
+    { x:  310, y: 600, width: 65 },
+    { x:  240, y: 640, width: 65 },
+    { x:  310, y: 680, width: 70 },
+    { x:  480, y: 660, width: 80 },
+    { x:  650, y: 620, width: 80 },
+    { x:  800, y: 600, width: 80 },
+    { x:  950, y: 580, width: 80 },
+    { x: 1080, y: 600, width: 80 },
+    { x: 1150, y: 560, width: 80 },
+  ],
+};
+
+function buildTrack(track) {
+  const wps = track.waypoints;
+  const N = wps.length;
+  const segLen = new Array(N);
+  let total = 0;
+  for (let i = 0; i < N; i++) {
+    const a = wps[i], b = wps[(i + 1) % N];
+    segLen[i] = Math.hypot(b.x - a.x, b.y - a.y);
+    total += segLen[i];
+  }
+  track.lapLength = total;
+  track.segLen = segLen;
+  track.N = N;
+
+  // precompute per-waypoint target speed using curvature
+  track.targetSpeed = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = wps[(i - 1 + N) % N], b = wps[i], c = wps[(i + 1) % N];
+    const v1x = b.x - a.x, v1y = b.y - a.y;
+    const v2x = c.x - b.x, v2y = c.y - b.y;
+    const cosA = (v1x * v2x + v1y * v2y) /
+      (Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y) + 1e-6);
+    const turn = Math.acos(Math.max(-1, Math.min(1, cosA)));
+    const tightness = turn / Math.PI;
+    const narrow = 80 / Math.max(40, b.width);
+    const vFrac = Math.max(0.35, 1.0 - 1.1 * tightness * narrow);
+    track.targetSpeed[i] = vFrac * PLAYER_MAX_SPEED;
+  }
+  return track;
+}
+buildTrack(TRACK);
+
+// ---------------------------------------------------------------------------
+// INPUT
+// ---------------------------------------------------------------------------
+const keys = {};
+window.addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code === "Space") e.preventDefault();
+});
+window.addEventListener("keyup", e => { keys[e.code] = false; });
+C.addEventListener("mousedown", () => {
+  if (state.phase === "menu") state.phase = "countdown";
+});
+
+function inputAxis() {
+  let x = 0, y = 0, hand = false;
+  if (keys.ArrowUp || keys.KeyW) y += 1;
+  if (keys.ArrowDown || keys.KeyS) y -= 1;
+  if (keys.ArrowLeft || keys.KeyA) x -= 1;
+  if (keys.ArrowRight || keys.KeyD) x += 1;
+  if (keys.ShiftLeft || keys.ShiftRight) hand = true;
+  return { x, y, hand };
+}
+
+// ---------------------------------------------------------------------------
+// CAR
+// ---------------------------------------------------------------------------
+class Car {
+  constructor(opts) {
+    this.x = opts.x; this.y = opts.y;
+    this.angle = opts.angle;
+    this.vx = 0; this.vy = 0;
+    this.speed = 0; // signed: + forward, - reverse
+    this.color = opts.color || "#FF3B3B";
+    this.name = opts.name || "car";
+    this.isAI = !!opts.isAI;
+    this.ai = opts.ai || null;
+    this.lap = 0;
+    this.lastProgress = 0;     // distance along track (monotonic)
+    this.progress = 0;
+    this.bestLapMs = null;
+    this.lastLapStart = 0;
+    this.crossedStart = false;
+    this.finished = false;
+    this.finishPlace = 0;
+    this.flash = 0;             // brief flash on lap complete
+    this.dead = false;
+  }
+  forward() { return { fx: Math.cos(this.angle), fy: Math.sin(this.angle) }; }
+}
+
+// ---------------------------------------------------------------------------
+// AI
+// ---------------------------------------------------------------------------
+const AI_PROFILES = {
+  aggressive: { lookahead: 3, reactionMs: 180, topSpeed: 0.97, mistakeRate: 0.00, cutCorners: 0.35, brakeAggression: 0.9, color: "#FFD600", name: "Blaze" },
+  steady:     { lookahead: 2, reactionMs: 220, topSpeed: 0.95, mistakeRate: 0.00, cutCorners: 0.05, brakeAggression: 1.1, color: "#00B0FF", name: "Steady" },
+  erratic:    { lookahead: 2, reactionMs: 260, topSpeed: 0.93, mistakeRate: 0.04, cutCorners: 0.15, brakeAggression: 0.8, color: "#9C27B0", name: "Jolt" },
+};
+
+function findCarAhead(self, cars, range) {
+  let best = null, bestD = range;
+  for (const o of cars) {
+    if (o === self || o.dead) continue;
+    const dx = o.x - self.x, dy = o.y - self.y;
+    const d = Math.hypot(dx, dy);
+    if (d > range) continue;
+    const ang = Math.atan2(dy, dx);
+    let diff = ang - self.angle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    if (Math.abs(diff) < 0.6 && d < bestD) { best = o; bestD = d; }
+  }
+  return best;
+}
+
+function updateAI(ai, car, dtMs, allCars) {
+  const p = ai.profile;
+  ai.reactionAccum = (ai.reactionAccum || 0) + dtMs;
+  if (ai.reactionAccum < p.reactionMs) return;
+  ai.reactionAccum = 0;
+
+  const wps = TRACK.waypoints;
+  const N = TRACK.N;
+
+  // advance waypoint pointer
+  const ahead = wps[(ai.wpIndex + 1) % N];
+  if (Math.hypot(ahead.x - car.x, ahead.y - car.y) < 60) {
+    ai.wpIndex = (ai.wpIndex + 1) % N;
+  }
+
+  // lookahead target
+  const targetIdx = (ai.wpIndex + p.lookahead) % N;
+  const target = wps[targetIdx];
+  const nextWp = wps[(ai.wpIndex + 1) % N];
+  const prevWp = wps[(ai.wpIndex - 1 + N) % N];
+  const inX = nextWp.x - prevWp.x, inY = nextWp.y - prevWp.y;
+  const outX = wps[(ai.wpIndex + 2) % N].x - nextWp.x;
+  const outY = wps[(ai.wpIndex + 2) % N].y - nextWp.y;
+  const cross = inX * outY - inY * outX;
+  const inLen = Math.hypot(inX, inY) + 1e-6;
+  const nx = -inY / inLen, ny = inX / inLen;
+  const side = Math.sign(cross) || 1;
+  const offsetPx = p.cutCorners * 25 * side;
+  const aimX = target.x + nx * offsetPx;
+  const aimY = target.y + ny * offsetPx;
+
+  // steering
+  const dx = aimX - car.x, dy = aimY - car.y;
+  const desired = Math.atan2(dy, dx);
+  let diff = desired - car.angle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  car.angle += Math.max(-1, Math.min(1, diff * 2.0)) * 0.12;
+
+  // throttle/brake
+  const cornerWp = wps[(ai.wpIndex + 1) % N];
+  const targetV = TRACK.targetSpeed[ai.wpIndex] * p.topSpeed;
+  const cornerV = TRACK.targetSpeed[(ai.wpIndex + 1) % N] * p.topSpeed;
+  const distToCorner = Math.hypot(cornerWp.x - car.x, cornerWp.y - car.y);
+  const blend = Math.max(0, Math.min(1, distToCorner / 200));
+  const desiredV = cornerV * (1 - blend) + targetV * blend;
+  let accel = (car.speed < desiredV) ? ACCEL * 0.4 : -BRAKE * 0.5 * p.brakeAggression;
+
+  // erratic swerve
+  if (p.mistakeRate > 0 && Math.random() < p.mistakeRate) {
+    car.angle += (Math.random() - 0.5) * 0.6;
+  }
+
+  // obstacle avoidance
+  const obstacle = findCarAhead(car, allCars, 140);
+  if (obstacle) {
+    const dodge = (obstacle.y < car.y ? 1 : -1) * 0.04;
+    car.angle += dodge;
+    accel = Math.min(accel, -BRAKE * 0.4);
+  }
+
+  // cap & apply
+  const maxV = PLAYER_MAX_SPEED * p.topSpeed;
+  car.speed = Math.max(-maxV * 0.3, Math.min(maxV, car.speed + accel * (p.reactionMs / 1000)));
+  car.vx = Math.cos(car.angle) * car.speed;
+  car.vy = Math.sin(car.angle) * car.speed;
+}
+
+// ---------------------------------------------------------------------------
+// TRACK UTILITIES
+// ---------------------------------------------------------------------------
+function distToTrack(x, y) {
+  // min distance from (x,y) to the centerline polyline (cyclic)
+  const wps = TRACK.waypoints;
+  const N = TRACK.N;
+  let best = Infinity, bestT = 0, bestIdx = 0;
+  for (let i = 0; i < N; i++) {
+    const a = wps[i], b = wps[(i + 1) % N];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    let t = ((x - a.x) * dx + (y - a.y) * dy) / (len2 + 1e-6);
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + dx * t, py = a.y + dy * t;
+    const d = Math.hypot(x - px, y - py);
+    if (d < best) { best = d; bestT = t; bestIdx = i; }
+  }
+  return { d: best, t: bestT, idx: bestIdx };
+}
+
+function trackWidthAt(idx, t) {
+  const a = TRACK.waypoints[idx], b = TRACK.waypoints[(idx + 1) % TRACK.N];
+  return a.width * (1 - t) + b.width * t;
+}
+
+function isOffTrack(x, y) {
+  const r = distToTrack(x, y);
+  return r.d > trackWidthAt(r.idx, r.t) / 2 - 2;
+}
+
+// compute monotonic progress (distance along centerline) for lap detection
+function computeProgress(x, y) {
+  const wps = TRACK.waypoints;
+  const N = TRACK.N;
+  let best = Infinity, bestDist = 0;
+  for (let i = 0; i < N; i++) {
+    const a = wps[i], b = wps[(i + 1) % N];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) + 1e-6;
+    let t = ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy);
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + dx * t, py = a.y + dy * t;
+    const d = Math.hypot(x - px, y - py);
+    if (d < best) {
+      best = d;
+      let acc = 0;
+      for (let k = 0; k < i; k++) acc += TRACK.segLen[k];
+      bestDist = acc + t * TRACK.segLen[i];
+    }
+  }
+  return bestDist;
+}
+
+// ---------------------------------------------------------------------------
+// GAME STATE
+// ---------------------------------------------------------------------------
+const state = {
+  phase: "menu",          // menu | countdown | racing | finished
+  countT: 0,
+  raceT: 0,
+  cars: [],
+  particles: [],
+  skids: [],
+  shake: 0,
+  finishOrder: [],
+  playerFinish: 0,
+  raceStartMs: 0,
+  playerBestLap: null,
+  prevInputHint: 3,       // seconds input hint stays visible
+};
+
+function spawnGrid() {
+  const wps = TRACK.waypoints;
+  const N = TRACK.N;
+  const sIdx = TRACK.startIndex;
+  const s = wps[sIdx];
+  const prev = wps[(sIdx - 1 + N) % N];
+  const ang = Math.atan2(s.y - prev.y, s.x - prev.x);
+  const px = -Math.sin(ang), py = Math.cos(ang);
+
+  const player = new Car({
+    x: s.x + px * 0 - Math.cos(ang) * 0,
+    y: s.y + py * 0 - Math.sin(ang) * 0,
+    angle: ang,
+    color: "#FF3B3B",
+    name: "You",
+    isAI: false,
+  });
+  player.ai = null;
+
+  const profiles = ["aggressive", "steady", "erratic"];
+  const opponents = profiles.map((pname, i) => {
+    const side = i % 2 === 0 ? 1 : -1;
+    const row = Math.floor(i / 2);
+    const cx = s.x + px * (25 * side) - Math.cos(ang) * (row * 30 + 32);
+    const cy = s.y + py * (25 * side) - Math.sin(ang) * (row * 30 + 32);
+    const ai = { profile: AI_PROFILES[pname], wpIndex: sIdx, reactionAccum: 0 };
+    const car = new Car({
+      x: cx, y: cy, angle: ang,
+      color: AI_PROFILES[pname].color,
+      name: AI_PROFILES[pname].name,
+      isAI: true, ai,
+    });
+    return car;
+  });
+
+  return [player, ...opponents];
+}
+
+function resetRace() {
+  state.cars = spawnGrid();
+  state.particles = [];
+  state.skids = [];
+  state.shake = 0;
+  state.finishOrder = [];
+  state.raceT = 0;
+  state.countT = 0;
+  state.phase = "countdown";
+  state.raceStartMs = 0;
+  state.playerBestLap = null;
+}
+
+// ---------------------------------------------------------------------------
+// UPDATE
+// ---------------------------------------------------------------------------
+let lastT = performance.now();
+function update(now) {
+  let dt = (now - lastT) / 1000;
+  if (dt > 0.05) dt = 0.05;
+  lastT = now;
+  const dtMs = dt * 1000;
+
+  // shake decay
+  state.shake *= Math.pow(0.05, dt); // ~95% decay per second
+
+  if (state.phase === "countdown") {
+    state.countT += dt;
+    if (state.countT >= 3.0) {
+      state.phase = "racing";
+      state.raceStartMs = now;
+      for (const c of state.cars) c.lastLapStart = now;
+    }
+  }
+
+  if (state.phase === "racing") {
+    state.raceT += dt;
+    if (state.prevInputHint > 0) {
+      state.prevInputHint -= dt;
+      if (state.prevInputHint < 0) state.prevInputHint = 0;
+    }
+    updateCars(dt, dtMs, now);
+    updateSkids(dt);
+    updateParticles(dt);
+    // win condition
+    const allDone = state.cars.every(c => c.finished);
+    if (allDone) {
+      state.phase = "finished";
+    }
+  }
+}
+
+function updateCars(dt, dtMs, now) {
+  const cars = state.cars;
+
+  // physics
+  for (const c of cars) {
+    if (c.finished) { c.speed *= Math.pow(0.001, dt); continue; }
+    if (state.phase === "countdown") {
+      c.speed = 0; c.vx = 0; c.vy = 0;
+      continue;
+    }
+    if (c.isAI) {
+      updateAI(c.ai, c, dtMs, cars);
+    } else {
+      const inp = inputAxis();
+      const off = isOffTrack(c.x, c.y);
+      const fric = off ? OFFTRACK_FRICTION : FRICTION;
+      // throttle / brake / reverse
+      let thrust = 0;
+      if (inp.y > 0) thrust = ACCEL;
+      else if (inp.y < 0) {
+        if (c.speed > 1) thrust = -BRAKE;
+        else thrust = -REVERSE_ACCEL;
+      }
+      if (inp.hand && c.speed > 30) thrust = -BRAKE * 1.4;
+      // forward-only acceleration
+      const fwdSpeed = c.vx * Math.cos(c.angle) + c.vy * Math.sin(c.angle);
+      if (thrust > 0) {
+        c.speed += thrust * dt;
+      } else if (thrust < 0) {
+        c.speed += thrust * dt;
+      }
+      // friction
+      const drag = fric * 60 * dt;
+      if (Math.abs(c.speed) <= drag) c.speed = 0;
+      else c.speed -= Math.sign(c.speed) * drag;
+      // steering scales with speed
+      const turnScale = Math.max(0.3, Math.min(1, Math.abs(c.speed) / 100));
+      if (inp.x !== 0 && Math.abs(c.speed) > 0.5) {
+        const sign = c.speed >= 0 ? 1 : -1;
+        c.angle += inp.x * TURN_RATE * turnScale * dt * sign;
+      }
+      c.speed = Math.max(-PLAYER_MAX_SPEED * 0.4, Math.min(PLAYER_MAX_SPEED, c.speed));
+      c.vx = Math.cos(c.angle) * c.speed;
+      c.vy = Math.sin(c.angle) * c.speed;
+
+      // skid mark spawning
+      if (Math.abs(inp.x) > 0.5 && Math.abs(c.speed) > PLAYER_MAX_SPEED * 0.5) {
+        if (Math.random() < 0.5) spawnSkid(c);
+      }
+      if (inp.hand && c.speed > 50 && Math.random() < 0.7) spawnSkid(c);
+
+      // off-track dust
+      if (off && Math.abs(c.speed) > PLAYER_MAX_SPEED * 0.2) {
+        if (Math.random() < 0.4) spawnDust(c);
+      }
+    }
+
+    // integrate position
+    c.x += c.vx * dt;
+    c.y += c.vy * dt;
+
+    // lap detection
+    const prog = computeProgress(c.x, c.y);
+    c.progress = prog;
+    // crossed start/finish (at TRACK.startIndex, t ~ 0)
+    const sIdx = TRACK.startIndex;
+    const sWp = TRACK.waypoints[sIdx];
+    const distToStart = Math.hypot(c.x - sWp.x, c.y - sWp.y);
+    if (distToStart < 40) {
+      if (!c.crossedStart && c.lastProgress > TRACK.lapLength * 0.5) {
+        // completed a lap
+        c.lap += 1;
+        c.flash = 0.5;
+        if (c.isAI) {
+          // AI best lap not tracked for display
+        } else {
+          const lapMs = now - c.lastLapStart;
+          if (c.lap > 1) {
+            if (state.playerBestLap == null || lapMs < state.playerBestLap) {
+              state.playerBestLap = lapMs;
+            }
+          }
+          c.lastLapStart = now;
+        }
+        if (c.lap >= LAPS_TO_WIN) {
+          c.finished = true;
+          c.finishPlace = state.finishOrder.length + 1;
+          state.finishOrder.push(c);
+        }
+        c.crossedStart = true;
+      }
+    } else {
+      c.crossedStart = false;
+    }
+    c.lastProgress = prog;
+    if (c.flash > 0) c.flash -= dt;
+  }
+
+  // car-car collisions (simple elastic)
+  for (let i = 0; i < cars.length; i++) {
+    for (let j = i + 1; j < cars.length; j++) {
+      const a = cars[i], b = cars[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.hypot(dx, dy);
+      const minD = (CAR_LEN + CAR_WID) / 2;
+      if (d < minD && d > 0.001) {
+        const nx = dx / d, ny = dy / d;
+        const overlap = minD - d;
+        a.x -= nx * overlap * 0.5; a.y -= ny * overlap * 0.5;
+        b.x += nx * overlap * 0.5; b.y += ny * overlap * 0.5;
+        // exchange a bit of velocity
+        const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+        const sep = rvx * nx + rvy * ny;
+        if (sep < 0) {
+          const imp = -sep * 0.5;
+          a.vx -= nx * imp; a.vy -= ny * imp;
+          b.vx += nx * imp; b.vy += ny * imp;
+          a.speed = a.vx * Math.cos(a.angle) + a.vy * Math.sin(a.angle);
+          b.speed = b.vx * Math.cos(b.angle) + b.vy * Math.sin(b.angle);
+          const impact = Math.abs(sep);
+          if (impact > 60) {
+            state.shake = Math.max(state.shake, Math.min(8, impact / 30));
+            spawnDust(a); spawnDust(b);
+          }
+        }
+      }
+    }
+  }
+}
+
+function spawnSkid(c) {
+  const rearX = c.x - Math.cos(c.angle) * CAR_LEN * 0.4;
+  const rearY = c.y - Math.sin(c.angle) * CAR_LEN * 0.4;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const sx = rearX + Math.cos(c.angle + Math.PI / 2) * (CAR_WID * 0.35 * side);
+  const sy = rearY + Math.sin(c.angle + Math.PI / 2) * (CAR_WID * 0.35 * side);
+  state.skids.push({ x: sx, y: sy, angle: c.angle, life: 8, max: 8 });
+  if (state.skids.length > 600) state.skids.shift();
+}
+
+function spawnDust(c) {
+  state.particles.push({
+    x: c.x, y: c.y,
+    vx: -c.vx * 0.1 + (Math.random() - 0.5) * 30,
+    vy: -c.vy * 0.1 + (Math.random() - 0.5) * 30 - 20,
+    life: 0.6, max: 0.6,
+    size: 4 + Math.random() * 4,
+  });
+  if (state.particles.length > 80) state.particles.shift();
+}
+
+function updateSkids(dt) {
+  for (let i = state.skids.length - 1; i >= 0; i--) {
+    state.skids[i].life -= dt;
+    if (state.skids[i].life <= 0) state.skids.splice(i, 1);
+  }
+}
+function updateParticles(dt) {
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { state.particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.92; p.vy *= 0.92;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RENDER
+// ---------------------------------------------------------------------------
+function render() {
+  // world transform: shake
+  const sx = (Math.random() - 0.5) * state.shake;
+  const sy = (Math.random() - 0.5) * state.shake;
+  X.save();
+  X.translate(sx, sy);
+
+  if (state.phase === "menu") {
+    X.fillStyle = "#0A0E14";
+    X.fillRect(-20, -20, W + 40, H + 40);
+    // speed lines
+    X.strokeStyle = "rgba(255,255,255,0.05)";
+    X.lineWidth = 1;
+    for (let i = 0; i < 12; i++) {
+      const y = (i * 70 + (performance.now() / 30) % 70) - 50;
+      X.beginPath(); X.moveTo(0, y); X.lineTo(W, y); X.stroke();
+    }
+    drawMenu();
+    X.restore();
+    return;
+  }
+
+  // grass background (visible if camera doesn't fill)
+  X.fillStyle = "#2e7d32";
+  X.fillRect(-20, -20, W + 40, H + 40);
+
+  drawTrack();
+  drawSkids();
+  drawCars();
+
+  X.restore();
+
+  // HUD on top, no shake
+  if (state.phase === "countdown") drawCountdown();
+  else if (state.phase === "racing") drawHUD();
+  else if (state.phase === "finished") drawFinish();
+}
+
+function drawTrack() {
+  const wps = TRACK.waypoints;
+  const N = TRACK.N;
+
+  // track surface (dark asphalt)
+  X.lineCap = "round"; X.lineJoin = "round";
+  X.strokeStyle = "#3a3a3a";
+  X.lineWidth = 80;
+  X.beginPath();
+  X.moveTo(wps[0].x, wps[0].y);
+  for (let i = 1; i < N; i++) X.lineTo(wps[i].x, wps[i].y);
+  X.closePath();
+  X.stroke();
+
+  // edge white lines (drawn as two thin strokes offset to the sides of the asphalt)
+  X.strokeStyle = "#ffffff";
+  X.lineWidth = 3;
+  // left edge (perpendicular offset)
+  const drawOffsetPoly = (off) => {
+    X.beginPath();
+    for (let i = 0; i < N; i++) {
+      const a = wps[i], b = wps[(i + 1) % N];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) + 1e-6;
+      const nx = -dy / len, ny = dx / len;
+      const wa = a.width / 2 * off, wb = b.width / 2 * off;
+      const px = a.x + nx * wa, py = a.y + ny * wa;
+      if (i === 0) X.moveTo(px, py); else X.lineTo(px, py);
+      const qx = b.x + nx * wb, qy = b.y + ny * wb;
+      X.lineTo(qx, qy);
+    }
+    X.closePath();
+    X.stroke();
+  };
+  drawOffsetPoly(1);
+  drawOffsetPoly(-1);
+
+  // dashed centerline
+  X.strokeStyle = "rgba(255,255,255,0.7)";
+  X.lineWidth = 2;
+  X.setLineDash([14, 14]);
+  X.beginPath();
+  X.moveTo(wps[0].x, wps[0].y);
+  for (let i = 1; i < N; i++) X.lineTo(wps[i].x, wps[i].y);
+  X.closePath();
+  X.stroke();
+  X.setLineDash([]);
+
+  // start/finish checkerboard
+  const s = wps[TRACK.startIndex];
+  const prev = wps[(TRACK.startIndex - 1 + N) % N];
+  const tang = Math.atan2(s.y - prev.y, s.x - prev.x);
+  const nx = -Math.sin(tang), ny = Math.cos(tang);
+  const half = s.width / 2;
+  const sq = 10;
+  for (let dx = -half; dx < half; dx += sq) {
+    for (let dy = -3; dy < 3; dy += sq) {
+      const px = s.x + Math.cos(tang) * dx + nx * dy;
+      const py = s.y + Math.sin(tang) * dx + ny * dy;
+      const on = (Math.floor((dx + half) / sq) + Math.floor((dy + 3) / sq)) % 2 === 0;
+      X.fillStyle = on ? "#ffffff" : "#111111";
+      X.fillRect(px - sq / 2, py - sq / 2, sq, sq);
+    }
+  }
+}
+
+function drawSkids() {
+  for (const s of state.skids) {
+    const fade = Math.min(1, s.life / 3);
+    X.strokeStyle = `rgba(26,26,26,${0.8 * fade})`;
+    X.lineWidth = 2;
+    X.beginPath();
+    X.moveTo(s.x - Math.cos(s.angle) * 3, s.y - Math.sin(s.angle) * 3);
+    X.lineTo(s.x + Math.cos(s.angle) * 3, s.y + Math.sin(s.angle) * 3);
+    X.stroke();
+  }
+}
+
+function drawCars() {
+  // sort by y so cars "behind" are drawn over
+  const sorted = [...state.cars].sort((a, b) => a.y - b.y);
+  for (const c of sorted) drawCar(c);
+}
+
+function drawCar(c) {
+  X.save();
+  X.translate(c.x, c.y);
+  X.rotate(c.angle);
+  // shadow
+  X.fillStyle = "rgba(0,0,0,0.4)";
+  X.fillRect(-CAR_LEN / 2 + 2, -CAR_WID / 2 + 3, CAR_LEN, CAR_WID);
+  // body
+  X.fillStyle = c.color;
+  X.fillRect(-CAR_LEN / 2, -CAR_WID / 2, CAR_LEN, CAR_WID);
+  // body inner
+  X.fillStyle = "rgba(0,0,0,0.25)";
+  X.fillRect(-CAR_LEN / 2 + 4, -CAR_WID / 2 + 3, CAR_LEN - 8, CAR_WID - 6);
+  // windshield
+  X.fillStyle = "rgba(150,200,255,0.5)";
+  X.fillRect(CAR_LEN / 2 - 10, -CAR_WID / 2 + 3, 5, CAR_WID - 6);
+  // front indicator
+  X.fillStyle = "#ffffff";
+  X.fillRect(CAR_LEN / 2 - 3, -CAR_WID / 2 - 1, 3, 3);
+  X.fillRect(CAR_LEN / 2 - 3, CAR_WID / 2 - 2, 3, 3);
+  // flash on lap
+  if (c.flash > 0) {
+    X.fillStyle = `rgba(255,255,255,${c.flash})`;
+    X.fillRect(-CAR_LEN / 2 - 4, -CAR_WID / 2 - 4, CAR_LEN + 8, CAR_WID + 8);
+  }
+  X.restore();
+}
+
+function drawParticles() {
+  for (const p of state.particles) {
+    const a = Math.max(0, p.life / p.max) * 0.6;
+    X.fillStyle = `rgba(194,168,120,${a})`;
+    const sz = p.size * (1 + (1 - p.life / p.max));
+    X.beginPath();
+    X.arc(p.x, p.y, sz, 0, Math.PI * 2);
+    X.fill();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MENU / COUNTDOWN / HUD / FINISH
+// ---------------------------------------------------------------------------
+function drawMenu() {
+  X.textAlign = "center";
+  X.fillStyle = "#FF3B3B";
+  X.font = "900 96px Impact, 'Arial Black', sans-serif";
+  X.lineWidth = 4;
+  X.strokeStyle = "#ffffff";
+  X.strokeText("APEX RACER", W / 2, H * 0.35);
+  X.fillText("APEX RACER", W / 2, H * 0.35);
+
+  X.fillStyle = "#B8C0CC";
+  X.font = "400 20px Impact, 'Arial Black', sans-serif";
+  X.fillText("TOP-DOWN ARCADE VELOCITY", W / 2, H * 0.35 + 50);
+
+  // car silhouette
+  X.save();
+  X.translate(W / 2, H * 0.35 + 130);
+  X.fillStyle = "rgba(255,107,0,0.4)";
+  X.beginPath(); X.arc(-22, 0, 18, 0, Math.PI * 2); X.fill();
+  X.beginPath(); X.arc(22, 0, 18, 0, Math.PI * 2); X.fill();
+  X.fillStyle = "#1F2A3A";
+  X.fillRect(-12, -30, 24, 60);
+  X.fillStyle = "#0A0E14";
+  X.fillRect(-2, -22, 16, 12);
+  X.fillRect(-2, 10, 16, 12);
+  X.restore();
+
+  const blink = Math.floor(performance.now() / 500) % 2 === 0;
+  if (blink) {
+    X.fillStyle = "#ffffff";
+    X.font = "700 28px Impact, 'Arial Black', sans-serif";
+    X.fillText("PRESS SPACE TO START", W / 2, H * 0.7);
+  }
+  X.fillStyle = "#7A8595";
+  X.font = "400 16px Impact, 'Arial Black', sans-serif";
+  X.fillText("ARROW KEYS OR WASD - DRIVE", W / 2, H * 0.7 + 40);
+  X.fillText("HOLD SHIFT - HANDBRAKE", W / 2, H * 0.7 + 62);
+  X.fillStyle = "#5A6473";
+  X.font = "400 14px Impact, 'Arial Black', sans-serif";
+  X.fillText("CLICK TO START", W / 2, H * 0.7 + 95);
+}
+
+function drawCountdown() {
+  X.textAlign = "center";
+  let txt, col;
+  const t = state.countT;
+  if (t < 1) { txt = "3"; col = "#ffffff"; }
+  else if (t < 2) { txt = "2"; col = "#ffffff"; }
+  else if (t < 3) { txt = "1"; col = "#ffffff"; }
+  else { txt = "GO!"; col = "#00E676"; }
+  X.font = "900 180px Impact, 'Arial Black', sans-serif";
+  X.lineWidth = 6;
+  X.strokeStyle = "#FF3B3B";
+  X.fillStyle = col;
+  X.strokeText(txt, W / 2, H / 2 + 30);
+  X.fillText(txt, W / 2, H / 2 + 30);
+}
+
+function drawHUD() {
+  // sort by progress to compute position
+  const ranked = [...state.cars]
+    .map(c => ({ c, key: c.lap * 100000 + c.progress }))
+    .sort((a, b) => b.key - a.key);
+  const player = state.cars[0];
+  const pos = ranked.findIndex(r => r.c === player) + 1;
+  const total = state.cars.length;
+
+  // lap
+  X.textAlign = "left";
+  X.fillStyle = "#ffffff";
+  X.font = "900 36px Impact, 'Arial Black', sans-serif";
+  X.fillText(`LAP ${Math.min(player.lap + 1, LAPS_TO_WIN)}/${LAPS_TO_WIN}`, 24, 50);
+
+  // position
+  X.textAlign = "right";
+  X.fillStyle = pos === 1 ? "#FFD700" : "#ffffff";
+  X.fillText(ordinal(pos), W - 24, 50);
+  X.fillStyle = "#B8C0CC";
+  X.font = "400 16px Impact, 'Arial Black', sans-serif";
+  X.fillText(`OF ${total}`, W - 24, 75);
+
+  // lap time (top center)
+  X.textAlign = "center";
+  X.fillStyle = "#ffffff";
+  X.font = "600 16px ui-monospace, Consolas, monospace";
+  const lapT = (performance.now() - player.lastLapStart) / 1000;
+  X.fillText(`LAP TIME  ${formatTime(lapT)}`, W / 2, 40);
+  if (state.playerBestLap != null) {
+    X.fillStyle = "#B8C0CC";
+    X.font = "400 14px ui-monospace, Consolas, monospace";
+    X.fillText(`BEST  ${formatTime(state.playerBestLap / 1000)}`, W / 2, 60);
+  }
+
+  // speedometer
+  const speed = Math.abs(player.speed);
+  const frac = speed / PLAYER_MAX_SPEED;
+  const mph = Math.round(speed * 0.6);
+  let col = "#00E676";
+  if (frac > 0.5) col = "#FFD600";
+  if (frac > 0.8) col = "#FF3B3B";
+  X.textAlign = "center";
+  X.font = "900 56px Impact, 'Arial Black', sans-serif";
+  X.fillStyle = col;
+  X.fillText(mph.toString(), W / 2, H - 60);
+  X.font = "400 14px Impact, 'Arial Black', sans-serif";
+  X.fillStyle = "#B8C0CC";
+  X.fillText("MPH", W / 2, H - 38);
+  // bar
+  X.fillStyle = "#1F2A3A";
+  roundRect(W / 2 - 110, H - 30, 220, 8, 4); X.fill();
+  X.fillStyle = col;
+  roundRect(W / 2 - 110, H - 30, 220 * frac, 8, 4); X.fill();
+
+  // input hint
+  if (state.prevInputHint > 0) {
+    const a = Math.min(1, state.prevInputHint / 0.5);
+    X.fillStyle = `rgba(122,133,149,${a})`;
+    X.font = "400 14px Impact, 'Arial Black', sans-serif";
+    X.textAlign = "left";
+    X.fillText("WASD / ARROWS", 24, H - 24);
+  }
+
+  // particles on top
+  drawParticles();
+}
+
+function drawFinish() {
+  const player = state.cars[0];
+  const ranked = [...state.cars]
+    .map(c => ({ c, key: c.lap * 100000 + c.progress }))
+    .sort((a, b) => b.key - a.key);
+  const pos = ranked.findIndex(r => r.c === player) + 1;
+
+  X.fillStyle = "rgba(0,0,0,0.75)";
+  X.fillRect(0, 0, W, H);
+
+  const pw = 480, ph = 360;
+  const px = (W - pw) / 2, py = (H - ph) / 2;
+  X.fillStyle = "#0A0E14";
+  X.fillRect(px, py, pw, ph);
+  X.lineWidth = 2;
+  X.strokeStyle = "#FF3B3B";
+  X.strokeRect(px, py, pw, ph);
+
+  X.textAlign = "center";
+  X.fillStyle = "#FF3B3B";
+  X.font = "900 64px Impact, 'Arial Black', sans-serif";
+  X.lineWidth = 4;
+  X.strokeStyle = "#ffffff";
+  X.strokeText("FINISH!", W / 2, py + 80);
+  X.fillText("FINISH!", W / 2, py + 80);
+
+  X.fillStyle = pos === 1 ? "#FFD700" : "#ffffff";
+  X.font = "900 48px Impact, 'Arial Black', sans-serif";
+  X.fillText(`${ordinal(pos)} PLACE`, W / 2, py + 170);
+
+  X.fillStyle = "#7A8595";
+  X.font = "400 14px Impact, 'Arial Black', sans-serif";
+  X.fillText("TIME", W / 2, py + 210);
+  X.fillStyle = "#ffffff";
+  X.font = "700 36px ui-monospace, Consolas, monospace";
+  X.fillText(formatTime(state.raceT), W / 2, py + 245);
+
+  if (state.playerBestLap != null) {
+    X.fillStyle = "#7A8595";
+    X.font = "400 14px Impact, 'Arial Black', sans-serif";
+    X.fillText("BEST LAP", W / 2, py + 280);
+    X.fillStyle = "#B8C0CC";
+    X.font = "600 22px ui-monospace, Consolas, monospace";
+    X.fillText(formatTime(state.playerBestLap / 1000), W / 2, py + 310);
+  }
+
+  const blink = Math.floor(performance.now() / 500) % 2 === 0;
+  if (blink) {
+    X.fillStyle = "#ffffff";
+    X.font = "700 20px Impact, 'Arial Black', sans-serif";
+    X.fillText("PRESS R TO RESTART", W / 2, py + 345);
+  }
+}
+
+function ordinal(n) {
+  const s = ["TH", "ST", "ND", "RD"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  const ms = Math.floor((secs * 1000) % 1000);
+  return `${m}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+}
+
+function roundRect(x, y, w, h, r) {
+  X.beginPath();
+  X.moveTo(x + r, y);
+  X.lineTo(x + w - r, y);
+  X.quadraticCurveTo(x + w, y, x + w, y + r);
+  X.lineTo(x + w, y + h - r);
+  X.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  X.lineTo(x + r, y + h);
+  X.quadraticCurveTo(x, y + h, x, y + h - r);
+  X.lineTo(x, y + r);
+  X.quadraticCurveTo(x, y, x + r, y);
+  X.closePath();
+}
+
+// ---------------------------------------------------------------------------
+// GLOBAL KEYS
+// ---------------------------------------------------------------------------
+window.addEventListener("keydown", e => {
+  if (e.code === "Space" && state.phase === "menu") {
+    state.phase = "countdown";
+  }
+  if ((e.code === "KeyR" || e.code === "Enter") && state.phase === "finished") {
+    resetRace();
+  }
+  if (e.code === "Escape" && state.phase === "finished") {
+    state.phase = "menu";
+  }
+});
+
+// ---------------------------------------------------------------------------
+// MAIN LOOP
+// ---------------------------------------------------------------------------
+function loop(now) {
+  update(now);
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
