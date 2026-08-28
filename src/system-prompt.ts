@@ -4,6 +4,7 @@ import { domDir } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 import { buildRepoMap } from "./repomap.js";
 import { buildLearnedContext } from "./sessionmemory.js";
+import { resolveShell } from "./tools/bash.js";
 
 /** The stated-working-directory line's stable prefix, shared with the engine. */
 export const WORKING_DIR_PREFIX = "Working directory: ";
@@ -18,6 +19,40 @@ export function withWorkingDir(prompt: string, cwd: string): string {
     .split("\n")
     .map((l) => (l.startsWith(WORKING_DIR_PREFIX) ? `${WORKING_DIR_PREFIX}${cwd}` : l))
     .join("\n");
+}
+
+/**
+ * What the model needs to know about the shell it is actually being given.
+ *
+ * bash.ts already resolves this per platform, and the model was never told —
+ * so on Windows it emitted process substitution and Linux-shaped paths into Git
+ * Bash and spent most of a turn failing at the seams between MSYS and native
+ * Windows programs. These are the specific edges that bite there.
+ */
+function shellNotes(): string[] {
+  const { label } = resolveShell();
+  if (label === "powershell") {
+    return [
+      "Commands run through PowerShell (no bash was found on this machine). POSIX syntax will NOT work:",
+      "no `&&` chaining, no `2>/dev/null`, no heredocs. Use `;` with `if ($?) { ... }`, `2>$null`, and",
+      "`Get-Content`/`Set-Content` rather than cat/tee.",
+    ];
+  }
+  if (process.platform !== "win32") {
+    return [`Commands run through ${label} on ${process.platform}. Standard POSIX syntax applies.`];
+  }
+  return [
+    `Commands run through ${label} on Windows — a POSIX shell over native Windows, not a Linux box.`,
+    "Two things break at that seam, and both cost whole turns when you hit them:",
+    "1. Process substitution `<(...)` produces a /dev/fd path that native Windows programs (node, npm, python)",
+    "   cannot open — you get ENOENT on a path like C:/proc/1234/fd/63. Never pipe `<(...)` into one.",
+    "   Write the intermediate to a real file and pass its path.",
+    "2. A POSIX path handed to a native Windows program may or may not be translated. When you pass a path to",
+    "   node/npm/python, prefer one that already exists on disk and let the tool resolve it, rather than",
+    "   constructing /c/Users/... by hand.",
+    "Shell state does NOT persist between calls: variables and `export` are gone next call, so never set a",
+    "variable in one call and use it in the next. Use literal paths, or write them into the script itself.",
+  ];
 }
 
 export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [], mapTokens = 1024): Promise<string> {
@@ -67,12 +102,25 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [],
     "ambiguous — pick sensibly and say what you placed. These figures are decoration with no session behind",
     "them, so never create real tabs to satisfy this request and never hand them real work.",
     "",
+    "SHELL",
+    ...shellNotes(),
+    "Writing a script: use the write tool to put it in a file, then run that file. Do NOT build scripts inside",
+    "a bash command with heredocs, `cat >`, or nested quoting — every layer of escaping is a place to be wrong,",
+    "and a failed heredoc tells you nothing about which layer broke. One write, one run.",
+    "When a command fails, read the error before trying again. If two attempts fail for reasons about the",
+    "ENVIRONMENT rather than your logic — quoting, path translation, a shell feature that is not there — stop",
+    "varying the same trick. Change approach: write a file and run it, or use the read/write/edit tools, which",
+    "have no shell between you and the result. Repeating a near-identical command is the most common way to",
+    "burn a turn and learn nothing.",
+    "",
     "WHERE FILES GO",
-    "~/Gnosis is your folder. Every NEW file you create goes there by default — scratch scripts, test",
-    "harnesses, generated demos, anything you invented rather than were handed. Writes there are silent.",
-    "Creating a new file ANYWHERE else always stops and asks the user first, even in yolo, so do not scatter",
-    "files: unless the user asked for a file at a specific place in their project, put it under ~/Gnosis and",
-    "tell them the path.",
+    "Inside a repository — anywhere with a .git dir or a build manifest above it — write, edit and create",
+    "files freely. That is the work; a repo is where code belongs.",
+    "~/Gnosis is your own folder, for files that belong to no project: scratch scripts, test harnesses,",
+    "one-off demos, anything you invented to check something. Put them there, not in the user's repo.",
+    "A new file with no project around it at all — loose in a home or downloads directory — stops and asks",
+    "the user first, even in yolo. If you find yourself about to create one, it almost certainly belongs in",
+    "~/Gnosis instead.",
     "~/dom is the Gnosis source code — the program you are running as. It is READ ONLY. Read it, grep it,",
     "explain it, quote it; never write, edit, or delete inside it. If the user asks you to change Gnosis itself,",
     "say that you cannot modify your own source and let them make the change.",

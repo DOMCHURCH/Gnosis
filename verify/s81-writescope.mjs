@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs, existsSync } from "node:fs";
 
-const { scopeDecision, scopeViolation, writeOpFor, bashScopeViolation, inSandbox, inSource, sourceDir, isDeletingCommand, isMutatingCommand } =
+const { scopeDecision, scopeViolation, writeOpFor, bashScopeViolation, inSandbox, inSource, sourceDir, hasProjectContext, isDeletingCommand, isMutatingCommand } =
   await import("../dist/writescope.js");
 const { gate } = await import("../dist/permissions.js");
 const { gnosisDir } = await import("../dist/workspace.js");
@@ -16,7 +16,14 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 const HOME = os.homedir();
 const SANDBOX = gnosisDir();
 const SRC = sourceDir();
-const PROJ = path.join(HOME, "groundwork");
+// A real repo on disk (a .git dir is enough) and a real directory with no project
+// above it — the create rule turns on exactly this distinction.
+const TMP = await fs.mkdtemp(path.join(os.tmpdir(), "scope-"));
+const PROJ = path.join(TMP, "repo");
+const LOOSE = path.join(TMP, "loose");
+await fs.mkdir(path.join(PROJ, ".git"), { recursive: true });
+await fs.mkdir(path.join(PROJ, "src"), { recursive: true });
+await fs.mkdir(LOOSE, { recursive: true });
 
 // --- the three zones ----------------------------------------------------------
 ok("~/Gnosis is the sandbox", inSandbox(path.join(SANDBOX, "workspace", "x.js")));
@@ -26,9 +33,12 @@ ok("a sibling sharing the prefix is NOT the source", !inSource(HOME + path.sep +
 
 // --- creates ------------------------------------------------------------------
 ok("a new file in the sandbox is allowed", scopeViolation("create", path.join(SANDBOX, "race-car.html")) === null);
-ok("a new file in a project asks first", scopeDecision("create", path.join(PROJ, "race-car.html")).kind === "confirm");
-ok("...and is never a silent write", scopeDecision("create", path.join(PROJ, "x.html")).kind !== "ok");
-ok("...naming the sandbox as where it belongs", scopeDecision("create", path.join(PROJ, "x.html")).reason.includes(SANDBOX));
+ok("a repo is a project", hasProjectContext(PROJ) && hasProjectContext(path.join(PROJ, "src")));
+ok("a loose directory is not", !hasProjectContext(LOOSE));
+ok("a new file INSIDE a repo is allowed outright", scopeDecision("create", path.join(PROJ, "src", "Card.tsx")).kind === "ok");
+ok("...anywhere in it", scopeDecision("create", path.join(PROJ, "race-car.html")).kind === "ok");
+ok("a new file with NO project around it asks first", scopeDecision("create", path.join(LOOSE, "stray.js")).kind === "confirm");
+ok("...naming the sandbox as where it belongs", scopeDecision("create", path.join(LOOSE, "stray.js")).reason.includes(SANDBOX));
 ok("a new file in the sandbox needs no confirmation", scopeDecision("create", path.join(SANDBOX, "x.html")).kind === "ok");
 ok("a new file in the source is refused", !!scopeViolation("create", path.join(SRC, "smoke.js")));
 ok("...as source, not as scatter", (scopeViolation("create", path.join(SRC, "smoke.js")) || "").includes("read-only"));
@@ -73,9 +83,11 @@ const T = {
   read: { name: "read", mutating: false },
 };
 
-const newFile = gate(T.write, { path: path.join(PROJ, "race-car.html") }, ctx(PROJ));
-ok("yolo still stops for a new file in a project", newFile.kind === "prompt" && newFile.dangerous === true);
-ok("...telling the user where it would land", /race-car\.html/.test(newFile.reason || ""));
+ok("yolo writes a new file into a repo without asking",
+  gate(T.write, { path: path.join(PROJ, "race-car.html") }, ctx(PROJ)).kind === "allow");
+const stray = gate(T.write, { path: path.join(LOOSE, "stray.js") }, ctx(LOOSE));
+ok("yolo still stops for a loose new file", stray.kind === "prompt" && stray.dangerous === true);
+ok("...telling the user where it would land", /stray\.js/.test(stray.reason || ""));
 ok("yolo still rejects editing the source",
   gate(T.edit, { path: path.join(SRC, "src", "engine.ts") }, ctx(SRC)).kind === "reject");
 ok("yolo still rejects rm inside the source",
@@ -103,8 +115,8 @@ ok("a non-existent path still warns rather than crashing", tracked.kind === "pro
 
 // A create outside the sandbox is INFORMATIONAL: it stops a session with a user in
 // it, but must not refuse a headless run — that would stop `dom -p` writing files.
-const info = gate(T.write, { path: path.join(PROJ, "new.js") }, ctx(PROJ));
-ok("a create outside the sandbox allows itself headlessly", info.nonInteractive === "allow");
+const info = gate(T.write, { path: path.join(LOOSE, "new.js") }, ctx(LOOSE));
+ok("a loose create allows itself headlessly", info.nonInteractive === "allow");
 const srcWrite = gate(T.write, { path: path.join(SRC, "new.js") }, ctx(SRC));
 ok("a create in the SOURCE is still a flat reject, headless or not", srcWrite.kind === "reject");
 const homeWrite = gate(T.write, { path: path.join(HOME, "loose.js") }, ctx(HOME));

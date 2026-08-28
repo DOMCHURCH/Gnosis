@@ -90,7 +90,11 @@ function parse(raw: unknown): ModelEntry[] {
         cacheWrite: toNum(m.pricing?.input_cache_write),
       },
       context_length: toNum(m.context_length ?? m.top_provider?.context_length),
-      pricingKnown: true,
+      // A NEGATIVE price is OpenRouter's "depends where this routes" sentinel
+      // (openrouter/auto reports -1). It is not a price, and treating it as one
+      // rendered "$-1000000.00" and sorted the router to the top of the cheapest
+      // list. Report it as unpriced, which is what it is.
+      pricingKnown: toNum(m.pricing?.prompt) >= 0 && toNum(m.pricing?.completion) >= 0,
       supported_parameters: supported,
       input_modalities: inputModalities,
     });
@@ -320,6 +324,10 @@ export type ModelTier = "free" | "paid" | "unknown";
 
 export function modelTier(m: ModelEntry): ModelTier {
   if (!m.pricingKnown) return "unknown";
+  // A negative figure is a "depends where this routes" sentinel, not a price
+  // (openrouter/auto reports -1). Guarded here as well as at parse time so no
+  // path — a fallback entry, a future provider — can leak one into the picker.
+  if (m.pricing.prompt < 0 || m.pricing.completion < 0) return "unknown";
   return m.pricing.prompt === 0 && m.pricing.completion === 0 ? "free" : "paid";
 }
 
@@ -327,12 +335,15 @@ export function isFreeModel(m: ModelEntry): boolean {
   return modelTier(m) === "free";
 }
 
-/** Per-1M-token USD, trimmed: sub-cent prices keep enough digits to stay distinct. */
+/** Per-1M-token USD, trimmed: sub-cent prices keep enough digits to stay distinct.
+ *  Every branch strips a trailing "." — without it a value that trims to a whole
+ *  number came out as "$1000000." with a dangling dot. */
 function per1M(n: number): string {
   const v = n * 1e6;
   if (v === 0) return "0";
-  if (v < 0.01) return v.toFixed(4).replace(/0+$/, "");
-  if (v < 1) return v.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  const trim = (t: string) => t.replace(/0+$/, "").replace(/\.$/, "");
+  if (v < 0.01) return trim(v.toFixed(4));
+  if (v < 1) return trim(v.toFixed(3));
   return v.toFixed(2);
 }
 

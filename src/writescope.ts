@@ -7,11 +7,15 @@
 //              folder and the place new files are supposed to land.
 //   ~/dom      the Gnosis source checkout. READ ONLY. No new files, no edits, no
 //              deletes. The agent must not modify the program it is running as.
-//   elsewhere  edit and delete existing files freely (that is the job — working on
-//              the user's repos). A NEW file always asks first, even in yolo, so
-//              nothing appears anywhere on the machine unseen — which is how
-//              race-car.html and smoke.js ended up loose in a repo. Deleting
-//              outside the sandbox asks too: it is the one action with no undo.
+//   a project edit, delete, AND create, freely. Adding a file to a repo the user
+//              asked you to work on is the job, and a repo is a legitimate home for
+//              a code file. "A project" means a .git dir or a build manifest at or
+//              above the path.
+//   elsewhere  edit and delete existing files freely, but a NEW file loose on the
+//              machine — no repo above it, no project it belongs to — always asks
+//              first, even in yolo. That is the case that produces stray files
+//              nobody meant to keep. Deleting outside the sandbox asks too: it is
+//              the one action with no undo.
 //
 // Reads are never restricted anywhere.
 //
@@ -23,6 +27,23 @@ import os from "node:os";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { gnosisDir } from "./workspace.js";
+
+// A directory is "a project" if it, or an ancestor, has a VCS dir or a build
+// manifest. Lives here rather than in permissions.ts so the write scope can ask
+// the same question the danger check does, without the two drifting apart.
+const PROJECT_MARKERS = ["package.json", "pyproject.toml", "go.mod", "Cargo.toml"];
+
+/** Walk up from `dir` looking for a .git dir or a build manifest. */
+export function hasProjectContext(dir: string): boolean {
+  let cur = path.resolve(dir);
+  for (;;) {
+    if (existsSync(path.join(cur, ".git"))) return true;
+    for (const m of PROJECT_MARKERS) if (existsSync(path.join(cur, m))) return true;
+    const parent = path.dirname(cur);
+    if (parent === cur) return false; // hit the filesystem root
+    cur = parent;
+  }
+}
 
 /** The kind of change a call would make. Reads never reach here. */
 export type WriteOp = "create" | "edit" | "delete";
@@ -60,11 +81,11 @@ const OK: ScopeDecision = { kind: "ok" };
  * `target` must already be absolute — resolving it against the right cwd is the
  * caller's job, so the message names the path that would actually be touched.
  *
- * Creating outside the sandbox CONFIRMS rather than rejects. A hard refusal also
- * blocks the legitimate case — adding a new file to a project the user asked you
- * to work on — and the goal here is that no file appears anywhere on the machine
- * without the user seeing it, which a confirmation achieves exactly. Modifying the
- * source is a flat reject: there is no version of that which is correct.
+ * Creating a file in a repo is ordinary work and passes silently. Creating one
+ * with no project around it CONFIRMS rather than rejects: the point is that no
+ * stray file appears on the machine unseen, which a confirmation achieves, while a
+ * refusal would also block legitimate work. Modifying the source is a flat reject:
+ * there is no version of that which is correct.
  */
 export function scopeDecision(op: WriteOp, target: string): ScopeDecision {
   const abs = path.resolve(target);
@@ -78,9 +99,13 @@ export function scopeDecision(op: WriteOp, target: string): ScopeDecision {
     };
   }
   if (op === "create") {
+    // A new file inside a repo is ordinary work — the user asked for a component,
+    // a module, a test — and a repo is where code is supposed to live. Only a file
+    // with no project above it is loose, and that is the one worth stopping for.
+    if (hasProjectContext(path.dirname(abs))) return OK;
     return {
       kind: "confirm",
-      reason: `creates a NEW file outside ${gnosisDir()}: ${abs} — scratch files belong in ${gnosisDir()}`,
+      reason: `creates a NEW file with no project around it: ${abs} — loose files belong in ${gnosisDir()}`,
     };
   }
   return OK; // edit / delete of an existing file outside the source: allowed

@@ -44,6 +44,12 @@ ok("an unpriced model never renders as $0.00", !priceLabel(groq).includes("0.00"
 
 const cheap = entry({ id: "c", pricingKnown: true, pricing: { prompt: 0.00000002, completion: 0.0000001, cacheRead: 0, cacheWrite: 0 } });
 ok("a sub-cent price keeps enough digits to stay distinct", priceLabel(cheap).includes("0.02") && priceLabel(cheap).includes("0.1"));
+ok("no price ever ends in a dangling dot", !/\d\.\D/.test(priceLabel(cheap)) && !/\.$/.test(priceLabel(cheap)));
+
+// openrouter/auto reports -1 per token: "depends where this routes", not a price.
+const router = entry({ id: "openrouter/auto", pricingKnown: true, pricing: { prompt: -1, completion: -1, cacheRead: 0, cacheWrite: 0 } });
+ok("a negative price is not treated as free", modelTier(router) !== "free");
+ok("...and never renders as a negative figure", !priceLabel(router).includes("-"));
 
 ok("200000 renders as 200K ctx", contextLabel(entry({})) === "200K ctx");
 ok("1000000 renders as 1M ctx", contextLabel(entry({ context_length: 1000000 })) === "1M ctx");

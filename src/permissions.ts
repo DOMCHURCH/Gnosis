@@ -11,7 +11,7 @@ import { httpBlockReason, normalizeMethod, UNSAFE_METHODS } from "./tools/http.j
 import { normalizeCommand, hasHiddenChars } from "./cmdnorm.js";
 import { spawnSync } from "node:child_process";
 import { gnosisDir, redirectWrite } from "./workspace.js";
-import { scopeDecision, type ScopeDecision, writeOpFor, bashScopeViolation, isDeletingCommand, inSandbox, commandPaths } from "./writescope.js";
+import { scopeDecision, hasProjectContext, type ScopeDecision, writeOpFor, bashScopeViolation, isDeletingCommand, inSandbox, commandPaths } from "./writescope.js";
 
 export type PermissionAnswer = "yes" | "no" | "always";
 
@@ -56,24 +56,9 @@ export function isDangerous(command: string): boolean {
 // WHERE they would land: git writes with no surrounding project, anything that
 // targets the bare home directory, or anything touching ~/.dom (hard-blocked).
 
-// A repo is "a project" if it (or an ancestor) has a VCS dir or a build manifest.
-const PROJECT_MARKERS = ["package.json", "pyproject.toml", "go.mod", "Cargo.toml"];
-
 // git subcommands that write to the working tree / repo (init/add/commit/...).
 const GIT_WRITE =
   /\bgit\s+(?:-C\s+\S+\s+|-c\s+\S+\s+)*(init|add|commit|rm|mv|apply|restore|reset|checkout|switch|clean|branch|tag|merge|rebase|stash|revert|cherry-pick|am|config|gc)\b/i;
-
-/** Walk up from `dir` looking for a .git dir or a build manifest. */
-function hasProjectContext(dir: string): boolean {
-  let cur = path.resolve(dir);
-  for (;;) {
-    if (existsSync(path.join(cur, ".git"))) return true;
-    for (const m of PROJECT_MARKERS) if (existsSync(path.join(cur, m))) return true;
-    const parent = path.dirname(cur);
-    if (parent === cur) return false; // hit the filesystem root
-    cur = parent;
-  }
-}
 
 /** Expand a leading `~` so the .dom hard-block can't be dodged with `~/.dom/...`. */
 function expandHome(p: string): string {
