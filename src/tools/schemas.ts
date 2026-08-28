@@ -143,20 +143,36 @@ export const taskSchema = z.object({
         "sub-agent needs to search the web or drive a browser, e.g. tools: [\"web_search\"]. write/edit/bash/" +
         "send_message/list_tabs/task are never granted.",
     ),
+  tokenBudget: z
+    .number()
+    .optional()
+    .describe(
+      "Token budget for this sub-agent — SIZE IT TO THE TASK. A lookup or a single-file question needs ~8000; " +
+        "investigating a subsystem ~30000; designing or drafting a whole component 60000-120000. Defaults to 32000 " +
+        "for a single sub-agent and 24000 for each coordinated subtask, and is clamped to [4000, 200000]. A " +
+        "sub-agent that returns \"truncated: hit the token cap\" ran out of budget — re-run it with a larger one " +
+        "rather than accepting the truncated answer. Pass 0 to request NO limit: that is not yours to grant, so it " +
+        "asks the user in the chat first and falls back to the 200000 ceiling if they decline. With `subtasks`, " +
+        "this is the default for every subtask; a subtask's own `tokenBudget` overrides it.",
+    ),
   subtasks: z
     .array(
       z.object({
         description: z.string().describe("Short label for this sub-agent (3–6 words), shown as a figure on the floor."),
         prompt: z.string().describe("The full, self-contained instruction for this one sub-agent."),
+        tokenBudget: z
+          .number()
+          .optional()
+          .describe("Token budget for THIS subtask, overriding the top-level `tokenBudget`. Same rules and limits."),
       }),
     )
     .optional()
     .describe(
       "Coordinated form: a list of independent scoped objectives. Each runs as its own read-only sub-agent IN " +
-        "PARALLEL (tighter caps: 8 iterations / 15k tokens each), and only their final summaries return to you — " +
-        "their intermediate tool calls never enter your history. Use when a task splits into independent areas " +
-        "(different files, topics, or codebases) that can be investigated at the same time. When provided, the " +
-        "top-level `prompt` is ignored except as optional framing.",
+        "PARALLEL (8 iterations each, and its own token budget — see `tokenBudget`), and only their final summaries " +
+        "return to you — their intermediate tool calls never enter your history. Use when a task splits into " +
+        "independent areas (different files, topics, or codebases) that can be investigated at the same time. When " +
+        "provided, the top-level `prompt` is ignored except as optional framing.",
     ),
 });
 

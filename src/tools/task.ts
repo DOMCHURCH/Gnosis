@@ -22,13 +22,13 @@ export async function runTask(args: TaskArgs, signal?: AbortSignal, ctx?: ToolCo
       return { output: "task: coordinated sub-tasks can only be launched by the top-level agent, not from within a sub-agent.", isError: true };
     }
     try {
-      const results = await coordinate(subtasks, signal, args.tools);
+      const results = await coordinate(subtasks, signal, { tools: args.tools, tokenBudget: args.tokenBudget });
       const totalTools = results.reduce((n, r) => n + r.tools, 0);
       const totalTokens = results.reduce((n, r) => n + r.tokens, 0);
       const header = `${results.length} sub-agents · ${totalTools} tool${totalTools === 1 ? "" : "s"} · ${totalTokens} tokens`;
       // Each sub-agent's scoped summary, labelled, for the coordinator to synthesize.
       const body = results
-        .map((r, i) => `── sub-agent ${i + 1}: ${r.description}${r.capped ? ` (truncated: hit the ${r.capped} cap)` : ""} ──\n${r.text}`)
+        .map((r, i) => `── sub-agent ${i + 1}: ${r.description}${r.capped ? ` (truncated: hit the ${r.capped} cap — re-run this subtask with a larger \`tokenBudget\`)` : ""} ──\n${r.text}`)
         .join("\n\n");
       return { output: `${header}\n\n${body}`, isError: false };
     } catch (e) {
@@ -40,10 +40,10 @@ export async function runTask(args: TaskArgs, signal?: AbortSignal, ctx?: ToolCo
   if (!run) return { output: "the task tool is not available here", isError: true };
   if (!args.prompt) return { output: "task: provide `prompt` for a single sub-agent, or `subtasks` for a coordinated task.", isError: true };
   try {
-    const res = await run(args.description, args.prompt, signal, args.tools);
+    const res = await run(args.description, args.prompt, signal, { tools: args.tools, tokenBudget: args.tokenBudget });
     const meta =
       `${res.tools} tool${res.tools === 1 ? "" : "s"} · ${res.tokens} tokens` +
-      (res.capped ? ` (truncated: hit the ${res.capped} cap)` : "");
+      (res.capped ? ` (truncated: hit the ${res.capped} cap — re-run with a larger \`tokenBudget\`, or tokenBudget: 0 to ask the user to remove the limit)` : "");
     return { output: `${meta}\n${res.text}`, isError: false };
   } catch (e) {
     return { output: `task: ${(e as Error).message}`, isError: true };

@@ -61,6 +61,10 @@ export interface SessionsProps {
   onNewTask?: (text: string, mode: TaskMode) => void;
   /** Re-run one of your own messages as a background agent in a new tab. */
   onRunBackground?: (text: string) => void;
+  /** True while the selected agent is mid-turn — gates the STOP button. */
+  busy?: boolean;
+  /** Interrupt the selected agent's current turn (leaves the session open). */
+  onStop?: () => void;
   /** Token-gated URL builder for rich file output (raw bytes vs text preview). */
   fileUrl?: (path: string, raw: boolean) => string;
   /** Save a written file into the Obsidian vault (images only, today). */
@@ -821,6 +825,19 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
       <div onMouseDown={p.onHeaderMouseDown} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38", flex: "0 0 auto", cursor: p.onHeaderMouseDown ? "move" : "default", userSelect: "none" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Interrupt. Only reachable while a turn is actually running, and it
+              leaves the session open — the browser's equivalent of Esc in the TUI. */}
+          {p.busy && p.onStop && (
+            <button
+              type="button"
+              title="stop this agent (the session stays open)"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={p.onStop}
+              style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, background: "#2A1216", color: "#F87171", border: "1px solid #7F1D1D", padding: "3px 8px", cursor: "pointer" }}
+            >
+              ■ STOP
+            </button>
+          )}
           {p.canDetach && (
             <button type="button" title={p.detached ? "dock (snap back)" : "detach into a floating panel"} onMouseDown={(e) => e.stopPropagation()} onClick={p.onToggleDetach}
               style={{ fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: 0 }}>

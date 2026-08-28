@@ -389,3 +389,18 @@ export function buildModelPickItems(models: ModelEntry[]): ModelPickItem[] {
     search: `${m.id} ${m.name} ${modelTier(m)}`,
   }));
 }
+
+/**
+ * The price note appended to a "switched to <id>" line.
+ *
+ * A ":free" id already says it is free, so repeating the word produced
+ * "switched to minimax/minimax-m3:free  free". Paid models always quote the
+ * price — that is the number worth confirming at the moment you switch.
+ */
+export function switchPriceNote(m: ModelEntry | undefined | null): string {
+  if (!m) return "";
+  const tier = modelTier(m);
+  if (tier === "unknown") return "  price n/a";
+  if (tier === "free") return /:free$/i.test(m.id) ? "" : "  free";
+  return `  ${priceLabel(m)}`;
+}

@@ -471,6 +471,9 @@ function handleClientMessage(bridge: AppBridge, text: string, send: (w: unknown)
     case "agent.close":
       bridge.onCloseAgent?.(Number(msg.tabId));
       break;
+    case "agent.stop":
+      bridge.onStopAgent?.(Number(msg.tabId));
+      break;
     case "goal.set":
       bridge.onGoalSet?.(Number(msg.tabId), {
         text: String(msg.text ?? ""),
@@ -666,7 +669,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     const client = { send, socket };
     const sendSnapshot = () => {
       for (const a of bridge.getAgents()) {
-        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput, contextLimit: a.contextLimit });
+        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput, contextLimit: a.contextLimit, tokens: a.tokens, cost: a.cost });
         if (a.busy) send({ type: "agent.busy", tabId: a.id, busy: true });
       }
     };

@@ -95,13 +95,20 @@ function compactArgs(args: unknown): string {
   }
 }
 const SUBAGENT_MAX_ITER = 15;
-const SUBAGENT_TOKEN_BUDGET = 8_000;
-// Coordinated sub-agents run many-at-once, each on its own isolated budget — the
-// same 8k a single delegated search gets, so a fan-out of N costs at most N times
-// one search rather than several times it. Their iteration cap stays tighter (8 vs
+// Defaults, not ceilings — the coordinator sizes each sub-agent to its task via the
+// task tool's `tokenBudget`. 8k was the old fixed value and it was too small for
+// anything but a lookup: a sub-agent asked to design or write a subsystem hit the
+// cap mid-sentence and came back truncated, which read as the sub-agent failing.
+const SUBAGENT_TOKEN_BUDGET = 32_000;
+// Coordinated sub-agents run many-at-once, each on its own isolated budget, so a
+// fan-out of N costs at most N times this. Their iteration cap stays tighter (8 vs
 // 15): breadth comes from running in parallel, not from any one of them digging.
 const COORD_SUBAGENT_MAX_ITER = 8;
-const COORD_SUBAGENT_TOKEN_BUDGET = 8_000;
+const COORD_SUBAGENT_TOKEN_BUDGET = 24_000;
+// The most the coordinator can grant on its own authority. Past this it is asking
+// to spend real money on the user's behalf, so the user is asked in the chat first.
+const SUBAGENT_MAX_TOKEN_BUDGET = 200_000;
+const SUBAGENT_MIN_TOKEN_BUDGET = 4_000;
 // The verifier subagent is deliberately blind to the generator's reasoning: it
 // sees ONLY the original request and the diff, and judges skeptically. No tools.
 const VERIFIER_DIRECTIVE =
@@ -543,6 +550,18 @@ export class Engine {
 
   // --- cost ----------------------------------------------------------------
 
+  /** Broadcast this session's running token/dollar totals. Safe to call as often
+   * as it likes: the payload is absolute, so a listener SETS rather than adds. */
+  emitCost(): void {
+    this.bus?.emit({
+      type: "cost.update",
+      tabId: this.agentId,
+      cost: this.cost.usd,
+      tokens: this.cost.promptTokens + this.cost.completionTokens,
+      cachedTokens: this.cost.cachedPromptTokens ?? 0,
+    });
+  }
+
   /** Apply a completion's usage to the running cost and return the dollar cost of
    * this call (for the trace). */
   private applyUsage(usage: Usage): number {
@@ -559,6 +578,10 @@ export class Engine {
     const applied = dollars > 0 ? dollars : 0;
     this.cost.usd += applied;
     if (usage.prompt_tokens > 0) this.lastPromptTokens = usage.prompt_tokens;
+    // Push the running totals out now, not at turn end. A sub-agent fan-out keeps
+    // one turn open for minutes; without this the UI's spend readout stays at zero
+    // for the whole of it. Absolute figures, so folding is idempotent.
+    this.emitCost();
     return applied;
   }
 
@@ -1003,10 +1026,14 @@ export class Engine {
       cwd: this.cwd,
       roots: this.roots,
       tab: this.toolContext?.tab,
-      subagent: (d, p, sig, tools) => this.runSubAgent(d, p, sig, { tools }),
+      subagent: async (d, p, sig, o) =>
+        this.runSubAgent(d, p, sig, {
+          tools: o?.tools,
+          tokenBudget: await this.resolveSubBudget(o?.tokenBudget, SUBAGENT_TOKEN_BUDGET, d, sig),
+        }),
       // Only the top-level agent can coordinate; a sub-agent gets no runner, so a
       // sub-agent that reaches for coordinated subtasks is refused by the task tool.
-      coordinate: this.isSubAgent ? undefined : (subtasks, sig, tools) => this.runCoordinatedTask(subtasks, sig, tools),
+      coordinate: this.isSubAgent ? undefined : (subtasks, sig, o) => this.runCoordinatedTask(subtasks, sig, o),
       setTodos: (items) => {
         this.todos = items;
       },
@@ -1033,6 +1060,29 @@ export class Engine {
   /** Set per-run from the turn's callbacks (see run()), so toolCtx can hand the
    * tool a runner without threading callbacks through every call site. */
   private askUserFn?: (question: string, options: string[], signal?: AbortSignal) => Promise<AskUserAnswer>;
+
+  /**
+   * Turn the coordinator's requested sub-agent token budget into a real number.
+   *
+   * A positive request is clamped into [MIN, MAX] and applied silently — sizing a
+   * sub-agent to its task is the coordinator's job. A request for NO limit (<= 0)
+   * is not the coordinator's call to make: it asks the user in the chat, and
+   * declines to uncap if there is nobody to ask (headless, or inside a sub-agent).
+   */
+  private async resolveSubBudget(requested: number | undefined, fallback: number, label: string, signal?: AbortSignal): Promise<number> {
+    if (requested == null) return fallback;
+    if (requested > 0) return Math.min(Math.max(Math.floor(requested), SUBAGENT_MIN_TOKEN_BUDGET), SUBAGENT_MAX_TOKEN_BUDGET);
+    const ask = this.askUserFn;
+    if (!ask) return SUBAGENT_MAX_TOKEN_BUDGET; // nobody to ask — grant the ceiling, not infinity
+    const answer = await ask(
+      `Remove the token limit for the sub-agent "${label}"? It will run until it finishes instead of stopping at ` +
+        `${SUBAGENT_MAX_TOKEN_BUDGET.toLocaleString()} tokens, which can cost significantly more.`,
+      ["Remove the limit", `Cap it at ${SUBAGENT_MAX_TOKEN_BUDGET.toLocaleString()} tokens`],
+      signal,
+    );
+    const said = typeof answer === "string" ? answer : (answer as { answer?: string })?.answer ?? "";
+    return /^remove/i.test(String(said)) ? Infinity : SUBAGENT_MAX_TOKEN_BUDGET;
+  }
 
   /** Set when a failed outcome should be fed back as the next turn (autoFixOutcome).
    *  The UI drains it after the turn ends and submits it as a fresh user turn. */
@@ -1061,8 +1111,9 @@ export class Engine {
   /**
    * Run a read-only sub-agent to completion and return only its final text. The
    * sub-agent is a fresh, ephemeral Engine with its own history and context budget,
-   * restricted to read/glob/grep/http (no recursion) and hard-capped at 15
-   * iterations / 50k tokens. Its intermediate turns never enter this engine's
+   * restricted to read/glob/grep/http (no recursion). Its iteration cap is fixed;
+   * its token budget is sized by the coordinator (see resolveSubBudget) and
+   * defaults to SUBAGENT_TOKEN_BUDGET. Its intermediate turns never enter this engine's
    * history; its cost folds into ours and is tracked separately for /cost.
    */
   async runSubAgent(
@@ -1121,6 +1172,7 @@ export class Engine {
     this.cost.completionTokens += sub.cost.completionTokens;
     this.cost.usd += sub.cost.usd;
     this.cost.subAgentUsd = (this.cost.subAgentUsd ?? 0) + sub.cost.usd;
+    this.emitCost(); // a finished sub-agent's spend is real spend — show it now
     (this.cost.subAgents ??= []).push({ label: description, usd: sub.cost.usd });
     // "ok" is false when the sub-agent hit a cap or produced no real summary — the
     // plan view renders those as failed rather than done.
@@ -1139,10 +1191,24 @@ export class Engine {
    * engine's history. Per-sub-agent cost lands in this.cost.subAgents for /cost.
    */
   async runCoordinatedTask(
-    subtasks: { description: string; prompt: string }[],
+    subtasks: { description: string; prompt: string; tokenBudget?: number }[],
     signal?: AbortSignal,
-    tools?: string[],
+    opts?: { tools?: string[]; tokenBudget?: number },
   ): Promise<CoordinatedResult[]> {
+    const tools = opts?.tools;
+    // Resolve budgets BEFORE the fan-out starts. Anything asking to be uncapped is
+    // settled in one question covering the whole fan-out — asking once per subtask
+    // would put N identical prompts in front of the user.
+    const requested = subtasks.map((t) => t.tokenBudget ?? opts?.tokenBudget);
+    const uncapped = requested.some((r) => r != null && r <= 0);
+    const uncappedBudget = uncapped
+      ? await this.resolveSubBudget(0, COORD_SUBAGENT_TOKEN_BUDGET, `${subtasks.length} coordinated sub-agents`, signal)
+      : 0;
+    const budgets = await Promise.all(
+      requested.map(async (r) =>
+        r != null && r <= 0 ? uncappedBudget : this.resolveSubBudget(r, COORD_SUBAGENT_TOKEN_BUDGET, "", signal),
+      ),
+    );
     // Announce the plan so the web renders one live row per subtask (tracked via the
     // subagent.start/end events each sub-agent emits below).
     this.bus?.emit({
@@ -1152,10 +1218,10 @@ export class Engine {
       subtasks: subtasks.map((t, i) => ({ index: i + 1, description: t.description })),
     });
     return Promise.all(
-      subtasks.map(async (t) => {
+      subtasks.map(async (t, i) => {
         const res = await this.runSubAgent(t.description, t.prompt, signal, {
           maxIter: COORD_SUBAGENT_MAX_ITER,
-          tokenBudget: COORD_SUBAGENT_TOKEN_BUDGET,
+          tokenBudget: budgets[i],
           tools,
         });
         return { ...res, description: t.description };

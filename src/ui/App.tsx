@@ -26,7 +26,7 @@ import { TOOL_NAMES } from "../tools/index.js";
 import { runGlob } from "../tools/glob.js";
 import { loadImage, isImagePath } from "../tools/viewimage.js";
 import { gatherPromptHistory } from "../history.js";
-import { fetchModels, resolveModelQuery, parseModelCommand, suggestVisionModel, priceLabel, buildModelPickItems, type ModelEntry } from "../models.js";
+import { fetchModels, resolveModelQuery, parseModelCommand, suggestVisionModel, switchPriceNote, buildModelPickItems, type ModelEntry } from "../models.js";
 import { getRepoInfo } from "../gitinfo.js";
 import { undoLast, listCheckpoints } from "../checkpoint.js";
 import { undoLastDomCommit } from "../autocommit.js";
@@ -918,7 +918,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   const applyModel = async (id: string, save = false) => {
     engine.setModel(id);
     const m = modelsRef.current.find((x) => x.id === id);
-    sysLog(`switched to ${id}${save ? " (saved as default)" : ""}${m ? `  ${priceLabel(m)}` : ""}`);
+    sysLog(`switched to ${id}${save ? " (saved as default)" : ""}${switchPriceNote(m)}`);
     // Persist the session durably (awaited) so a hard exit can't lose the switch.
     await engine.persist();
     if (save) {
@@ -1694,7 +1694,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // connects at once already sees wired handlers.
   const wireBridge = (b: AppBridge) => {
     b.getAgents = () =>
-      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength() }));
+      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength(), tokens: t.engine.cost.promptTokens + t.engine.cost.completionTokens, cost: t.engine.cost.usd }));
     b.getSkills = () => controller.active().engine.skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope }));
     b.onInput = (tabId, text, attachments) => {
       const tab = controller.byId(tabId) ?? controller.active();
@@ -1721,6 +1721,15 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
       if (!t) return;
       if (t.id !== controller.active().id) switchToTab(t.id);
       closeActiveTab();
+    };
+    // Stop, not close: abort the running turn and leave the tab (and its history)
+    // exactly where it is. Works on any tab, not just the focused one.
+    b.onStopAgent = (tabId) => {
+      const t = controller.byId(tabId);
+      if (!t) return;
+      t.engine.abort();
+      t.pendingPermission?.resolve("no"); // a parked approval would keep the turn hanging
+      bridge?.bus.emit({ type: "line", tabId: t.id, item: { kind: "system", text: "⎿ stopped by the user" } });
     };
     b.onFiles = (tabId, query) => rankedFiles(controller.byId(tabId)?.engine.cwd ?? controller.active().engine.cwd, query);
     // Goal bar: set/clear a tab's standing goal, then echo the new state back so

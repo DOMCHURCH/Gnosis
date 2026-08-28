@@ -99,6 +99,8 @@ export type ClientMessage =
   | { type: "agent.create"; name?: string; purpose?: string }
   | { type: "agent.background"; tabId: number; text: string }
   | { type: "agent.close"; tabId: number }
+  // Interrupt the running turn without closing the session.
+  | { type: "agent.stop"; tabId: number }
   | { type: "job.kill"; jobId: string }
   | { type: "goal.set"; tabId: number; text: string; maxRounds?: number; reviewModel?: string; active?: boolean }
   | { type: "goal.clear"; tabId: number }

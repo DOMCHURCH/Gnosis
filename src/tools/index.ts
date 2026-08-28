@@ -77,12 +77,19 @@ export interface SubAgentResult {
   capped: string | null;
 }
 /** Spawns a read-only sub-agent and returns only its final text (+ accounting). */
-export type SubAgentRunner = (description: string, prompt: string, signal?: AbortSignal, tools?: string[]) => Promise<SubAgentResult>;
+export type SubAgentRunner = (
+  description: string,
+  prompt: string,
+  signal?: AbortSignal,
+  opts?: { tools?: string[]; tokenBudget?: number },
+) => Promise<SubAgentResult>;
 
 /** One coordinated sub-agent's scoped objective. */
 export interface SubTask {
   description: string;
   prompt: string;
+  /** Per-subtask token budget; <= 0 asks the user to remove the limit entirely. */
+  tokenBudget?: number;
 }
 /** Result of one coordinated sub-agent (its label + final summary + accounting). */
 export interface CoordinatedResult extends SubAgentResult {
@@ -90,7 +97,11 @@ export interface CoordinatedResult extends SubAgentResult {
 }
 /** Spawns every subtask as a parallel read-only sub-agent (tight caps) and returns
  * each one's summary in the same order. Refused inside a sub-agent (no recursion). */
-export type CoordinateRunner = (subtasks: SubTask[], signal?: AbortSignal, tools?: string[]) => Promise<CoordinatedResult[]>;
+export type CoordinateRunner = (
+  subtasks: SubTask[],
+  signal?: AbortSignal,
+  opts?: { tools?: string[]; tokenBudget?: number },
+) => Promise<CoordinatedResult[]>;
 
 /** Result of an oracle consultation: the answer plus accounting. */
 export interface OracleResult {
@@ -275,7 +286,10 @@ export const TOOLS: Record<string, ToolDef> = {
       "concise summary as the result. Its intermediate steps never enter your history, so prefer it over grepping " +
       "large amounts of output into your own context. Cannot write, run commands, or spawn further sub-agents. " +
       "For work that splits into independent areas, pass `coordinate: true` with a `subtasks` array: each subtask " +
-      "runs as its own sub-agent in parallel and you synthesize all their summaries — faster and lighter on context.",
+      "runs as its own sub-agent in parallel and you synthesize all their summaries — faster and lighter on context. " +
+      "YOU size each sub-agent with `tokenBudget`: a lookup needs little, drafting a whole component needs a lot. " +
+      "If a result comes back \"truncated: hit the token cap\", that answer is incomplete — re-run it with a larger " +
+      "budget instead of working around the truncation.",
     schema: taskSchema,
     mutating: false,
     run: runTask,

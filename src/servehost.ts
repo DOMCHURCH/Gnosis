@@ -10,7 +10,7 @@ import { Engine, type Callbacks } from "./engine.js";
 import { TabsController, type Tab } from "./tabs.js";
 import type { AppBridge } from "./events.js";
 import { partitionAttachments } from "./messages.js";
-import { fetchModels, parseModelCommand, buildModelPickItems } from "./models.js";
+import { fetchModels, parseModelCommand, buildModelPickItems, switchPriceNote } from "./models.js";
 import { listSessions, loadSession, domDir, saveConfig } from "./config.js";
 import { saveVaultNote } from "./vault.js";
 import { callParts, resultBody, toolDetail } from "./ui/toolrender.js";
@@ -95,8 +95,13 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
       if (model) {
         tab.engine.setModel(model);
         void tab.engine.persist();
-        if (save) void saveConfig({ model }).then(() => say(`switched to ${model} (saved as default)`));
-        else say(`switched to ${model}`);
+        // Confirm the price alongside the id. fetchModels is memoised, so this
+        // costs nothing after the first call.
+        void fetchModels().then((all) => {
+          const note = switchPriceNote(all.find((m) => m.id === model));
+          if (save) void saveConfig({ model }).then(() => say(`switched to ${model} (saved as default)${note}`));
+          else say(`switched to ${model}${note}`);
+        });
         break;
       }
       void fetchModels().then((models) => {
@@ -106,7 +111,7 @@ function handleCommand(controller: TabsController, tabId: number, command: strin
         openOverlay(bridge, tab.id, "model", "select model", items, tab.engine.modelId, (v) => {
           tab.engine.setModel(v);
           void tab.engine.persist();
-          say(`switched to ${v}`);
+          say(`switched to ${v}${switchPriceNote(models.find((m) => m.id === v))}`);
         });
       });
       break;
@@ -163,7 +168,7 @@ export function wireServeHost(rootEngine: Engine, bridge: AppBridge): void {
   );
 
   bridge.getAgents = () =>
-    controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength() }));
+    controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength(), tokens: t.engine.cost.promptTokens + t.engine.cost.completionTokens, cost: t.engine.cost.usd }));
   bridge.getSkills = () => rootEngine.skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope }));
   bridge.onInput = (tabId, text, attachments) => {
     const tab = controller.byId(tabId) ?? controller.active();
@@ -182,6 +187,15 @@ export function wireServeHost(rootEngine: Engine, bridge: AppBridge): void {
   bridge.onCommand = (tabId, command) => handleCommand(controller, tabId, command, bridge);
   bridge.onCreateAgent = (name, purpose) => void controller.create(name, purpose);
   bridge.onCloseAgent = (tabId) => void controller.close(tabId);
+  // Stop the running turn without closing the tab — the browser's only way to
+  // interrupt an agent (headless serve has no TUI Esc).
+  bridge.onStopAgent = (tabId) => {
+    const t = controller.byId(tabId);
+    if (!t) return;
+    t.engine.abort();
+    t.pendingPermission?.resolve("no");
+    bridge.bus.emit({ type: "line", tabId: t.id, item: { kind: "system", text: "⎩ stopped by the user" } });
+  };
   bridge.onFiles = (tabId, query) => rankedFiles((controller.byId(tabId) ?? controller.active()).engine.cwd, query);
   bridge.onVaultSave = async (filename, tags, content) => {
     const r = await saveVaultNote(filename, tags, content);

@@ -452,6 +452,8 @@ ${text}` });
         canDoc={canDoc}
         onAnswerAsk={answerAsk}
         onRunBackground={(text) => activeId != null && send({ type: "agent.background", tabId: activeId, text })}
+        busy={activeId != null && !!state.agents[activeId]?.busy}
+        onStop={() => activeId != null && send({ type: "agent.stop", tabId: activeId })}
         onNewTask={onNewTask}
         onFixOutcome={() => activeId != null && send({ type: "command", tabId: activeId, command: "/fix" })}
         fileUrl={(path, raw) => fileUrlFor(activeId ?? 0, path, raw)}
