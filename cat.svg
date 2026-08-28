@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0a0a15"/>
+    </radialGradient>
+    <linearGradient id="fur" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3d3d5c"/>
+      <stop offset="100%" stop-color="#1f1f33"/>
+    </linearGradient>
+    <linearGradient id="furLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6b6b8a"/>
+      <stop offset="100%" stop-color="#3d3d5c"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a8ff60"/>
+      <stop offset="60%" stop-color="#7cfc00"/>
+      <stop offset="100%" stop-color="#3a8a00"/>
+    </radialGradient>
+    <linearGradient id="moon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fff8dc"/>
+      <stop offset="100%" stop-color="#ffd700"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="400" fill="url(#bg)"/>
+
+  <!-- Stars -->
+  <g fill="white" opacity="0.8">
+    <circle cx="50" cy="60" r="1"/>
+    <circle cx="120" cy="40" r="1.2"/>
+    <circle cx="340" cy="80" r="1"/>
+    <circle cx="80" cy="140" r="0.8"/>
+    <circle cx="360" cy="180" r="1.2"/>
+    <circle cx="30" cy="220" r="1"/>
+    <circle cx="370" cy="250" r="0.8"/>
+    <circle cx="60" cy="320" r="1"/>
+    <circle cx="320" cy="340" r="1"/>
+  </g>
+
+  <!-- Moon -->
+  <circle cx="310" cy="90" r="35" fill="url(#moon)" opacity="0.9"/>
+  <circle cx="300" cy="85" r="32" fill="url(#bg)"/>
+
+  <!-- Cat body shadow -->
+  <ellipse cx="200" cy="360" rx="130" ry="12" fill="#000" opacity="0.4"/>
+
+  <!-- Tail -->
+  <path d="M 270 320 Q 350 310 360 250 Q 365 220 350 200 Q 345 215 348 235 Q 340 280 290 290 Z"
+        fill="url(#fur)"/>
+
+  <!-- Body -->
+  <ellipse cx="200" cy="290" rx="100" ry="80" fill="url(#fur)"/>
+
+  <!-- Back legs -->
+  <ellipse cx="150" cy="355" rx="25" ry="15" fill="url(#fur)"/>
+  <ellipse cx="250" cy="355" rx="25" ry="15" fill="url(#fur)"/>
+
+  <!-- Front legs -->
+  <ellipse cx="160" cy="340" rx="18" ry="35" fill="url(#furLight)"/>
+  <ellipse cx="240" cy="340" rx="18" ry="35" fill="url(#furLight)"/>
+
+  <!-- Paws -->
+  <ellipse cx="160" cy="370" rx="20" ry="10" fill="#0a0a15"/>
+  <ellipse cx="240" cy="370" rx="20" ry="10" fill="#0a0a15"/>
+
+  <!-- Chest -->
+  <ellipse cx="200" cy="300" rx="50" ry="60" fill="url(#furLight)" opacity="0.7"/>
+
+  <!-- Head -->
+  <ellipse cx="200" cy="180" rx="75" ry="70" fill="url(#fur)"/>
+
+  <!-- Ears (outer) -->
+  <path d="M 140 130 L 125 60 L 175 100 Z" fill="url(#fur)"/>
+  <path d="M 260 130 L 275 60 L 225 100 Z" fill="url(#fur)"/>
+
+  <!-- Ears (inner) -->
+  <path d="M 145 120 L 138 80 L 165 105 Z" fill="#5a2d4a"/>
+  <path d="M 255 120 L 262 80 L 235 105 Z" fill="#5a2d4a"/>
+
+  <!-- Eyes -->
+  <ellipse cx="170" cy="180" rx="18" ry="22" fill="url(#eye)"/>
+  <ellipse cx="230" cy="180" rx="18" ry="22" fill="url(#eye)"/>
+
+  <!-- Eye pupils (slit) -->
+  <ellipse cx="170" cy="180" rx="2.5" ry="20" fill="#0a0a15"/>
+  <ellipse cx="230" cy="180" rx="2.5" ry="20" fill="#0a0a15"/>
+
+  <!-- Eye highlights -->
+  <circle cx="175" cy="172" r="3" fill="white" opacity="0.9"/>
+  <circle cx="235" cy="172" r="3" fill="white" opacity="0.9"/>
+
+  <!-- Nose -->
+  <path d="M 195 210 L 205 210 L 200 218 Z" fill="#ff6b9d"/>
+
+  <!-- Mouth -->
+  <path d="M 200 218 Q 190 230 180 225" stroke="#0a0a15" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M 200 218 Q 210 230 220 225" stroke="#0a0a15" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Whiskers -->
+  <g stroke="#e0e0e0" stroke-width="1.2" stroke-linecap="round" opacity="0.8">
+    <line x1="150" y1="215" x2="100" y2="210"/>
+    <line x1="150" y1="220" x2="95" y2="225"/>
+    <line x1="150" y1="225" x2="100" y2="240"/>
+    <line x1="250" y1="215" x2="300" y2="210"/>
+    <line x1="250" y1="220" x2="305" y2="225"/>
+    <line x1="250" y1="225" x2="300" y2="240"/>
+  </g>
+
+  <!-- Stripes on head -->
+  <g stroke="#1a1a2e" stroke-width="2" fill="none" opacity="0.6" stroke-linecap="round">
+    <path d="M 200 120 Q 195 130 200 145"/>
+    <path d="M 185 115 Q 180 130 185 145"/>
+    <path d="M 215 115 Q 220 130 215 145"/>
+  </g>
+
+  <!-- Stripes on body -->
+  <g stroke="#1a1a2e" stroke-width="2.5" fill="none" opacity="0.5" stroke-linecap="round">
+    <path d="M 145 270 Q 150 280 145 290"/>
+    <path d="M 165 280 Q 170 290 165 300"/>
+    <path d="M 235 280 Q 240 290 235 300"/>
+    <path d="M 255 270 Q 260 280 255 290"/>
+  </g>
+</svg>
