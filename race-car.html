@@ -946,7 +946,7 @@ function roundRect(x, y, w, h, r) {
 // ---------------------------------------------------------------------------
 window.addEventListener("keydown", e => {
   if (e.code === "Space" && state.phase === "menu") {
-    state.phase = "countdown";
+    resetRace();
   }
   if ((e.code === "KeyR" || e.code === "Enter") && state.phase === "finished") {
     resetRace();
