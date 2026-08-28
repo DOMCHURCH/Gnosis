@@ -9,6 +9,9 @@ import { cacheDir, domDir, skillsDir, worktreesDir } from "./config.js";
 import type { ToolDef } from "./tools/index.js";
 import { httpBlockReason, normalizeMethod, UNSAFE_METHODS } from "./tools/http.js";
 import { normalizeCommand, hasHiddenChars } from "./cmdnorm.js";
+import { spawnSync } from "node:child_process";
+import { gnosisDir, redirectWrite } from "./workspace.js";
+import { scopeDecision, type ScopeDecision, writeOpFor, bashScopeViolation, isDeletingCommand, inSandbox, commandPaths } from "./writescope.js";
 
 export type PermissionAnswer = "yes" | "no" | "always";
 
@@ -230,19 +233,111 @@ export interface GateContext {
 export type GateDecision =
   | { kind: "allow" }
   | { kind: "reject"; reason: string }
-  | { kind: "prompt"; dangerous: boolean; reason?: string };
+  | {
+      kind: "prompt";
+      dangerous: boolean;
+      reason?: string;
+      /**
+       * What to do when there is no interactive UI to ask.
+       *
+       * A dangerous call refuses — that is the point of the flag, and a headless
+       * run must not silently do something irreversible. "allow" is for the case
+       * where the prompt exists to keep the user INFORMED rather than to stop
+       * harm: creating a file outside ~/Gnosis should stop a yolo session so the
+       * user sees the path, but refusing it headlessly would mean `dom -p` could
+       * never write a file at all. Defaults to refusing.
+       */
+      nonInteractive?: "allow" | "refuse";
+    };
 
 /**
  * Decide what to do with a tool call short of prompting. Returns `prompt` when
  * the UI must ask; the caller builds the appropriate preview and, for file
  * edits, the diff. The caller persists 'always' approvals.
  */
+/**
+ * Why this call violates the write scope (see writescope.ts), or null.
+ *
+ * Covers the built-ins by their resolved `path`, bash by scanning its command,
+ * and computer-use servers by scanning every string argument — the same three
+ * surfaces the ~/.dom guard covers, for the same reason: a filesystem tool from
+ * an MCP server can reach the source checkout exactly as `write` can.
+ */
+export function scopeTarget(cwd: string, tool: ToolDef, args: any): ScopeDecision {
+  if (tool.name === "write" || tool.name === "edit") {
+    const resolved = resolveTarget(cwd, tool, args);
+    if (!resolved) return { kind: "ok" };
+    // planWrite redirects a BARE filename into today's ~/Gnosis workspace, so the
+    // gate has to judge the same path the bytes will land on — otherwise a bare
+    // "notes.md" is rejected here as a create in the cwd while the write tool was
+    // going to put it in the sandbox all along.
+    const target = (tool.name === "write" ? redirectWrite(cwd, String(args?.path ?? "")) : null) ?? resolved;
+    // `edit` never creates, so it is always an edit; `write` depends on whether
+    // the file is already there.
+    return scopeDecision(tool.name === "edit" ? "edit" : writeOpFor(target), target);
+  }
+  if (tool.name === "bash") {
+    const hit = bashScopeViolation(String(args?.command ?? ""), cwd);
+    return hit ? { kind: "reject", reason: hit } : { kind: "ok" };
+  }
+  if (tool.computerUse) {
+    for (const str of argStrings(args)) {
+      const hit = bashScopeViolation(str, cwd);
+      if (hit) return { kind: "reject", reason: hit };
+    }
+  }
+  return { kind: "ok" };
+}
+
+/**
+ * A deletion outside the sandbox that the user should look at before it happens.
+ * Deleting anywhere but ~/Gnosis is allowed — but it is the one action with no
+ * undo, so it always prompts, even in yolo, and the prompt says what is at stake.
+ */
+function deletionWarning(cwd: string, tool: ToolDef, args: any): string | null {
+  if (tool.name !== "bash") return null;
+  const cmd = String(args?.command ?? "");
+  if (!isDeletingCommand(cmd)) return null;
+  const outside = commandPaths(cmd, cwd).filter((p) => !inSandbox(p));
+  if (!outside.length) return null; // deleting inside its own folder needs no ceremony
+  const tracked = outside.filter((p) => isTrackedFile(p));
+  const named = (tracked.length ? tracked : outside).slice(0, 3).map((p) => path.basename(p)).join(", ");
+  return tracked.length
+    ? `deletes files that are committed to git (${named}) — check this is intended`
+    : `deletes files outside ${gnosisDir()} (${named}) — there is no undo`;
+}
+
+/** True when git has this file committed — i.e. it is part of a real project and
+ *  losing it matters. Best effort: a repo-less or git-less path answers false. */
+function isTrackedFile(abs: string): boolean {
+  try {
+    const dir = path.dirname(abs);
+    if (!existsSync(dir)) return false;
+    const r = spawnSync("git", ["ls-files", "--error-unmatch", "--", path.basename(abs)], {
+      cwd: dir,
+      encoding: "utf8",
+      timeout: 2000,
+      windowsHide: true,
+    });
+    return r.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   // Hard block: nothing may touch ~/.dom — not even a read. Never a prompt.
   const dom = domTarget(ctx.cwd, tool, args);
   if (dom) {
     return { kind: "reject", reason: `blocked: ${dom} is inside ~/.dom, which dom must never touch.` };
   }
+
+  // The write scope. Changing the Gnosis source is a flat reject — there is no
+  // right answer to "may I modify the program I am running as". Creating a file
+  // outside ~/Gnosis is allowed but never silent: it falls through to the
+  // dangerous path below, so even yolo stops and shows the user the path.
+  const scope = scopeTarget(ctx.cwd, tool, args);
+  if (scope.kind === "reject") return { kind: "reject", reason: scope.reason };
 
   // The http tool has bespoke gating: SSRF/scheme violations are hard rejects
   // (never prompted); unsafe methods (POST/PUT/PATCH/DELETE) always prompt, even
@@ -269,10 +364,16 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   // to auto-approve and no undo. Marking it here (rather than as merely `mutating`)
   // is what makes it prompt in yolo mode too, since only `dangerous` survives the
   // yolo/approvals shortcut below.
-  const reason =
+  // Reasons that mean "a human must actually see this", in precedence order. A
+  // scope confirmation is deliberately NOT one of them — it only informs — so it
+  // is considered last and never softens a genuine danger that also applies.
+  const hardReason =
     (tool.computerUse ? "computer use — controls the real mouse, keyboard, and screen" : null) ??
+    deletionWarning(ctx.cwd, tool, args) ??
     dangerReason(ctx.cwd, tool, args) ??
-    undefined;
+    null;
+  const softReason = scope.kind === "confirm" ? scope.reason : null;
+  const reason = hardReason ?? softReason ?? undefined;
   const cmd = String(args.command ?? "");
   const dangerous =
     !!tool.computerUse || reason !== undefined || (tool.name === "bash" && (isDangerous(cmd) || hasHiddenChars(cmd)));
@@ -290,7 +391,11 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
     if (ctx.approvals.has(approvalKey(tool, args))) return { kind: "allow" };
   }
 
-  return { kind: "prompt", dangerous, reason };
+  // A scope confirmation is informational: prompt wherever there is a user, but do
+  // not refuse a headless run over it.
+  // Soften only when the scope confirmation is the ONLY thing asking. A new file
+  // loose in the home directory is both — and must still refuse headlessly.
+  return { kind: "prompt", dangerous, reason, ...(!hardReason && softReason ? { nonInteractive: "allow" as const } : {}) };
 }
 
 export function buildBashPreview(cwd: string, command: string, warning?: string): Preview {

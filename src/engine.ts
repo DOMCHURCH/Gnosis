@@ -1668,13 +1668,17 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
     // yolo nor the session 'always'/auto-accept flag may wave it through.
     const forcePrompt = decision.kind === "prompt" && decision.dangerous;
     const dangerReason = decision.kind === "prompt" ? decision.reason : undefined;
-    if (forcePrompt && !this.interactive) {
+    const softHeadless = decision.kind === "prompt" && decision.nonInteractive === "allow";
+    if (forcePrompt && !this.interactive && !softHeadless) {
       // No interactive UI to confirm — refuse rather than silently apply.
       return {
         output: `Refused: ${dangerReason ?? "dangerous target"} — run interactively to confirm.`,
         isError: true,
       };
     }
+    // Informational prompt with nobody to show it to (headless, a pipe, a
+    // sub-agent): proceed. Refusing here would stop `dom -p` writing any file.
+    if (forcePrompt && !this.interactive && softHeadless) return apply();
     // No prompt: headless, yolo/approved, or the session already opted into 'always'.
     if (!forcePrompt && (decision.kind !== "prompt" || !this.interactive || this.autoApproveEdits)) {
       return apply();
