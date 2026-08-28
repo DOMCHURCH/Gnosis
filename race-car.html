@@ -107,7 +107,7 @@ window.addEventListener("keydown", e => {
 });
 window.addEventListener("keyup", e => { keys[e.code] = false; });
 C.addEventListener("mousedown", () => {
-  if (state.phase === "menu") state.phase = "countdown";
+  if (state.phase === "menu") resetRace();
 });
 
 function inputAxis() {
