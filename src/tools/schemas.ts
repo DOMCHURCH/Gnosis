@@ -230,7 +230,24 @@ export const officeSchema = z.object({
       "Which room to place them in: coordinator (1 desk), planning (2), application (2), coding (8), subagents (6). " +
         "Omit with action=fill to fill every zone; omit with action=add to spread them across the free desks.",
     ),
+  mode: z
+    .enum(["real", "decorative"])
+    .optional()
+    .describe(
+      "REQUIRED for add/fill, and it is the USER's answer, never your guess. real: open an actual session per " +
+        "agent (a /new tab with its own engine and history) and start it on a task. decorative: figures on the " +
+        "floor with nothing behind them — visual only. Omit it and the tool places nothing and hands you the " +
+        "question to put to the user.",
+    ),
   count: z.number().int().positive().optional().describe("For action=add: how many agents to place (default 1)."),
+  tasks: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "For mode=real only: what each agent starts working on, in placement order — sent as that session's first " +
+        "message, so write it as an instruction to a teammate. Ask the user what each zone should work on before " +
+        "calling; agents past the end of this list are not opened.",
+    ),
   names: z
     .array(z.string())
     .optional()

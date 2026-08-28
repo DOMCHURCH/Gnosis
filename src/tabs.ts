@@ -365,6 +365,27 @@ export class TabsController {
       selfName: () => tab.name,
       selfId: () => tab.id,
       sendMessage: (to, text) => this.route(tab.name, to, text),
+      createTab: (name, purpose, task) => {
+        const made = this.create(name, purpose);
+        const text = task?.trim();
+        if (text) {
+          // Seeded straight into the new tab's queue rather than through route():
+          // this is the first task handed to a session that has never run, not a
+          // reply, so it must not spend the per-session inter-agent message
+          // budget (a whole-office fill would eat all of it). It still starts at
+          // hop 1, so anything the new tab goes on to send stays hop-bounded.
+          made.queue.push({ from: tab.name, text, hops: 1 });
+          if (made.id !== this.activeId && made.badge !== "approval") made.badge = "output";
+          this.bus?.emit({ type: "message.sent", from: tab.name, to: made.name, hops: 1 });
+          this.onChange();
+          this.dispatch(made);
+        }
+        return {
+          ok: true,
+          name: made.name,
+          message: text ? `opened "${made.name}" and started it on its task.` : `opened "${made.name}".`,
+        };
+      },
       listTabs: () =>
         this.tabs.map((t) => ({
           name: t.name,

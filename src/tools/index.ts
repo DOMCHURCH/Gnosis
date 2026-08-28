@@ -67,6 +67,12 @@ export interface TabRuntime {
   selfId(): number;
   sendMessage(to: string, text: string): { ok: boolean; message: string };
   listTabs(): { name: string; purpose: string; active: boolean; busy: boolean }[];
+  /** Open a real session — the same tab `/new` makes, with its own engine and
+   * history — and optionally start it on `task` as its first message. This is
+   * what the office tool's real mode places on the floor; the new tab seats
+   * itself there like any other agent. Returns the name it was actually given
+   * (uniquified against the open tabs). */
+  createTab(name: string | undefined, purpose: string, task?: string): { ok: boolean; name?: string; message: string };
 }
 
 /** Result of a sub-agent run: its final text plus accounting for the transcript. */
@@ -355,8 +361,10 @@ export const TOOLS: Record<string, ToolDef> = {
       "or fill agents on the floor (\"add 5 agents to the coding floor\", \"fill the office\", \"clear the floor\") — " +
       "they appear immediately, so do it instead of explaining how. action=add places `count` agents in `zone`; " +
       "action=fill fills a zone (or the whole office) to capacity; action=clear empties it. Pass names that read " +
-      "like teammates. These figures are decoration — they have no session and run nothing — so never use them " +
-      "for real work and never create real tabs to satisfy this request.",
+      "like teammates. NEVER place agents silently: `mode` is the user's answer to whether they want real working " +
+      "sessions or visual decoration, so call this without it first — it places nothing and gives you the question " +
+      "to ask. mode=real opens a real /new tab per agent and starts each on its entry in `tasks`; mode=decorative " +
+      "draws figures with no session behind them, which cannot work or approve a prompt.",
     schema: officeSchema,
     // Changes nothing on disk — only what the browser draws — so no permission gate.
     mutating: false,

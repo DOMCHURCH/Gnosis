@@ -20,7 +20,8 @@ const imp = (f) => import(pathToFileURL(path.resolve(here, f)).href);
 const { ZONES, ZONE_BY_ID, layoutFloor, planOfficePlacement, PLACEMENT_STATES, pushOfficeRequest, OFFICE_QUEUE_MAX } =
   await imp("../web/src/sessions.js");
 // The built tool, so this checks what actually ships (needs `npm run build`).
-const { runOffice, ZONE_DESKS, ZONE_ORDER, generatedNames, autoNames } = await imp("../dist/tools/office.js");
+const { runOffice, ZONE_DESKS, ZONE_ORDER, generatedNames, autoNames, autoZones, MODE_QUESTION } =
+  await imp("../dist/tools/office.js");
 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
@@ -30,31 +31,77 @@ const fig = (id, zone, state = "thinking") => ({ id, tabId: 1, kind: "tab", name
 // --- 1. the tool: what the model calls ---------------------------------------
 {
   const calls = [];
-  const ctx = { office: { place: (zone, count, names, state) => calls.push({ zone, count, names, state }), clear: () => calls.push({ clear: true }) } };
+  const made = [];
+  const ctx = {
+    office: { place: (zone, count, names, state) => calls.push({ zone, count, names, state }), clear: () => calls.push({ clear: true }) },
+    tab: { createTab: (name, purpose, task) => { made.push({ name, purpose, task }); return { ok: true, name, message: "opened" }; } },
+  };
 
-  const r = await runOffice({ action: "add", zone: "coding", count: 5 }, undefined, ctx);
-  ok("office(add) emits one placement", calls.length === 1 && !r.isError);
+  // The gate: a placement with no mode is the user never having been asked, and
+  // it must put NOTHING on the floor and no session on the machine.
+  const unasked = await runOffice({ action: "fill" }, undefined, ctx);
+  ok("a call with no mode places nothing", calls.length === 0 && made.length === 0);
+  ok("...and is not an error, it is a question", !unasked.isError);
+  ok("...and hands back the exact question to ask", unasked.output.includes(MODE_QUESTION));
+  ok("...naming both options", /real/.test(unasked.output) && /decorative/.test(unasked.output));
+
+  const r = await runOffice({ action: "add", zone: "coding", count: 5, mode: "decorative" }, undefined, ctx);
+  ok("office(add, decorative) emits one placement", calls.length === 1 && !r.isError);
   ok("it passes the zone and the count through", calls[0].zone === "coding" && calls[0].count === 5);
   ok("it generates a name per requested desk", calls[0].names.length === 5 && calls[0].names.every((n) => typeof n === "string" && n.length));
   ok("names default to mixed states", calls[0].state === "mixed");
   ok("the result says what landed on the floor", /placed 5 agents in the coding zone/.test(r.output));
+  ok("...and that decoration is all it is", /visual only/.test(r.output) && /cannot do/.test(r.output));
+  ok("decoration opens no sessions", made.length === 0);
 
   calls.length = 0;
-  await runOffice({ action: "fill" }, undefined, ctx);
+  await runOffice({ action: "fill", mode: "decorative" }, undefined, ctx);
   ok("office(fill) with no zone fills every zone", calls[0].zone === null && calls[0].count === null);
 
   calls.length = 0;
-  await runOffice({ action: "add", zone: "planning", count: 2, names: ["scoper"], state: "thinking" }, undefined, ctx);
+  await runOffice({ action: "add", zone: "planning", count: 2, names: ["scoper"], state: "thinking", mode: "decorative" }, undefined, ctx);
   ok("model-supplied names are kept, the tail auto-filled without repeating one",
     calls[0].names[0] === "scoper" && calls[0].names.length === 2 && new Set(calls[0].names).size === 2);
   ok("an explicit state is passed through", calls[0].state === "thinking");
 
   calls.length = 0;
   await runOffice({ action: "clear" }, undefined, ctx);
-  ok("office(clear) empties the floor", calls.length === 1 && calls[0].clear === true);
+  ok("office(clear) empties the floor without asking anything", calls.length === 1 && calls[0].clear === true);
 
-  const noFloor = await runOffice({ action: "fill" }, undefined, {});
+  const noFloor = await runOffice({ action: "fill", mode: "decorative" }, undefined, {});
   ok("with no browser attached it errors instead of pretending", noFloor.isError && /dom serve/.test(noFloor.output));
+}
+
+// --- 1b. real mode: actual sessions, one task each ---------------------------
+{
+  const made = [];
+  const ctx = {
+    office: { place: () => { throw new Error("real mode must not draw decoration"); }, clear: () => {} },
+    tab: { createTab: (name, purpose, task) => { made.push({ name, purpose, task }); return { ok: true, name, message: "opened" }; } },
+  };
+
+  const r = await runOffice(
+    { action: "add", zone: "planning", count: 2, mode: "real", names: ["scoper", "estimator"], tasks: ["scope the login rewrite", "estimate it"] },
+    undefined,
+    ctx,
+  );
+  ok("real mode opens one session per agent", made.length === 2 && !r.isError);
+  ok("...named as asked", made.map((m) => m.name).join() === "scoper,estimator");
+  ok("...each started on its own task", made[0].task === "scope the login rewrite" && made[1].task === "estimate it");
+  ok("...and told the user they are live, not drawings", /real session/.test(r.output) && /own engine/.test(r.output));
+
+  // A task list shorter than the desks asked for opens only what it can explain.
+  made.length = 0;
+  const short = await runOffice({ action: "add", zone: "coding", count: 4, mode: "real", tasks: ["fix the parser"] }, undefined, ctx);
+  ok("an agent with no task is not opened", made.length === 1);
+  ok("...and the shortfall is reported, not hidden", /not opened/.test(short.output) || /missing/.test(short.output));
+
+  made.length = 0;
+  const noTasks = await runOffice({ action: "fill", mode: "real" }, undefined, ctx);
+  ok("real mode with no tasks opens nothing and says why", made.length === 0 && noTasks.isError && /task/.test(noTasks.output));
+
+  const noRuntime = await runOffice({ action: "add", count: 1, mode: "real", tasks: ["x"] }, undefined, { office: ctx.office });
+  ok("real mode with no tab runtime errors instead of quietly drawing", noRuntime.isError && /session/.test(noRuntime.output));
 }
 
 // --- 2. the desk counts the tool quotes must match the floor's ---------------
@@ -69,6 +116,12 @@ const fig = (id, zone, state = "thinking") => ({ id, tabId: 1, kind: "tab", name
   ok("a whole-office fill names every desk", whole.length === 19 && new Set(whole).size === 19);
   ok("...starting with the coordinator's own name", whole[0] === generatedNames("coordinator", 1)[0]);
   ok("...and the coding desks keep the coding flavour", whole[5] === generatedNames("coding", 1)[0]);
+  // Real sessions get told which room they landed in, so the zone list must run
+  // in the same seating order the names do.
+  const zs = autoZones(null, 19);
+  ok("a whole-office fill labels every desk with its zone", zs.length === 19);
+  ok("...in the floor's seating order", zs[0] === "coordinator" && zs[5] === "coding" && zs[18] === "subagents");
+  ok("...and one zone's fill is all that zone", autoZones("coding", 8).every((z) => z === "coding"));
 }
 
 // --- 3. the planner: a request meets the desks that are actually free --------
