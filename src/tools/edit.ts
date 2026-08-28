@@ -3,6 +3,7 @@ import path from "node:path";
 import { recordCheckpoint } from "../checkpoint.js";
 import type { EditArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
+import { resolveUserPath } from "../homepath.js";
 
 /** Line numbers (1-based) at which `needle` begins within `text`. */
 export function matchLines(text: string, needle: string): number[] {
@@ -62,7 +63,7 @@ function normalizeEdits(args: EditArgs): SingleEdit[] | { error: string } {
  * has every edit applied, so the caller's single diff preview is the combined one.
  */
 export async function planEdit(args: EditArgs, cwd: string = process.cwd()): Promise<EditPlan | { error: string }> {
-  const abs = path.resolve(cwd, args.path);
+  const abs = resolveUserPath(cwd, args.path);
   const edits = normalizeEdits(args);
   if ("error" in edits) return edits;
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import { loadConfig } from "../config.js";
 import { redirectWrite } from "../workspace.js";
 import { recordCheckpoint } from "../checkpoint.js";
+import { expandHome } from "../homepath.js";
 import type { WriteArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
 
@@ -31,8 +32,13 @@ export async function planWrite(args: WriteArgs, cwd: string = process.cwd()): P
   // This happens HERE, in the shared planner, so the permission preview, the diff
   // the user approves, and the bytes on disk are all the same path — a redirect
   // applied later would prompt for one file and write another.
-  const redirected = redirectWrite(cwd, args.path);
-  let abs = redirected ?? path.resolve(cwd, args.path);
+  // `~` is expanded before anything else looks at the path, so the redirect check,
+  // the permission preview and the bytes on disk all reason about the same target.
+  // Only a path that STARTS with `~` changes here, and such a path always contains
+  // a separator (or is bare `~`), so the bare-filename redirect below is untouched.
+  const requested = expandHome(args.path);
+  const redirected = redirectWrite(cwd, requested);
+  let abs = redirected ?? path.resolve(cwd, requested);
   // Vault mode only: a note written without an extension defaults to .md. Outside
   // the configured vault, paths are left exactly as given (no silent .md).
   if (path.extname(abs) === "") {

@@ -12,6 +12,7 @@ import { normalizeCommand, hasHiddenChars } from "./cmdnorm.js";
 import { spawnSync } from "node:child_process";
 import { gnosisDir, redirectWrite } from "./workspace.js";
 import { scopeDecision, hasProjectContext, type ScopeDecision, writeOpFor, bashScopeViolation, isDeletingCommand, inSandbox, commandPaths } from "./writescope.js";
+import { expandHome } from "./homepath.js";
 
 export type PermissionAnswer = "yes" | "no" | "always";
 
@@ -59,13 +60,6 @@ export function isDangerous(command: string): boolean {
 // git subcommands that write to the working tree / repo (init/add/commit/...).
 const GIT_WRITE =
   /\bgit\s+(?:-C\s+\S+\s+|-c\s+\S+\s+)*(init|add|commit|rm|mv|apply|restore|reset|checkout|switch|clean|branch|tag|merge|rebase|stash|revert|cherry-pick|am|config|gc)\b/i;
-
-/** Expand a leading `~` so the .dom hard-block can't be dodged with `~/.dom/...`. */
-function expandHome(p: string): string {
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/") || p.startsWith("~\\")) return path.join(os.homedir(), p.slice(2));
-  return p;
-}
 
 /** The absolute filesystem target a tool call would touch, if it names one.
  * Resolved against the caller's explicit `cwd`, never the global process cwd. */

@@ -10,6 +10,7 @@ import type { ImagePart } from "../messages.js";
 import type { ViewImageArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
 import { suggestVisionModel } from "../models.js";
+import { resolveUserPath } from "../homepath.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -83,7 +84,7 @@ export async function runViewImage(args: ViewImageArgs, _signal?: AbortSignal, c
     };
   }
   const cwd = ctx.cwd ?? process.cwd();
-  const abs = path.resolve(cwd, args.path);
+  const abs = resolveUserPath(cwd, args.path);
   const r = await loadImage(abs, cwd);
   if ("error" in r) return { output: r.error, isError: true };
   ctx.attachImage?.({ source: r.source, mime: r.mime, data: r.data });

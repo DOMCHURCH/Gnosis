@@ -4,6 +4,7 @@ import { truncateOutput } from "./truncate.js";
 import { buildIgnorer, type Ignorer } from "./ignore.js";
 import type { GlobArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
+import { resolveUserPath } from "../homepath.js";
 
 /** Translate a glob pattern into an anchored RegExp over POSIX-style paths. */
 export function globToRegExp(pattern: string): RegExp {
@@ -167,7 +168,7 @@ export async function runGlob(args: GlobArgs, _signal?: AbortSignal, ctx?: ToolC
     };
   }
 
-  const base = path.resolve(ctx?.cwd ?? process.cwd(), args.path ?? ".");
+  const base = resolveUserPath(ctx?.cwd ?? process.cwd(), args.path ?? ".");
   const match = compileGlob(args.pattern);
   const ig = buildIgnorer(base, args.include_ignored ?? false);
   const found: Found[] = [];

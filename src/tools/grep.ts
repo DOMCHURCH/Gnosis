@@ -6,6 +6,7 @@ import { globToRegExp } from "./glob.js";
 import { buildIgnorer, DEFAULT_IGNORE_DIRS } from "./ignore.js";
 import type { GrepArgs } from "./schemas.js";
 import type { ToolContext, ToolResult } from "./index.js";
+import { resolveUserPath } from "../homepath.js";
 
 /**
  * Normalize one ripgrep output line's leading path to forward slashes. rg emits
@@ -43,7 +44,7 @@ async function runRipgrep(rg: string, args: GrepArgs, cwd: string): Promise<Tool
   }
   if (args.glob) argv.push("--glob", args.glob);
   argv.push("-e", args.pattern);
-  argv.push(args.path ? path.resolve(cwd, args.path) : ".");
+  argv.push(args.path ? resolveUserPath(cwd, args.path) : ".");
 
   const res = await execa(rg, argv, {
     cwd,
@@ -80,7 +81,7 @@ async function jsFallback(args: GrepArgs, cwd: string): Promise<ToolResult> {
     return { output: `grep: invalid pattern: ${(e as Error).message}`, isError: true };
   }
   const globRe = args.glob ? globToRegExp(args.glob) : null;
-  const base = path.resolve(cwd, args.path ?? ".");
+  const base = resolveUserPath(cwd, args.path ?? ".");
   const ig = buildIgnorer(base, args.include_ignored ?? false);
   const results: string[] = [];
 
