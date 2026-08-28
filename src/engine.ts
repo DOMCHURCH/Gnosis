@@ -94,6 +94,26 @@ function compactArgs(args: unknown): string {
     return "{}";
   }
 }
+/**
+ * The live approval situation, stated to the model each turn. It must never tell
+ * the user a confirmation is coming when none is, so it is told plainly which
+ * regime it is in rather than left to infer one.
+ */
+function approvalNotice(mode: string, autoApproveEdits: boolean): string {
+  if (mode === "plan") return "APPROVAL MODE: plan — read-only. You cannot write, edit, or run commands this turn.";
+  if (mode === "yolo") {
+    return (
+      "APPROVAL MODE: yolo — every tool call runs IMMEDIATELY with no confirmation prompt, including file writes, " +
+      "shell commands, and any real-desktop control. Nothing stands between your call and the user's machine. Do " +
+      "not tell the user they will be asked to approve anything; they will not. Say what you are about to do first."
+    );
+  }
+  return (
+    `APPROVAL MODE: ask${autoApproveEdits ? " (edits auto-approved)" : ""} — mutating tool calls are shown to the ` +
+    `user for approval before they run${autoApproveEdits ? ", except file edits, which apply immediately" : ""}.`
+  );
+}
+
 const SUBAGENT_MAX_ITER = 15;
 // Defaults, not ceilings — the coordinator sizes each sub-agent to its task via the
 // task tool's `tokenBudget`. 8k was the old fixed value and it was too small for
@@ -472,6 +492,13 @@ export class Engine {
         `\n\nWorkspace roots — grep/glob WITHOUT a path argument search all of these; ` +
         `each result is prefixed with its root's name. Use an explicit path to scope to one.\n${list}`;
     }
+    // The approval mode changes at runtime (shift+tab), so it cannot live in the
+    // prompt built at startup. Without it the model guesses — and it guessed wrong
+    // in yolo, telling the user "every click and keypress gets a confirmation"
+    // while nothing was going to ask them anything.
+    base += `
+
+${approvalNotice(this.mode, this.autoApproveEdits)}`;
     return this.mode === "plan" ? base + PLAN_DIRECTIVE : base;
   }
 
