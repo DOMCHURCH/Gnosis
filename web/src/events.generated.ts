@@ -6,7 +6,7 @@
 import type { GoalState, Preview, TranscriptItem } from "./types";
 
 export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number; tokens?: number; cost?: number }
+  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number; contextUsed?: number; tokens?: number; cost?: number }
   | { type: "agent.closed"; tabId: number; name: string }
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }
@@ -16,7 +16,7 @@ export type DomEvent =
   // ends. A turn that fans out to sub-agents runs for minutes, and until this
   // existed the header read "0 tok · $0.0000" for all of it. Absolute, not a delta,
   // so a client that connects mid-turn lands on the right number immediately.
-  | { type: "cost.update"; tabId: number; cost: number; tokens: number; cachedTokens: number }
+  | { type: "cost.update"; tabId: number; cost: number; tokens: number; cachedTokens: number; contextUsed: number }
   // The automatic outcome evaluation for a file-touching turn. `line` is the dim
   // one-liner already shown in the rail; the rest lets a client offer "fix it".
   | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }

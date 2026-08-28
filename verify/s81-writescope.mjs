@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs, existsSync } from "node:fs";
 
-const { scopeDecision, scopeViolation, writeOpFor, bashScopeViolation, inSandbox, inSource, sourceDir, hasProjectContext, isDeletingCommand, isMutatingCommand } =
+const { scopeDecision, scopeViolation, writeOpFor, bashScopeViolation, inSandbox, inSource, sourceDir, hasProjectContext, isDeletingCommand, isMutatingCommand, commandPaths } =
   await import("../dist/writescope.js");
 const { gate } = await import("../dist/permissions.js");
 const { gnosisDir } = await import("../dist/workspace.js");
@@ -73,6 +73,34 @@ ok("READING the source over bash is untouched", bashScopeViolation(`grep -rn foo
 ok("cat-ing a source file is untouched", bashScopeViolation(`cat ${SRC}/package.json`, HOME) === null);
 ok("mutating a project is allowed", bashScopeViolation(`rm ${PROJ}/old.js`, HOME) === null);
 ok("mutating the sandbox is allowed", bashScopeViolation(`rm ${SANDBOX}/tmp.js`, HOME) === null);
+
+// --- the command name is not a file in the cwd --------------------------------
+// Every bare word used to be resolved against the cwd, so running ANY mutating
+// command from inside the source checkout matched "$SRC/mkdir" and was refused —
+// which blocked mkdir, mv and cat outright and left the agent with no shell.
+ok("mkdir elsewhere is not blocked by its own command name",
+  bashScopeViolation(`mkdir -p ${SANDBOX}`, SRC) === null);
+ok("mv between two paths outside the source is allowed from inside it",
+  bashScopeViolation(`mv ${SANDBOX}/a ${SANDBOX}/b.html`, SRC) === null);
+ok("cat piped to a redirect outside the source is allowed",
+  bashScopeViolation(`cat ${SANDBOX}/a > ${SANDBOX}/b.html`, SRC) === null);
+ok("a subcommand is not a path", commandPaths("git checkout master", SRC).every((p) => !/master$/.test(p)));
+ok("a bare filename with an extension IS a path", commandPaths("rm build.js", PROJ).some((p) => p === path.join(PROJ, "build.js")));
+ok("the command name after && is dropped too",
+  bashScopeViolation(`ls ${SANDBOX} && mkdir ${SANDBOX}/x`, SRC) === null);
+// ...but a real write into the source, however it is spelled, still stops.
+ok("a relative write into the source is still refused", !!bashScopeViolation("rm ./src/engine.ts", SRC));
+ok("an existing bare file in the source is still refused", !!bashScopeViolation("rm package.json", SRC));
+
+// --- Git Bash absolute paths --------------------------------------------------
+// The bash tool resolves to Git Bash on Windows, whose paths are /c/Users/...
+// Untranslated they resolve to C:\c\Users\... — under no guarded root, so a write
+// into the source went straight through the check.
+if (process.platform === "win32") {
+  const msys = "/" + SRC[0].toLowerCase() + SRC.slice(2).replace(/\\/g, "/");
+  ok("an MSYS path into the source is refused", !!bashScopeViolation(`rm ${msys}/src/engine.ts`, HOME));
+  ok("an MSYS path outside it is allowed", bashScopeViolation(`rm /c/Users/nobody/tmp.js`, HOME) === null);
+}
 
 // --- the gate, in yolo (where nothing else would stop it) ---------------------
 const ctx = (cwd) => ({ cwd, mode: "yolo", approvals: new Set() });

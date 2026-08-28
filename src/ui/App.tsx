@@ -20,6 +20,7 @@ import { Engine, outcomeLine, outcomeFixPrompt, type Callbacks } from "../engine
 import type { Msg } from "../messages.js";
 import { contextBreakdown, partitionAttachments } from "../messages.js";
 import { TabsController, type Tab } from "../tabs.js";
+import { readClipboard, normalizePaste, applyPaste } from "../paste.js";
 import type { Preview, PermissionAnswer } from "../permissions.js";
 import type { AskUserAnswer } from "../tools/index.js";
 import { TOOL_NAMES } from "../tools/index.js";
@@ -1681,7 +1682,36 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
     controller.submitUser(tab, v);
   };
 
+  // Set by InputBar's PasteKey the instant Ctrl+V arrives — before the text field
+  // handles the same keypress, so this is still null for ordinary typing.
+  const pasteRef = useRef<string | null>(null);
+
+  /** Ctrl+V: read the clipboard now, and let handleChange splice it in below.
+   *
+   * The flag lives for exactly one keypress. Ink dispatches its listeners
+   * synchronously, so the text field's onChange runs before any microtask — and
+   * anything that has not claimed the paste by then never will. Clearing on the
+   * microtask rather than from another key handler keeps that lifetime out of the
+   * listener ordering, which is not guaranteed and shifts after a re-render. */
+  const handlePasteKey = () => {
+    pasteRef.current = normalizePaste(readClipboard());
+    queueMicrotask(() => {
+      pasteRef.current = null;
+    });
+  };
+
   const handleChange = (v: string) => {
+    // A paste is in flight: `v` is the previous value with a stray "v" inserted at
+    // the cursor (ink-text-input sees Ctrl+V as that letter). inputRef.current has
+    // not been re-rendered yet, so it still holds the pre-keypress value — which is
+    // exactly what applyPaste needs to find the stray character and replace it with
+    // the clipboard. An empty clipboard just removes the "v".
+    const paste = pasteRef.current;
+    if (paste !== null) {
+      pasteRef.current = null;
+      setInput(applyPaste(inputRef.current, v, paste));
+      return;
+    }
     setInput(v);
     if (v.endsWith("@") && !busyRef.current) void openFilePicker(v.slice(0, -1));
   };
@@ -1694,7 +1724,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   // connects at once already sees wired handlers.
   const wireBridge = (b: AppBridge) => {
     b.getAgents = () =>
-      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength(), tokens: t.engine.cost.promptTokens + t.engine.cost.completionTokens, cost: t.engine.cost.usd }));
+      controller.tabs.map((t) => ({ id: t.id, name: t.name, cwd: t.engine.cwd, model: t.engine.modelId, mode: t.engine.mode, busy: t.busy, imageInput: t.engine.supportsImageInput(), documentInput: t.engine.supportsDocumentInput(), contextLimit: t.engine.contextLength(), contextUsed: t.engine.contextTokens(), tokens: t.engine.cost.promptTokens + t.engine.cost.completionTokens, cost: t.engine.cost.usd }));
     b.getSkills = () => controller.active().engine.skills.map((s) => ({ name: s.name, description: s.description, scope: s.scope }));
     b.onInput = (tabId, text, attachments) => {
       const tab = controller.byId(tabId) ?? controller.active();
@@ -2262,6 +2292,7 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
             mode={engine.mode}
             autoApproveEdits={engine.autoApproveEdits}
             busy={busy}
+            onPasteKey={handlePasteKey}
           />
           {/* Queued type-ahead lines, dim, below the input. Present while a turn
               runs and (after a ctrl+c abort) until sent or cleared. */}

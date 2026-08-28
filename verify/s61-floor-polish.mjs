@@ -116,7 +116,7 @@ ok("above 75% is red", tokenBar(76, 100).color === "#F87171" && tokenBar(99, 100
 ok("the bar clamps to 0-100%", tokenBar(500, 100).pct === 100 && tokenBar(-5, 100).pct === 0);
 ok("the bar is labelled with a whole percentage", tokenBar(25, 100).label === "25% CTX");
 
-const mk = (id, name, extra) => Object.assign({ id, name, mode: "ask", busy: false, awaitingPermission: false, tokens: 0, cost: 0, contextLimit: 200000 }, extra);
+const mk = (id, name, extra) => Object.assign({ id, name, mode: "ask", busy: false, awaitingPermission: false, tokens: 0, cost: 0, contextLimit: 200000, contextUsed: 0 }, extra);
 const base = { order: [1], agents: { 1: mk(1, "LEDGER") }, running: {}, actions: {}, jobs: {}, subagents: [], transcripts: {} };
 const idleM = sessionsModel(base, 1, null, {}, []);
 ok("all idle gives a green floor dot, not pulsing", idleM.floorDot === "#4ADE80" && idleM.floorDotPulse === false);
@@ -133,9 +133,17 @@ ok("anyone blocked shows N AWAITING in amber instead of the agent count",
 ok("N AWAITING knows which agent to scroll to",
   waitM.firstAwaitingId === "tab:1" && typeof waitM.firstAwaitingX === "number");
 
-const usedM = sessionsModel({ ...base, agents: { 1: mk(1, "LEDGER", { tokens: 160000 }) } }, 1, null, {}, []);
+const usedM = sessionsModel({ ...base, agents: { 1: mk(1, "LEDGER", { contextUsed: 160000 }) } }, 1, null, {}, []);
 ok("the model carries live context usage for the bar",
   usedM.tokenBar.known === true && usedM.tokenBar.pct === 80 && usedM.tokenBar.color === "#F87171");
+// The bar reads the LIVE window, never cumulative spend. A session re-sends its
+// history every turn, so billing tokens cross the limit while the window is still
+// nearly empty — that read 85% CTX on a session the terminal showed at 4%.
+const spentM = sessionsModel({ ...base, agents: { 1: mk(1, "LEDGER", { tokens: 889000, contextUsed: 8000 }) } }, 1, null, {}, []);
+ok("cumulative spend does NOT drive the context bar",
+  spentM.tokenBar.pct === 4 && spentM.tokenBar.color === "#4ADE80");
+ok("...while the spend readout still shows the cumulative total",
+  spentM.costLine.startsWith("889"));
 ok("a session with no known context limit reports no bar",
   sessionsModel({ ...base, agents: { 1: mk(1, "LEDGER", { contextLimit: 0 }) } }, 1, null, {}, []).tokenBar.known === false);
 

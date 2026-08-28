@@ -669,7 +669,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
     const client = { send, socket };
     const sendSnapshot = () => {
       for (const a of bridge.getAgents()) {
-        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput, contextLimit: a.contextLimit, tokens: a.tokens, cost: a.cost });
+        send({ type: "agent.created", tabId: a.id, name: a.name, cwd: a.cwd, model: a.model, mode: a.mode, imageInput: a.imageInput, documentInput: a.documentInput, contextLimit: a.contextLimit, contextUsed: a.contextUsed, tokens: a.tokens, cost: a.cost });
         if (a.busy) send({ type: "agent.busy", tabId: a.id, busy: true });
       }
     };

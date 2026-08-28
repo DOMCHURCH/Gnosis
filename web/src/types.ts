@@ -18,6 +18,10 @@ export interface Agent {
   documentInput: boolean;
   /** The active model's context window in tokens (0 when unknown). */
   contextLimit: number;
+  /** Tokens live in the window right now — the context bar's numerator. NOT
+   * `tokens`, which is cumulative billing spend across every turn and climbs past
+   * the context limit on a session whose window is nearly empty. */
+  contextUsed: number;
 }
 
 /** A file attachment sent alongside a message (base64 bytes + declared MIME). */

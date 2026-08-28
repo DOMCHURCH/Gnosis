@@ -236,7 +236,7 @@ export function reducer(state: State, action: Action): State {
       return resetAll(state, action.notice);
     case "agent.created": {
       if (state.agents[action.tabId]) return state; // snapshot may duplicate
-      const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: action.cost ?? 0, tokens: action.tokens ?? 0, awaitingPermission: false, imageInput: !!action.imageInput, documentInput: !!action.documentInput, contextLimit: action.contextLimit ?? 0 };
+      const agent: Agent = { id: action.tabId, name: action.name, cwd: action.cwd, model: action.model, mode: action.mode, busy: false, cost: action.cost ?? 0, tokens: action.tokens ?? 0, awaitingPermission: false, imageInput: !!action.imageInput, documentInput: !!action.documentInput, contextLimit: action.contextLimit ?? 0, contextUsed: action.contextUsed ?? 0 };
       return {
         ...state,
         agents: { ...state.agents, [action.tabId]: agent },
@@ -261,7 +261,7 @@ export function reducer(state: State, action: Action): State {
     // after every model call, which is what makes the spend readout move during a
     // long fan-out turn instead of sitting at zero until the turn ends.
     case "cost.update":
-      return patchAgent(state, action.tabId, (a) => ({ ...a, cost: action.cost, tokens: action.tokens }));
+      return patchAgent(state, action.tabId, (a) => ({ ...a, cost: action.cost, tokens: action.tokens, contextUsed: action.contextUsed ?? a.contextUsed }));
     case "turn.end": {
       // A turn just finished → the agent 'spoke' for a beat (drives the speaking
       // cue). The activity line is derived from live state (activityFor), never the

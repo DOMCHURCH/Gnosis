@@ -108,6 +108,7 @@ export class TabsController {
       imageInput: tab.engine.supportsImageInput(),
       documentInput: tab.engine.supportsDocumentInput(),
       contextLimit: tab.engine.contextLength(),
+      contextUsed: tab.engine.contextTokens(),
     });
   }
 

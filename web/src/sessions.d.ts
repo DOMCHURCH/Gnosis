@@ -119,7 +119,7 @@ export function variantOf(color: string): Variant;
 export function minimapModel(layout: FloorLayout): MinimapCell[];
 export function minimapViewport(scrollLeft: number, clientWidth: number, scrollWidth: number): { x: number; y: number; w: number; h: number } | null;
 export function centerScrollLeft(cxFloor: number, clientWidth: number, scrollWidth: number): number;
-export function tokenBar(tokens: number, limit: number): TokenBar;
+export function tokenBar(used: number, limit: number): TokenBar;
 
 /** One office.place request as it reaches the browser: `zone: null` = every zone,
  * `count: null` = fill to capacity, `state: "mixed"` = rotate through the states. */

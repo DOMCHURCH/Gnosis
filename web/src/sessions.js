@@ -305,12 +305,17 @@ export function centerScrollLeft(cxFloor, clientWidth, scrollWidth) {
   return Math.max(0, Math.min(max, (cxFloor / 1440) * scrollWidth - clientWidth / 2));
 }
 
-/** The context-usage bar across the top of the floor: cumulative session tokens as
+/** The context-usage bar across the top of the floor: tokens LIVE IN THE WINDOW as
  * a percentage of the model's context limit. Green under 50%, amber to 75%, red
- * past it. `known` is false when no limit is available (nothing to show). */
-export function tokenBar(tokens, limit) {
+ * past it. `known` is false when no limit is available (nothing to show).
+ *
+ * `used` is the engine's contextTokens(), never the cumulative billing total: a
+ * session re-sends its history every turn, so cumulative spend crosses a 1M limit
+ * long before the window fills. Feeding it here read 85% CTX on a session the
+ * terminal correctly showed at 4%. */
+export function tokenBar(used, limit) {
   if (!limit || limit <= 0) return { pct: 0, color: "#4ADE80", known: false, label: "" };
-  const pct = Math.max(0, Math.min(100, (Number(tokens) || 0) / limit * 100));
+  const pct = Math.max(0, Math.min(100, (Number(used) || 0) / limit * 100));
   const color = pct > 75 ? "#F87171" : pct >= 50 ? "#FBBF24" : "#4ADE80";
   return { pct, color, known: true, label: `${Math.round(pct)}% CTX` };
 }
@@ -385,7 +390,7 @@ export function sessionsModel(state, activeId, selectedId, debugByFloor, manuals
     firstAwaitingId: firstAwaiting ? firstAwaiting.id : null,
     firstAwaitingX: firstAwaiting ? firstAwaiting.deskX + 60 : null,
     // Context usage for the 2px bar across the top of the floor container.
-    tokenBar: tokenBar(tab ? tab.tokens : 0, tab ? tab.contextLimit : 0),
+    tokenBar: tokenBar(tab ? tab.contextUsed : 0, tab ? tab.contextLimit : 0),
   };
 }
 

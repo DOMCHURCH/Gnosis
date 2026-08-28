@@ -147,25 +147,71 @@ export function isDeletingCommand(cmd: string): boolean {
 }
 
 /**
+ * Turn a shell token into a path this process can resolve.
+ *
+ * On Windows the bash tool resolves to Git Bash, whose absolute paths are MSYS
+ * form: `/c/Users/...`, not `C:/Users/...`. Left untranslated, node resolves
+ * `/c/Users/Dominique/dom/x` to `C:\c\Users\Dominique\dom\x` — a path under no
+ * guarded root at all, so a real write into the source checkout sails straight
+ * past the check below. Translate the drive prefix so the guard sees the file the
+ * shell would actually open.
+ */
+export function toNativePath(tok: string): string {
+  if (process.platform !== "win32") return tok;
+  const m = /^\/([A-Za-z])(\/|$)/.exec(tok);
+  const drive = m?.[1];
+  return drive ? `${drive.toUpperCase()}:/${tok.slice(3)}` : tok;
+}
+
+/** The tokens of a command line that are ARGUMENTS, not the program being run.
+ *  A token is in command position at the start of the line and after every
+ *  separator. `mkdir` is a program name; resolving it against the cwd is what
+ *  blocked every shell command issued from a read-only directory. */
+function argumentTokens(norm: string): string[] {
+  const args: string[] = [];
+  for (const seg of norm.split(/\|\||&&|[;&|(`]|\$\(/)) {
+    const toks = seg.trim().split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < toks.length && /^\w+=/.test(toks[i] ?? "")) i++; // VAR=x prefixes
+    args.push(...toks.slice(i + 1)); // everything after the command name
+  }
+  return args;
+}
+
+/** True when a bare word (no slash, not absolute) is meant as a filename. A
+ *  subcommand ("install"), a branch name ("master") or a flag value is not a path;
+ *  a name with an extension, or one already on disk, is. */
+function bareWordIsPath(tok: string, cwd: string): boolean {
+  if (/\.[A-Za-z0-9]{1,8}$/.test(tok)) return true;
+  return existsSync(path.resolve(cwd, tok));
+}
+
+/**
  * Path-ish tokens in a shell command, resolved against `cwd`.
  *
- * Deliberately generous: this feeds a guard, so over-collecting costs a needless
- * check while under-collecting lets a write through. Backslashes are normalised so
- * a Windows absolute path and a ~/ path are both recognised.
+ * Generous, but not indiscriminate: this feeds a guard, so over-collecting costs a
+ * needless check while under-collecting lets a write through — yet collecting
+ * every bare word made `mkdir`, `mv` and `cat` look like files in the current
+ * directory, which blocked those commands outright wherever the cwd was guarded.
+ * Command names are dropped, and a bare word counts only when it looks like a
+ * filename or exists on disk. Backslashes are normalised so a Windows absolute
+ * path and a ~/ path are both recognised.
  */
 export function commandPaths(cmd: string, cwd: string): string[] {
   const out: string[] = [];
   const home = os.homedir();
   const norm = cmd.replace(/\\/g, "/");
-  const re = /(?:[A-Za-z]:)?[~.]?[/\w][\w./~-]*/g;
-  for (let m = re.exec(norm); m; m = re.exec(norm)) {
-    let tok = m[0];
-    if (tok.length < 2 || /^-/.test(tok)) continue;
-    if (tok.startsWith("~")) tok = path.join(home, tok.slice(1));
-    // A bare word ("index.js") is only a path if it looks like a filename or an
-    // existing entry; a flag value or a subcommand is neither.
-    const abs = path.isAbsolute(tok) ? tok : path.resolve(cwd, tok);
-    out.push(abs);
+  for (const arg of argumentTokens(norm)) {
+    const re = /(?:[A-Za-z]:)?[~.]?[/\w][\w./~-]*/g;
+    for (let m = re.exec(arg); m; m = re.exec(arg)) {
+      let tok = m[0];
+      if (tok.length < 2 || /^-/.test(tok)) continue;
+      if (tok.startsWith("~")) tok = path.join(home, tok.slice(1));
+      tok = toNativePath(tok);
+      const rooted = path.isAbsolute(tok) || /^[.~]?\//.test(tok);
+      if (!rooted && !bareWordIsPath(tok, cwd)) continue;
+      out.push(path.isAbsolute(tok) ? tok : path.resolve(cwd, tok));
+    }
   }
   return out;
 }

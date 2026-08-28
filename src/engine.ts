@@ -586,6 +586,9 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
       cost: this.cost.usd,
       tokens: this.cost.promptTokens + this.cost.completionTokens,
       cachedTokens: this.cost.cachedPromptTokens ?? 0,
+      // The same measure the status-bar meter and the compaction trigger read, so
+      // the browser's context bar can never disagree with the terminal's.
+      contextUsed: this.contextTokens(),
     });
   }
 

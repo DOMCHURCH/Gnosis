@@ -21,7 +21,7 @@ const { TabsController } = await import("../dist/tabs.js");
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
 
-const makeEngine = (cwd = "/proj") => ({ cwd, modelId: "m", mode: "ask", cost: { usd: 0 }, toolContext: undefined, messages: [], bus: undefined, bridge: undefined, agentId: 0, agentName: "", supportsImageInput() { return false; }, supportsDocumentInput() { return false; }, contextLength() { return 200000; }, fork() { return makeEngine(cwd); }, abort() {} });
+const makeEngine = (cwd = "/proj") => ({ cwd, modelId: "m", mode: "ask", cost: { usd: 0 }, toolContext: undefined, messages: [], bus: undefined, bridge: undefined, agentId: 0, agentName: "", supportsImageInput() { return false; }, supportsDocumentInput() { return false; }, contextLength() { return 200000; }, contextTokens() { return 0; }, fork() { return makeEngine(cwd); }, abort() {} });
 
 // A plain TUI session: controller with NO bus/bridge (as if launched as `dom`).
 const controller = new TabsController(makeEngine(), "main", () => Promise.resolve(), () => {});

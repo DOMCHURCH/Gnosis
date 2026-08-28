@@ -26,6 +26,12 @@ export interface AgentSnapshot {
   /** The active model's context window in tokens (0 when unknown) — the denominator
    * for the web view's context-usage bar. */
   contextLimit: number;
+  /** Tokens LIVE IN THE WINDOW right now — the numerator for the context bar.
+   * Distinct from `tokens` below, which is a cumulative billing total: a long
+   * session re-sends (and re-bills) the same history every turn, so cumulative
+   * spend passes the context limit while the window itself stays nearly empty.
+   * Reading the bar off `tokens` showed 85% CTX on a session holding 4%. */
+  contextUsed: number;
   /** Session totals so far, so a browser that connects mid-session shows the real
    * spend rather than starting from zero and only catching up on the next call. */
   tokens: number;
@@ -36,7 +42,7 @@ export interface AgentSnapshot {
  * passed straight through and JSON-serialized by the server — the bus does not
  * couple to their concrete shapes. */
 export type DomEvent =
-  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number; tokens?: number; cost?: number }
+  | { type: "agent.created"; tabId: number; name: string; cwd: string; model: string; mode: string; imageInput: boolean; documentInput: boolean; contextLimit: number; contextUsed?: number; tokens?: number; cost?: number }
   | { type: "agent.closed"; tabId: number; name: string }
   | { type: "agent.mode"; tabId: number; mode: string }
   | { type: "agent.busy"; tabId: number; busy: boolean }
@@ -46,7 +52,7 @@ export type DomEvent =
   // ends. A turn that fans out to sub-agents runs for minutes, and until this
   // existed the header read "0 tok · $0.0000" for all of it. Absolute, not a delta,
   // so a client that connects mid-turn lands on the right number immediately.
-  | { type: "cost.update"; tabId: number; cost: number; tokens: number; cachedTokens: number }
+  | { type: "cost.update"; tabId: number; cost: number; tokens: number; cachedTokens: number; contextUsed: number }
   // The automatic outcome evaluation for a file-touching turn. `line` is the dim
   // one-liner already shown in the rail; the rest lets a client offer "fix it".
   | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }
