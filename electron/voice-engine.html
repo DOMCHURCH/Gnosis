@@ -128,7 +128,7 @@
       // so it hands this renderer a file path.
       window.voice.onPlay((file) => {
         try {
-          const a = new Audio("file:///" + String(file).replace(/\/g, "/"));
+          const a = new Audio("file:///" + String(file).replace(/\\/g, "/"));
           a.play().catch((e) => window.voice.engineStatus({ reason: "playback failed: " + e.message }));
         } catch (e) {
           window.voice.engineStatus({ reason: "playback failed: " + String(e?.message ?? e) });

@@ -513,17 +513,10 @@
           }
           if (d.tts.default) sel.value = d.tts.default;
         }
-        // Three distinct states, and collapsing them is how this panel came to
-        // claim "Kokoro not installed" on a machine where it was installed with
-        // its weights on disk: the probe simply had not run yet. "Not checked" is
-        // not a result. The probe already knows WHY it fell back when it has run —
-        // "not installed" and "installed but the weights are missing" need
-        // different fixes, so its own reason is what gets shown.
-        $("tts-engine").textContent = voices.length
-          ? ""
-          : d.tts
-            ? d.tts.reason ?? "using SAPI"
-            : "checking…";
+        // The probe already knows WHY it fell back — "not installed" and
+        // "installed but the weights are missing" need different fixes, and the
+        // old flat message sent people to reinstall a package that was fine.
+        $("tts-engine").textContent = voices.length ? "" : (d.tts?.reason ?? "Kokoro unavailable — using SAPI");
         $("wake-phrase").textContent = d.wakePhrase
           ? `Wake phrase is currently “${d.wakePhrase}” (openWakeWord's closest available model). Custom “hey gnosis” training coming later.`
           : "";

@@ -463,9 +463,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       },
     });
 
+    // Re-probe on start: the startup probe already ran, but a user who installed
+    // Kokoro and then switched voice on expects the panel to notice.
     void probeKokoro().then((k) => {
       diag.tts = k.ok
-        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python }
+        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python, backend: k.backend }
         : { engine: "sapi", voices: [], reason: k.reason };
     });
 
@@ -505,6 +507,24 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (config.voiceEnabled) await start();
     else status = { enabled: false, wakeWord: false, transcription: false, reason: "disabled in settings" };
   })();
+
+  // Probe the TTS engine once at startup, whether or not voice is on.
+  //
+  // This used to run only inside start(), so with voice disabled diag.tts stayed
+  // null and the settings panel rendered its "Kokoro not installed" fallback —
+  // reporting a result for a check that had never been made, on a machine where
+  // Kokoro was installed and its weights were on disk. Telling someone to
+  // reinstall a working package is worse than saying nothing. It costs one Python
+  // process at launch, in the background, and nothing waits on it.
+  void probeKokoro()
+    .then((k) => {
+      diag.tts = k.ok
+        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python, backend: k.backend }
+        : { engine: "sapi", voices: [], reason: k.reason };
+    })
+    .catch((e) => {
+      diag.tts = { engine: "sapi", voices: [], reason: `TTS probe failed: ${String(e?.message ?? e)}` };
+    });
 
   // Exposed so settings can show whether the wake-word runtime is present
   // before the user turns voice on.
