@@ -6,7 +6,7 @@
 // with our preload can reach these handlers — the window showing the agent UI has
 // no preload at all, so nothing served over HTTP can call them.
 
-import { BrowserWindow, ipcMain, app } from "electron";
+import { BrowserWindow, ipcMain, app, dialog } from "electron";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -78,14 +78,36 @@ export function openSettings(parent) {
 }
 
 /** Register the handlers once, at startup. */
-export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnabled }) {
+export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnabled, getRootDir, envCwd = null, defaultCwd = null }) {
   ipcMain.handle("settings:load", async () => {
     const env = parseEnv(await readEnvText());
     const keys = {};
     for (const k of KNOWN_KEYS) keys[k] = { set: !!env[k], masked: maskSecret(env[k]) };
+    let appCwd;
+    try {
+      const { loadConfig } = await import("../dist/config.js");
+      appCwd = (await loadConfig()).appCwd;
+    } catch {
+      /* unreadable config — the panel shows the live directory instead */
+    }
     return {
       path: await envFilePath(),
       keys,
+      // Two separate facts, because they disagree in exactly the case worth
+      // seeing: `configured` is what the setting says, `active` is where the
+      // agent is ACTUALLY working right now. They differ when GNOSIS_CWD was set
+      // for this launch, when the configured path has gone missing, or when the
+      // setting was changed and the app has not been restarted yet.
+      cwd: {
+        configured: appCwd ?? null,
+        active: getRootDir?.() ?? null,
+        // GNOSIS_CWD set by whoever launched the app wins over this setting, the
+        // same way an OPENROUTER_API_KEY in the environment beats the saved one.
+        // Saying so beats saving a path three times and wondering why the window
+        // keeps opening somewhere else. Null when nobody pinned one.
+        envPin: envCwd,
+        default: defaultCwd,
+      },
       // Everything else in the file, named so the user can see what "left
       // untouched" refers to. Names only — never their values.
       otherKeys: Object.keys(env).filter((k) => !KNOWN_KEYS.includes(k)),
@@ -133,6 +155,51 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
     } catch (e) {
       return { enabled: false, reason: String(e?.message ?? e) };
     }
+  });
+
+  // The working directory. Saved to ~/.dom/config.json (appCwd) rather than .env,
+  // because it is a preference and not a secret — and because the CLI reads that
+  // same file, so the key sits beside the model and mode it belongs with.
+  //
+  // Takes effect on restart, and says so rather than pretending otherwise: the
+  // engine, the repo map and the file tree are all built from cwd at boot, so
+  // moving a live agent to a different root would leave three caches describing a
+  // directory it is no longer in.
+  ipcMain.handle("settings:set-app-cwd", async (_e, dir) => {
+    try {
+      const raw = String(dir ?? "").trim();
+      const { saveConfig } = await import("../dist/config.js");
+      // Empty clears the setting and returns the app to its default.
+      if (!raw) {
+        await saveConfig({ appCwd: undefined });
+        return { ok: true, cleared: true };
+      }
+      const abs = path.resolve(raw);
+      let stat;
+      try {
+        stat = await fs.stat(abs);
+      } catch {
+        return { ok: false, error: `No such directory: ${abs}` };
+      }
+      if (!stat.isDirectory()) return { ok: false, error: `Not a directory: ${abs}` };
+      await saveConfig({ appCwd: abs });
+      return { ok: true, path: abs };
+    } catch (e) {
+      return { ok: false, error: e?.message ?? String(e) };
+    }
+  });
+
+  // A native folder picker, because typing an absolute path by hand is how you
+  // get a typo saved as a setting and a window that opens somewhere unexpected.
+  ipcMain.handle("settings:pick-app-cwd", async () => {
+    const parent = win && !win.isDestroyed() ? win : getMainWindow?.();
+    const r = await dialog.showOpenDialog(parent ?? undefined, {
+      title: "Working directory",
+      properties: ["openDirectory", "createDirectory"],
+      defaultPath: getRootDir?.() ?? undefined,
+    });
+    if (r.canceled || !r.filePaths?.length) return { ok: false, canceled: true };
+    return { ok: true, path: r.filePaths[0] };
   });
 
   ipcMain.handle("settings:set-voice-name", async (_e, name) => {

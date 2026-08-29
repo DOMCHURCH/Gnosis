@@ -25,24 +25,43 @@ import { registerUpdater } from "./updater.js";
 import { registerContextMenus } from "./context-menus.js";
 import { registerWin32Focus } from "./win32-focus.js";
 import { registerVoice } from "./voice.js";
+import { resolveRootCwd, defaultProject } from "./rootcwd.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-/** The directory the root agent works in.
+/** The default working directory when nothing else has been chosen: the Gnosis
+ * source tree. See rootcwd.js — the resolution lives there so it can be tested
+ * without an Electron process around it. */
+const DEFAULT_PROJECT = defaultProject();
+
+/** Was GNOSIS_CWD set by whoever launched us, as opposed to by us?
  *
- * A packaged app is launched from a shortcut, where process.cwd() is wherever
- * Explorer happened to be (often system32) — never a project. The home directory
- * is not the answer either: pointing a repo-indexing agent at all of ~ makes
- * boot() take minutes. So packaged runs start in ~/Gnosis, the workspace root
- * this project already defines (src/workspace.ts) for exactly this "no project
- * to belong to" case: visible, outside every repo, and small. In dev the cwd IS
- * the project, so keep it. GNOSIS_CWD overrides both. */
+ * Captured at load because rootCwd() writes the resolved directory back into the
+ * environment. After that point "is GNOSIS_CWD set" is always yes and tells you
+ * nothing; this is the question the settings panel actually needs answered, so it
+ * can say the working directory is pinned for this launch rather than offering a
+ * control that will be silently ignored. */
+const ENV_CWD = process.env.GNOSIS_CWD ? path.resolve(process.env.GNOSIS_CWD) : null;
+
+/** The directory the root agent works in — resolveRootCwd() with this process's
+ * real dependencies wired in. */
 async function rootCwd() {
-  if (process.env.GNOSIS_CWD) return path.resolve(process.env.GNOSIS_CWD);
-  if (!app.isPackaged) return process.cwd();
-  const { gnosisDir } = await import("../dist/workspace.js");
-  const dir = gnosisDir();
-  await fs.mkdir(dir, { recursive: true });
+  const { dir, source } = await resolveRootCwd({
+    loadConfig: async () => (await import("../dist/config.js")).loadConfig(),
+    isPackaged: app.isPackaged,
+    // ~/Gnosis is the workspace root src/workspace.ts already defines for the
+    // "no project to belong to" case: visible, outside every repo, and small.
+    // Created on demand, since the fallback only runs when nothing else existed.
+    fallbackDir: async () => {
+      const { gnosisDir } = await import("../dist/workspace.js");
+      const d = gnosisDir();
+      await fs.mkdir(d, { recursive: true });
+      return d;
+    },
+  });
+  // Which rule won is the first thing anyone asks when the app opens somewhere
+  // unexpected, and it is otherwise invisible.
+  console.log(`gnosis: working directory ${dir} (${source})`);
   return dir;
 }
 
@@ -188,6 +207,12 @@ if (!app.requestSingleInstanceLock()) {
     let bootFailed = false;
     try {
       rootDir = await rootCwd();
+      // Publish the decision. Anything spawned from here — a bash tool call, an
+      // MCP server, a background job — inherits this environment, and a child
+      // that disagreed with the window about where "here" is would be worse than
+      // one that had never been told. Idempotent: rootCwd() reads this first, so
+      // re-resolving returns the same answer.
+      process.env.GNOSIS_CWD = rootDir;
       const started = await startGnosis(rootDir);
       server = started.server;
       bridge = started.bridge;
@@ -221,6 +246,11 @@ if (!app.requestSingleInstanceLock()) {
       getMainWindow: () => win,
       voiceStatus: () => voice?.status() ?? null,
       setVoiceEnabled: (on) => (on ? voice?.start() : (voice?.stop(), voice?.status())),
+      // Where the agent is actually working, so the panel can show the live
+      // directory next to the configured one and make a pending restart obvious.
+      getRootDir: () => rootDir,
+      envCwd: ENV_CWD,
+      defaultCwd: DEFAULT_PROJECT,
     });
     registerWindowChrome(() => win);
     registerContextMenus({ getRoot: () => rootDir });

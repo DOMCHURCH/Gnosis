@@ -41,7 +41,10 @@ The desktop app includes:
   release](https://github.com/nazdridoy/kokoro-tts/releases/tag/v1.0.0)) in
   `~/.dom/kokoro/`. The settings panel's voice diagnostics reports which engine
   is actually in use and names what is missing if it is not Kokoro
-- Settings panel for API keys and configuration
+- Settings panel for API keys and configuration, including the working directory
+  the app opens into. It defaults to the Gnosis source tree (`~/dom`); point it at
+  whichever project you actually work on, or set `GNOSIS_CWD` to override it for a
+  single launch
 - System tray with agent status
 - Auto-updates when new versions are released
 

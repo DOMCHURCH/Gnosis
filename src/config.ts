@@ -61,6 +61,14 @@ export interface Config {
   /** Extra workspace roots (multi-root): grep/glob without a path search cwd plus
    * these. Also addable at runtime with /workspace add <path>. */
   workspaceRoots?: string[];
+  /** Which directory the DESKTOP APP opens into (Settings → Working directory).
+   * Ignored by the CLI, which is always launched from the directory it should
+   * work in. GNOSIS_CWD still overrides it. */
+  appCwd?: string;
+  /** Desktop app: wake-word listening on/off. Written by the settings panel. */
+  voiceEnabled?: boolean;
+  /** Desktop app: which Kokoro voice speaks replies (e.g. "af_heart"). */
+  kokoroVoice?: string;
 }
 
 export interface CostState {

@@ -253,6 +253,21 @@
       </section>
 
       <section>
+        <h2>Working directory</h2>
+        <p class="note">
+          The folder the app opens into. The agent reads, searches and edits from here, so point it at a
+          project you actually work on — an empty folder means every question about “this project” finds
+          nothing. Leave it blank to use the default.
+        </p>
+        <div class="row">
+          <input id="app-cwd" type="text" placeholder="" autocomplete="off" spellcheck="false" />
+          <button id="cwd-browse" type="button">Browse…</button>
+          <button id="cwd-clear" type="button">Default</button>
+        </div>
+        <div class="state" id="cwd-state"></div>
+      </section>
+
+      <section>
         <h2>Keyboard shortcuts</h2>
         <p class="note">Active while a Gnosis window has focus.</p>
         <table id="shortcuts"></table>
@@ -301,6 +316,38 @@
         el.textContent = info.set ? `Currently set · ${info.masked}` : "Not set.";
       }
 
+      // --- working directory ---------------------------------------------------
+      // What is currently SAVED, so Save can tell whether the box was actually
+      // changed. Blank box + blank setting is not an edit, and asking the main
+      // process to re-save the same path on every Save would be noise.
+      let cwdSaved = "";
+
+      function paintCwd(c) {
+        cwdSaved = c.configured ?? "";
+        const input = $("app-cwd");
+        input.value = cwdSaved;
+        input.placeholder = c.default ?? "";
+        const st = $("cwd-state");
+        // The live directory is the fact that matters — the setting only takes
+        // effect on restart, so showing the saved path alone would tell the user
+        // the change had landed when it has not.
+        const bits = [];
+        if (c.active) bits.push(`Working in ${c.active}`);
+        if (c.envPin) bits.push(`GNOSIS_CWD=${c.envPin} is set for this launch and overrides this setting`);
+        else if (!c.configured && c.default) bits.push(`using the default (${c.default})`);
+        st.className = "state" + (c.configured && !c.envPin ? " set" : "");
+        st.textContent = bits.join(" · ") || "";
+      }
+
+      $("cwd-browse").addEventListener("click", async () => {
+        const r = await window.gnosis.pickAppCwd();
+        if (r?.ok && r.path) $("app-cwd").value = r.path;
+      });
+      // "Default" clears the setting rather than writing the default path in:
+      // a saved copy of today's default would not follow it if the default ever
+      // moves, and the user asked for "the default", not for that path.
+      $("cwd-clear").addEventListener("click", () => { $("app-cwd").value = ""; });
+
       async function load() {
         const s = await window.gnosis.loadSettings();
         $("envpath").textContent = s.path;
@@ -328,6 +375,7 @@
           tbl.appendChild(tr);
         }
         paintVoice(s.voice);
+        paintCwd(s.cwd ?? {});
 
         $("others").textContent = s.otherKeys.length
           ? `${s.otherKeys.length} other entr${s.otherKeys.length === 1 ? "y" : "ies"} in this file (${s.otherKeys.join(", ")}) ${s.otherKeys.length === 1 ? "is" : "are"} left untouched when you save.`
@@ -343,17 +391,35 @@
         if (br) updates.BRAVE_API_KEY = br;
         else if (cleared.BRAVE_API_KEY) updates.BRAVE_API_KEY = null;
 
+        // The working directory saves on the same button as the keys — two Save
+        // buttons on one panel is how half a change gets left behind.
+        const cwd = $("app-cwd").value.trim();
+        const cwdChanged = cwd !== cwdSaved;
+
         const status = $("status");
-        if (!Object.keys(updates).length) {
+        if (!Object.keys(updates).length && !cwdChanged) {
           status.className = "";
           status.textContent = "Nothing to save.";
           return;
         }
-        const r = await window.gnosis.saveSettings(updates);
-        if (!r.ok) {
-          status.className = "err";
-          status.textContent = r.error;
-          return;
+        if (Object.keys(updates).length) {
+          const r = await window.gnosis.saveSettings(updates);
+          if (!r.ok) {
+            status.className = "err";
+            status.textContent = r.error;
+            return;
+          }
+        }
+        if (cwdChanged) {
+          // Validated in the main process (it has to stat the path anyway), so a
+          // typo comes back as "No such directory" instead of being saved and
+          // only failing at the next launch.
+          const c = await window.gnosis.setAppCwd(cwd);
+          if (!c.ok) {
+            status.className = "err";
+            status.textContent = c.error;
+            return;
+          }
         }
         $("openrouter").value = "";
         $("brave").value = "";

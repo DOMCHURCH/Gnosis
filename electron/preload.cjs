@@ -19,4 +19,8 @@ contextBridge.exposeInMainWorld("gnosis", {
   voiceProbe: () => ipcRenderer.invoke("voice:probe-runtime"),
   voiceTest: () => ipcRenderer.invoke("voice:test"),
   setVoiceName: (v) => ipcRenderer.invoke("settings:set-voice-name", v),
+  // Working directory: the folder the app opens into. pickAppCwd opens the native
+  // directory chooser; setAppCwd saves a path (empty string clears the setting).
+  pickAppCwd: () => ipcRenderer.invoke("settings:pick-app-cwd"),
+  setAppCwd: (dir) => ipcRenderer.invoke("settings:set-app-cwd", dir),
 });
