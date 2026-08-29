@@ -9,7 +9,7 @@ const MONO = "'JetBrains Mono', ui-monospace, monospace";
 // place; a file click previews it in a modal; the + button attaches the file to the
 // next message. Refreshes when the tab changes or a tool touches files (fileEpoch,
 // driven by the existing tool.end event stream — no polling). The surrounding panel
-// shell (collapse + tab switcher) lives in LeftPanel.
+// shell (the collapsible section it sits in) lives in Sidebar.
 export function FilesBody(props: { tabId: number | null; fileEpoch: number; onAttach: (path: string) => void }) {
   const { tabId, fileEpoch } = props;
   const [data, setData] = useState<TreeResult | null>(null);

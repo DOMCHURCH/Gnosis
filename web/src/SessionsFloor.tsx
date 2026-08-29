@@ -18,6 +18,9 @@ import { messageStyle } from "./chatgroups.js";
 import { centerScrollLeft } from "./sessions.js";
 import { Z, GUTTER } from "./layers";
 import { DropZone } from "./DropZone";
+import { Sidebar } from "./Sidebar";
+import { InspectorHeader } from "./Inspector";
+import { ActivityFeed, ActivityStrip, useActivity } from "./Activity";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; fileOutput?: FileOutput | null; autoSaved?: string; askId?: string; options?: string[]; answered?: string; verdict?: "pass" | "fail" | "unknown"; confidence?: number; }
 export interface SelDetail {
@@ -40,6 +43,8 @@ export interface SessionsProps {
   commands: CommandItem[];
   activeTabId: number | null;
   requestFiles: (tabId: number, query: string) => Promise<string[]>;
+  /** The FLOOR / KANBAN / SERVE / TERMINAL tabs, docked in the floor header. */
+  viewTabs?: React.ReactNode;
   onSelectFloor: (id: number) => void;
   onAddFloor: () => void;
   onSelectFig: (id: string | null) => void;
@@ -65,6 +70,10 @@ export interface SessionsProps {
   onNewTask?: (text: string, mode: TaskMode) => void;
   /** Re-run one of your own messages as a background agent in a new tab. */
   onRunBackground?: (text: string) => void;
+  /** The active goal's text, shown in the inspector. */
+  goalText?: string | null;
+  /** "View full activity" — scrolls the transcript rather than opening a page. */
+  onViewActivity?: () => void;
   /** True while the selected agent is mid-turn — gates the STOP button. */
   busy?: boolean;
   /** Interrupt the selected agent's current turn (leaves the session open). */
@@ -196,6 +205,11 @@ export function SessionsFloor(props: SessionsProps) {
   useEffect(() => { lsSet(CHAT_FLOAT_KEY, floatRect); }, [floatRect]);
 
   const dockRef = useRef<HTMLDivElement>(null);
+  // Tool activity, derived from the transcript, plus how much of it the user
+  // has dismissed from the bottom strip. CLEAR hides what has been seen; it
+  // must not delete anything, because the transcript is the record.
+  const activity = useActivity(props.chat);
+  const [clearedAt, setClearedAt] = useState(0);
   const resizeRef = useRef<{ y: number; h: number } | null>(null);        // docked vertical resize
   const dragRef = useRef<{ mx: number; my: number; x: number; y: number } | null>(null); // floating move
   const fResizeRef = useRef<{ mx: number; my: number; r: { x: number; y: number; w: number; h: number }; edge: string } | null>(null); // floating resize
@@ -364,7 +378,7 @@ export function SessionsFloor(props: SessionsProps) {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
+        <div data-testid="main-row" style={{ display: "flex", gap: 20, alignItems: "stretch", flexWrap: "wrap" }}>
           {/* File Browser: inline when there's room; a bottom sheet on narrow/mobile. */}
           {!narrow && props.leftPanel}
           <div style={{ flex: "1 1 640px", minWidth: 0, display: mobile ? "none" : "flex", gap: 16, alignItems: "stretch" }}>
@@ -381,7 +395,12 @@ export function SessionsFloor(props: SessionsProps) {
             </div>
 
             {/* center column */}
-            <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div data-testid="floor-column" style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+              {props.viewTabs && (
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  {props.viewTabs}
+                </div>
+              )}
               <div data-testid="session-title" style={{ background: "#171721", border: "2px solid #2C2C3E", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {model.sessionNum && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "#4A4A58", whiteSpace: "nowrap" }}>{model.sessionNum}</span>}
                 <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "60%" }}>{model.sessionTitle}</span>
@@ -448,7 +467,21 @@ export function SessionsFloor(props: SessionsProps) {
           {/* right column — roster + chat. Hidden while the chat is floating so
               the office floor expands to fill the freed width. */}
           {!floating && (
-          <div style={{ flex: "1 1 320px", minWidth: "min(100%, 300px)", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div data-testid="agent-inspector" style={{ flex: "1 1 340px", minWidth: "min(100%, 320px)", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column" }}>
+              <InspectorHeader
+                name={model.sessionTitle}
+                state={model.sessionState}
+                stateColor={model.sessionStateColor}
+                task={model.sessionTask}
+                plan={props.plan ?? null}
+                goal={props.goalText ?? null}
+              />
+              <div style={{ padding: "0 14px 14px" }}>
+                <ActivityFeed entries={activity} live={!!props.busy} onViewAll={props.onViewActivity} />
+              </div>
+            </div>
+
             <div style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", maxHeight: 320 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
                 <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>WHO IS WORKING</span>
@@ -486,6 +519,15 @@ export function SessionsFloor(props: SessionsProps) {
           )}
           {/* Background jobs: inline when there's room; a bottom sheet on narrow/mobile. */}
           {!narrow && props.rightPanel}
+        </div>
+
+        <div style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex" }}>
+          <ActivityStrip
+            entries={activity.slice(clearedAt)}
+            agent={model.sessionTitle}
+            live={!!props.busy}
+            onClear={() => setClearedAt(activity.length)}
+          />
         </div>
 
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2C2C3E", paddingTop: 10 }}>

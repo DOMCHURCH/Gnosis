@@ -12,7 +12,7 @@ import { tokenizedUrl, token, fileUrlFor } from "./api";
 import { notify as webNotify, pageHidden } from "./notify";
 import type { TaskMode } from "./NewTaskSheet";
 import { OverlayModal } from "./OverlayModal";
-import { LeftPanel } from "./LeftPanel";
+import { Sidebar } from "./Sidebar";
 import { VaultSaveModal } from "./VaultSaveModal";
 import { GoalBar } from "./GoalBar";
 import { BackgroundPanel } from "./BackgroundPanel";
@@ -499,8 +499,10 @@ ${text}` });
     <button type="button" onClick={() => { setQr({ title, codes }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color, border: 0, borderBottom: last ? 0 : "1px solid #2C2C3E" }}>{label}</button>
   );
 
-  const viewToggle = (
-    <div data-testid="view-toggle" style={{ position: "fixed", top: 10, right: 14, zIndex: Z.chrome, display: "flex", flexDirection: "column", alignItems: "flex-end", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+  const makeViewToggle = (docked: boolean) => (
+    <div data-testid="view-toggle" style={docked
+      ? { position: "relative", display: "flex", flexDirection: "column", alignItems: "flex-start", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+      : { position: "fixed", top: 10, right: 14, zIndex: Z.chrome, display: "flex", flexDirection: "column", alignItems: "flex-end", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
       <div style={{ display: "flex" }}>
         {chip("FLOOR", view === "floor", () => setView("floor"), true)}
         {chip("KANBAN", view === "kanban", () => setView("kanban"), false)}
@@ -508,13 +510,17 @@ ${text}` });
         {view === "floor" && !isMobile && chip("▸_ TERMINAL", terminalOpen, () => setTerminalOpen((o) => !o), false)}
       </div>
       {serveMenu && (
-        <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", minWidth: 132 }}>
+        <div style={{ position: "absolute", top: "100%", marginTop: 4, zIndex: Z.chrome, background: "#0D0D12", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", minWidth: 132 }}>
           {qrItem("ALL · QR", "#C9C9D6", allCodes, "SERVE URLS", false)}
           {allCodes.map((c, i) => qrItem(`${c.title.split(" · ")[0]} · QR`, c.color, [c], c.title.toUpperCase(), i === allCodes.length - 1))}
         </div>
       )}
     </div>
   );
+  // Floating over the page for the kanban view, in the floor header for the
+  // floor view — the redesign puts the tabs at the top of the centre column.
+  const viewToggle = makeViewToggle(false);
+  const dockedViewToggle = makeViewToggle(true);
   const topBar = shell ? (
     <TopBar
       shell={shell}
@@ -546,9 +552,9 @@ ${text}` });
     <>
       {topBar}
       {shell && <UpdateToast shell={shell} />}
-      {viewToggle}
       {qrPopover}
       <SessionsFloor
+        viewTabs={dockedViewToggle}
         model={model}
         chat={chat}
         sel={sel}
@@ -557,6 +563,8 @@ ${text}` });
         commands={state.commands}
         activeTabId={activeId}
         requestFiles={requestFiles}
+        goalText={activeId != null ? state.goals[activeId]?.text ?? null : null}
+        onViewActivity={() => setView("floor")}
         onSelectFloor={(id) => { select(id); setSelFig(null); }}
         onAgentContext={shell ? (d) => shell.showMenu("agent", { ...d }) : undefined}
         onZoneContext={shell ? (d) => shell.showMenu("zone", { ...d }) : undefined}
@@ -603,7 +611,34 @@ ${text}` });
         }
         canSaveVault={!!vault?.configured}
         onSaveMsg={(content) => setSaveTarget(content)}
-        leftPanel={<LeftPanel tabId={activeId} fileEpoch={state.fileEpoch} vault={vault} connections={connections} memory={memory} onAttach={attachFile} onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)} onRefreshConnections={() => { refreshConnections(); refreshMemory(); }} onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })} onClearMemory={() => send({ type: "memory.clear" })} webhookEpoch={state.webhookEpoch} />}
+        leftPanel={
+          <Sidebar
+            project={(() => {
+              const cwd = activeId != null ? state.agents[activeId]?.cwd ?? "" : "";
+              // Windows paths use backslashes, POSIX forward — split on either.
+              return cwd.split(/[\\/]/).filter(Boolean).slice(-1)[0] || "workspace";
+            })()}
+            tabId={activeId}
+            fileEpoch={state.fileEpoch}
+            vault={vault}
+            connections={connections}
+            memory={memory}
+            onAttach={attachFile}
+            onRefreshVault={() => void apiGet<VaultTree>("/api/vault/tree").then(setVault)}
+            onRefreshConnections={() => { refreshConnections(); refreshMemory(); }}
+            onToggleMcp={(name, enabled) => send({ type: "mcp.toggle", name, enabled })}
+            onClearMemory={() => send({ type: "memory.clear" })}
+            webhookEpoch={state.webhookEpoch}
+            onNewSession={() => activeId != null && send({ type: "command", tabId: activeId, command: "/new" })}
+            sessions={state.order.map((id) => ({
+              id,
+              name: state.agents[id]?.name ?? String(id),
+              state: state.agents[id]?.busy ? "busy" : "idle",
+              color: id === activeId ? "#22D3EE" : "#2C2C3E",
+            }))}
+            onSelectSession={(id) => { select(id); setSelFig(null); }}
+          />
+        }
         rightPanel={<BackgroundPanel jobEpoch={state.jobEpoch} send={send} />}
         webhooksPanel={<WebhooksBody webhookEpoch={state.webhookEpoch} localOrigin={typeof location !== "undefined" ? location.origin : ""} />}
       />

@@ -255,3 +255,61 @@ textarea:focus {
     transition: none !important;
   }
 }
+
+
+/* ------------------------------------------- the desktop shell's app layout */
+
+/* In the shell the window IS the app: it fills the viewport and the columns
+ * scroll inside it, rather than the whole page growing and pushing the chat and
+ * the activity strip below the fold. A browser tab keeps the scrolling page —
+ * that is the right behaviour on a phone, where the layout is a single column.
+ *
+ * Everything below is scoped to .gnosis-shell for exactly that reason. */
+.gnosis-shell,
+.gnosis-shell body,
+.gnosis-shell #root {
+  height: 100%;
+  overflow: hidden;
+}
+.gnosis-shell #root > div:not([data-testid="top-bar"]):not([data-testid="view-toggle"]) {
+  height: 100vh;
+  min-height: 0 !important;
+  overflow: hidden;
+}
+/* The max-width wrapper, and the row of columns inside it. */
+.gnosis-shell #root > div > div {
+  min-height: 0;
+}
+.gnosis-shell [data-testid="main-row"] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Each column scrolls on its own so one long file tree cannot push the
+ * inspector off the bottom of the window. */
+.gnosis-shell [data-testid="left-panel"],
+.gnosis-shell [data-testid="floor-column"],
+.gnosis-shell [data-testid="agent-inspector"] {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* The inspector is a column whose LAST child is the chat, and the chat is what
+ * you type into — so it takes the leftover height and its composer stays put
+ * instead of scrolling off the bottom. Everything above it keeps its own size
+ * (the roster and the goal panel already cap and scroll themselves). */
+.gnosis-shell [data-testid="agent-inspector"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.gnosis-shell [data-testid="agent-inspector"] > * {
+  flex: 0 0 auto;
+}
+.gnosis-shell [data-testid="agent-inspector"] [data-testid="chat-drop"] {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 200px !important;
+}
+
