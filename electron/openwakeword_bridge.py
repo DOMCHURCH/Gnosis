@@ -121,7 +121,7 @@ def main() -> int:
 
     # Fire once per utterance, not once per frame over the threshold: a spoken
     # wake phrase stays above it for several frames, and re-triggering on each
-    # would open the overlay repeatedly for one "hey gnosis".
+    # would open the overlay repeatedly for one "hey jarvis".
     armed = {}
 
     stream = sys.stdin.buffer

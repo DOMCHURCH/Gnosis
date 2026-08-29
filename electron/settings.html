@@ -221,7 +221,7 @@
       <section class="magenta">
         <h2>Voice <span style="color: var(--dim); text-transform: none; letter-spacing: 0.04em">— desktop app only</span></h2>
         <p class="note">
-          Say “hey gnosis” to talk to the agent. Not available in the browser UI or the CLI: the microphone
+          Say “hey jarvis” to talk to the agent. Not available in the browser UI or the CLI: the microphone
           lives in the desktop shell and is never exposed to the served page.
         </p>
         <p class="note">
@@ -449,7 +449,7 @@
         }
         $("tts-engine").textContent = voices.length ? "" : "Kokoro not installed — using SAPI";
         $("wake-phrase").textContent = d.wakePhrase
-          ? `Say “${d.wakePhrase}”. openWakeWord ships no “hey gnosis” model, so that is the phrase this build actually listens for.`
+          ? `Wake phrase is currently “${d.wakePhrase}” (openWakeWord's closest available model). Custom “hey gnosis” training coming later.`
           : "";
       }
 

@@ -3,7 +3,7 @@
 // the LAN cannot start a microphone.
 //
 // Pipeline:
-//   wake word ("hey gnosis")  ->  overlay appears, tray pulses
+//   wake word ("hey jarvis")  ->  overlay appears, tray pulses
 //   record until 1.5s silence ->  transcribe            ->  run as a turn
 //   agent replies             ->  spoken via Windows SAPI + shown in the chat
 //
@@ -29,10 +29,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  *
  * openWakeWord's pretrained set is alexa / hey_jarvis / hey_mycroft /
  * hey_rhasspy / timer / weather. There is NO "hey gnosis" model — that phrase
- * would need a custom model trained against it. Until one exists, the app must
- * say which words really work rather than telling the user to say two that do
- * nothing. GNOSIS_WAKE_MODELS overrides the model, and this maps it back to the
- * English the user has to speak.
+ * needs a custom model trained against it, which is future work. Until then the
+ * app loads hey_jarvis and says so: telling someone to speak two words that
+ * cannot possibly be detected is worse than naming two that can.
+ *
+ * GNOSIS_WAKE_MODELS overrides the model; this maps whichever is loaded back to
+ * the English the user has to say.
  */
 const PHRASES = {
   hey_jarvis: "hey jarvis",
@@ -365,8 +367,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       const runtime = await probeRuntime();
       return { ok: false, stage: "detector", reason: runtime.reason ?? "the detector is not running" };
     }
-    // Say whichever phrase the loaded model actually listens for. openWakeWord's
-    // pretrained set does NOT include "hey gnosis" — see WAKE_PHRASE below.
+    // Say whichever phrase the loaded model actually listens for — see PHRASES.
     const phrase = wakePhrase();
     const { config } = await readEnv();
     const spoken = await speak(phrase, { voice: config.kokoroVoice });
@@ -401,6 +402,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // is missing rather than a bare "unavailable".
     detector?.stop();
     detector = await startWakeWord({
+      // Just the one model. Loading all six costs a prediction per frame each
+      // and lets "alexa" or "timer" open the overlay, which is not what anyone
+      // asked for.
+      models: [DEFAULT_WAKE_MODEL],
       onWake: (w) => {
         diag.lastWake = `${w?.model ?? "?"} @ ${new Date().toISOString()}`;
         wake();
@@ -416,7 +421,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
           transcription: !!env.GROQ_API_KEY,
           reason: s.ready
             ? env.GROQ_API_KEY
-              ? "ready — listening for “hey gnosis”"
+              ? `ready — listening for “${wakePhrase()}”`
               : "wake word ready, but no GROQ_API_KEY, so speech cannot be transcribed."
             : s.reason,
         };

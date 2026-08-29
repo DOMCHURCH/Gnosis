@@ -30,8 +30,9 @@ The desktop app includes:
 
 - Three.js 3D office floor showing agents working in real time
 - Integrated terminal panel
-- Voice mode — say "hey gnosis" to activate (no API key required for wake word,
-  `GROQ_API_KEY` for transcription)
+- Voice mode — say "hey jarvis" to activate (no API key required for wake word,
+  `GROQ_API_KEY` for transcription). "hey jarvis" is openWakeWord's closest
+  available model; a custom "hey gnosis" model is future work
 - Settings panel for API keys and configuration
 - System tray with agent status
 - Auto-updates when new versions are released

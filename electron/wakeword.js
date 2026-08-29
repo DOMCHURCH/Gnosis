@@ -19,14 +19,42 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE = path.join(here, "openwakeword_bridge.py");
 
+/**
+ * Every interpreter on the launcher's list, newest first.
+ *
+ * This exists because probing only `python` / `py` / `python3` is not enough on
+ * Windows and quietly misses real installations. `py` runs the launcher's
+ * DEFAULT version, `python` is whatever venv happens to be on PATH, and a user
+ * who ran `pip install` from a specific interpreter — say 3.12 while the
+ * default is 3.14 — ends up with the package installed and the app insisting it
+ * is not. `py -0p` is the authoritative list, so ask it.
+ */
+function launcherPythons() {
+  return new Promise((resolve) => {
+    execFile("py", ["-0p"], { timeout: 15000, windowsHide: true }, (err, stdout) => {
+      if (err) return resolve([]);
+      const paths = [];
+      // Lines look like:  -V:3.12          C:\path\to\python.exe
+      const LINE = /\s([A-Za-z]:\\[^\s][^\r\n]*?python\.exe)\s*$/i;
+      for (const line of String(stdout).split(/\r?\n/)) {
+        const m = line.match(LINE);
+        if (m) paths.push(m[1]);
+      }
+      resolve(paths);
+    });
+  });
+}
+
 /** Interpreters to try, in order. GNOSIS_PYTHON wins if it is set. */
-function candidates() {
-  const explicit = process.env.GNOSIS_PYTHON;
-  const list = explicit ? [explicit] : [];
-  // `py -3` is the Windows launcher and is usually the most reliable; plain
-  // `python` on Windows can be the App Execution Alias stub that opens the
-  // Store instead of running anything.
-  return [...list, "python", "py", "python3"];
+async function candidates() {
+  // An explicit GNOSIS_PYTHON is a decision, not a hint: if the user pinned an
+  // interpreter and it lacks openwakeword, quietly succeeding with a DIFFERENT
+  // one hides their mistake and runs code they did not choose.
+  if (process.env.GNOSIS_PYTHON) return [process.env.GNOSIS_PYTHON];
+  const launcher = process.platform === "win32" ? await launcherPythons() : [];
+  // Dedup while keeping order: the plain names first, then every interpreter
+  // the Windows launcher knows about.
+  return [...new Set(["python", "py", "python3", ...launcher])];
 }
 
 /** Ask an interpreter whether it can import openwakeword. */
@@ -45,7 +73,7 @@ function probe(exe) {
  */
 export async function findPython() {
   const tried = [];
-  for (const exe of candidates()) {
+  for (const exe of await candidates()) {
     const r = await probe(exe);
     if (r.ok) return r;
     tried.push(exe);
@@ -53,8 +81,8 @@ export async function findPython() {
   return {
     ok: false,
     reason:
-      "openWakeWord is not installed. It is free and needs no API key — install it with:  pip install openwakeword" +
-      `  (tried: ${tried.join(", ")}; set GNOSIS_PYTHON to point at a specific interpreter)`,
+      "openWakeWord is not installed in any Python found. It is free and needs no API key — install it with:  pip install openwakeword" +
+      `  (tried ${tried.length}: ${tried.slice(0, 6).join(", ")}${tried.length > 6 ? ", …" : ""}; set GNOSIS_PYTHON to point at a specific interpreter)`,
   };
 }
 
@@ -152,11 +180,23 @@ export async function startWakeWord({ onWake, onStatus, models = [], threshold =
   child.stderr.on("data", (d) => {
     const t = String(d).trim();
     if (!t) return;
-    const last = t.split("\n").slice(-3).join(" ").slice(0, 300);
     // Always logged, not only in debug mode: a Python traceback here is the
     // entire explanation for "the wake word does nothing".
-    console.error("[wakeword]", last);
-    onStatus?.({ ready: false, reason: `detector error: ${last}`, stderr: last });
+    console.error("[wakeword]", t.split("\n").slice(-3).join(" ").slice(0, 300));
+
+    // Not everything on stderr is a failure. openWakeWord logs a WARNING when
+    // it falls back from tflite to onnxruntime, which is the NORMAL path on a
+    // plain `pip install openwakeword` — surfacing that as "detector error" in
+    // the diagnostics panel sends people chasing a problem that is not there.
+    const meaningful = t
+      .split("\n")
+      .filter((l) => !/^\s*(WARNING|INFO|DEBUG)\b/i.test(l))
+      .join(" ")
+      .trim();
+    if (meaningful && /Traceback|Exception|\bError\b|error:/i.test(meaningful)) {
+      const msg = meaningful.slice(0, 300);
+      onStatus?.({ ready: false, reason: `detector error: ${msg}`, stderr: msg });
+    }
   });
 
   child.on("exit", (code) => {
