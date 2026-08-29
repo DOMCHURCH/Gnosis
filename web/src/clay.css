@@ -33,16 +33,35 @@
   --clay-magenta-glow: rgba(232, 121, 249, 0.26);
 
   /* Depth. The top highlight is what makes a surface read as puffy rather than
-   * merely shadowed — clay catches light on its upper edge. */
-  --clay-lift: 0 10px 26px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.055);
-  --clay-lift-sm: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+   * merely shadowed — clay catches light on its upper edge.
+   *
+   * Three layers, and each is doing separate work: a wide, very soft cast for the
+   * ambient occlusion that says "there is space under this", a tight dark one for
+   * the contact edge, and the inset highlight along the top. A single blurred
+   * shadow reads as a drawing of a shadow; the pair reads as height. They are
+   * still only two shadows on one already-composited surface — the cost is a
+   * paint, not a new layer, which is why this can be stronger without the UI
+   * getting sluggish. */
+  --clay-lift: 0 18px 44px -12px rgba(0, 0, 0, 0.72), 0 4px 12px -2px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --clay-lift-sm: 0 8px 20px -6px rgba(0, 0, 0, 0.55), 0 2px 5px -1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* Hover: the panel comes UP, so the shadow gets longer and softer rather than
+   * merely darker — a shadow that only darkens reads as a colour change. */
+  --clay-lift-hover: 0 26px 60px -12px rgba(0, 0, 0, 0.8), 0 6px 16px -2px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
   --clay-press: inset 0 2px 6px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 
-  --clay-r: 16px;
-  --clay-r-sm: 12px;
-  --clay-r-xs: 9px;
+  --clay-r: 18px;
+  --clay-r-sm: 14px;
+  --clay-r-xs: 10px;
   --clay-ease: 200ms ease-out;
+
+  /* How far fixed chrome stays off the window frame in the desktop shell. The
+   * page's own columns already sit in a 24px gutter (SessionsFloor sets it
+   * inline) — this is for the pieces that are position:fixed and would otherwise
+   * be welded to the frame: the terminal dock and the corner buttons. */
+  --clay-inset: 16px;
 }
 
 /* A hair more ambient light in the page itself, so floating surfaces have
@@ -64,7 +83,26 @@ body {
   border: 1px solid var(--clay-line) !important;
   box-shadow: var(--clay-lift);
   background-color: var(--clay-surface-solid) !important;
-  transition: box-shadow var(--clay-ease), border-color var(--clay-ease);
+  transition: box-shadow var(--clay-ease), border-color var(--clay-ease), transform var(--clay-ease);
+}
+
+/* Hover lift. Deliberately small — 2px and no scale on the big panels, because a
+ * panel that visibly grows under the pointer shifts the text inside it, and text
+ * that moves while you are reading it is worse than no affordance at all. The
+ * shadow does most of the talking; the translate just seats it.
+ *
+ * transform + box-shadow only: both are cheap on an already-composited surface,
+ * and neither triggers layout. Nothing here adds a blur or a new stacking layer. */
+[data-testid="session-title"]:hover,
+[data-testid="floor-container"]:hover,
+[data-testid="left-panel"]:hover,
+[data-testid="right-panel"]:hover {
+  transform: translateY(-2px);
+  border-color: var(--clay-line-strong) !important;
+}
+[data-testid="session-title"]:hover,
+[data-testid="floor-container"]:hover {
+  box-shadow: var(--clay-lift-hover);
 }
 
 /* The two side panels each carry their own accent: cyan on the left, magenta on
@@ -76,6 +114,14 @@ body {
 [data-testid="right-panel"] {
   background-image: linear-gradient(260deg, var(--clay-magenta-wash), transparent 42%) !important;
   box-shadow: var(--clay-lift), 1px 0 0 var(--clay-magenta-glow), 10px 0 24px -14px var(--clay-magenta-glow);
+}
+/* The side panels keep their accent edge on hover — it is how you tell left from
+ * right at a glance, so the lift must not overwrite it. */
+[data-testid="left-panel"]:hover {
+  box-shadow: var(--clay-lift-hover), -1px 0 0 var(--clay-cyan-glow), -14px 0 30px -14px var(--clay-cyan-glow);
+}
+[data-testid="right-panel"]:hover {
+  box-shadow: var(--clay-lift-hover), 1px 0 0 var(--clay-magenta-glow), 14px 0 30px -14px var(--clay-magenta-glow);
 }
 
 /* The session card keeps its accent stripe, softened into the rounded edge. */
@@ -102,6 +148,30 @@ body {
 }
 [data-testid="page-header"] {
   border-bottom: 0 !important;
+}
+
+/* The activity strip runs the full width under the floor and was the last flat
+ * surface left: a bordered band, square-cornered, sitting directly on the page.
+ * Same treatment as the panels above it, so the row reads as one more floating
+ * card rather than a rule drawn across the bottom. */
+[data-testid="activity-strip"] {
+  border-radius: var(--clay-r) !important;
+  border: 1px solid var(--clay-line) !important;
+  background-color: var(--clay-surface-solid) !important;
+  box-shadow: var(--clay-lift-sm);
+  transition: box-shadow var(--clay-ease), border-color var(--clay-ease), transform var(--clay-ease);
+}
+[data-testid="activity-strip"]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--clay-lift);
+  border-color: var(--clay-line-strong) !important;
+}
+
+/* The corner buttons are fixed to the frame; hold them off it by the same gap the
+ * dock uses so the three pieces of floating chrome line up. */
+.gnosis-shell [data-testid="terminal-dock"] ~ button,
+.gnosis-shell #root > button {
+  right: var(--clay-inset) !important;
 }
 
 /* The 3D floor sits in a softly inset well, so the scene reads as recessed into
@@ -131,7 +201,13 @@ body {
 /* Make room for the bar AND for the floating view chips that sit under it. The
  * page root sets its padding inline, so this has to win. 96px = the 44px bar,
  * the ~32px chip row below it, and air between the two — without it the chips
- * land on top of the right-hand panel. */
+ * land on top of the right-hand panel.
+ *
+ * The other three sides are the frame gap: in a browser tab the page scrolls and
+ * its own 24px gutter is enough, but in the shell the window edge is RIGHT THERE
+ * and a panel that touches it reads as painted onto the frame rather than sitting
+ * in it. The panels' shadows also need somewhere to fall — a shadow with no gap
+ * to cast into is invisible, which is most of why they looked stuck down. */
 .gnosis-shell #root > div:not([data-testid="top-bar"]):not([data-testid="view-toggle"]) {
   padding-top: 96px !important;
 }
@@ -182,6 +258,18 @@ body {
   border-radius: var(--clay-r) var(--clay-r) 0 0 !important;
   box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
+}
+/* In the shell the dock floats like everything else: off all three edges, rounded
+ * on all four corners, with the shadow wrapping right round it. A browser tab
+ * keeps it welded to the viewport bottom — there is no window frame there for it
+ * to lift off. */
+.gnosis-shell [data-testid="terminal-dock"] {
+  left: var(--clay-inset) !important;
+  right: var(--clay-inset) !important;
+  bottom: var(--clay-inset) !important;
+  border-radius: var(--clay-r) !important;
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.8), 0 -12px 30px -8px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 /* Soft inner shadow around the terminal surface itself, so the text well reads
  * as pressed into the dock rather than laid on it. The shadow goes on a

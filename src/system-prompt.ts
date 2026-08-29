@@ -1,10 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { domDir } from "./config.js";
+import { domDir, loadConfig, resolveVaultPath } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 import { buildRepoMap } from "./repomap.js";
 import { buildLearnedContext } from "./sessionmemory.js";
 import { resolveShell } from "./tools/bash.js";
+import { TOOL_NAMES } from "./tools/index.js";
 
 /** The stated-working-directory line's stable prefix, shared with the engine. */
 export const WORKING_DIR_PREFIX = "Working directory: ";
@@ -88,7 +89,40 @@ function windowsFocusNotes(): string[] {
   ];
 }
 
+/**
+ * Where the user's personal writing actually lives.
+ *
+ * Asked about a resume or a past decision, the model reached for glob/grep in the
+ * current project and found nothing — because notes are not code and were never in
+ * the repo. The vault is already configured (config.obsidianVault, or a `vault:`
+ * line in ~/.dom/AGENTS.md); this puts its absolute path in front of the model so
+ * the first search goes to the right tree. Silent when no vault is configured:
+ * pointing at a directory that does not exist is worse than saying nothing.
+ */
+async function personalContextNotes(cwd: string): Promise<string[]> {
+  let vault: string | undefined;
+  try {
+    vault = await resolveVaultPath(await loadConfig());
+  } catch {
+    return []; // unreadable config is not worth failing a boot over
+  }
+  if (!vault) return [];
+  if (path.resolve(vault) === path.resolve(cwd)) {
+    return ["You are already working inside the vault, so search here."];
+  }
+  return [
+    `The vault is at: ${vault}`,
+    "Search it with glob/grep by passing that path explicitly — grep and glob default to the working",
+    "directory, which is not where the notes are. Read the notes you find before answering; do not",
+    "answer from the file names alone.",
+  ];
+}
+
 export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [], mapTokens = 1024): Promise<string> {
+  // The vault path is resolved here, not left to the model to discover: "search the
+  // vault first" is useless advice if it has to guess where the vault is, and its
+  // first move would be the same fruitless glob of cwd the rule exists to prevent.
+  const vaultNotes = await personalContextNotes(cwd);
   const lines = [
     "IDENTITY",
     "You are Gnosis, a terminal coding agent. You work directly on the user's filesystem, run",
@@ -109,8 +143,14 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [],
     "USE still apply: attempt the work, and confirm first in the specific cases those sections name.",
     "",
     "TOOLS",
-    "You have twelve tools: read, write, edit, bash, glob, grep, http, send_message, list_tabs, task,",
-    "ask_user, office.",
+    // Written from TOOL_NAMES rather than typed out, because it was typed out
+    // once and then drifted: the prompt claimed twelve while eighteen were wired,
+    // so six real tools — todo, view_image, web_search, oracle, memory,
+    // focus_window — were absent from the model's own account of itself. A model
+    // told it has twelve tools disclaims the other six, which reads to the user
+    // as the app being less capable than the terminal when both had all of them.
+    `You have ${TOOL_NAMES.length} tools: ${TOOL_NAMES.join(", ")}.`,
+    "That list is generated from what is actually registered, so it is never short of what you can call.",
     "Use the minimum tools needed. Never read a file you don't need. Never run a command just to",
     "understand context — ask if you need it.",
     "",
@@ -203,6 +243,13 @@ export async function buildSystemPrompt(cwd: string, skills: LoadedSkill[] = [],
     "Before deleting anything outside ~/Gnosis, check what it is first: whether it is committed to git, whether",
     "anything references it, whether it is generated or hand-written. Say what you found, then delete. A delete",
     "outside your own folder always stops for the user to confirm, and there is no undo.",
+    "",
+    "PERSONAL CONTEXT",
+    "For questions about the user's personal information — resume, accomplishments, notes, decisions,",
+    "research — search the Obsidian vault first if one is configured, before searching the current project",
+    "directory. Never assume personal content lives in the current project's cwd. Do this automatically",
+    "without being told to check Obsidian.",
+    ...vaultNotes,
     "",
     "COMPUTER USE",
     "Some MCP servers control the REAL desktop — the actual mouse, the actual keyboard, the actual screen",

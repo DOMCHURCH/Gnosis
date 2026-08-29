@@ -35,7 +35,7 @@ import { jobs, type Job } from "../jobs.js";
 import { listHooks } from "../hooks.js";
 import { writeAgentsMd } from "../init.js";
 import { buildRepoMap } from "../repomap.js";
-import { listSessions, loadConfig, loadSession, saveConfig, type Mode } from "../config.js";
+import { listSessions, loadConfig, loadSession, saveConfig, resolveVaultPath, type Mode } from "../config.js";
 import { saveVaultNote } from "../vault.js";
 import { readTrace, summarizeTrace, formatTraceSummary } from "../trace.js";
 import { notify } from "../notify.js";
@@ -791,12 +791,17 @@ export function App({ engine: rootEngine, caps, width, ghAuth, initialRepo, skil
   };
 
   const openVault = async () => {
-    const cfg = await loadConfig();
-    if (!cfg.obsidianVault) {
-      sysLog("no obsidian vault configured — set one with /vault set <path>");
+    // resolveVaultPath, not config.obsidianVault: a `vault:` line in
+    // ~/.dom/AGENTS.md configures one too — that is the documented second way to
+    // set it, and vault.ts (which builds the OBSIDIAN panel) has always honoured
+    // it. Reading only the config key made /vault answer "none configured" on a
+    // machine whose vault the rest of the app could see perfectly well.
+    const vault = await resolveVaultPath(await loadConfig());
+    if (!vault) {
+      sysLog("no obsidian vault configured — set one with /vault set <path>, or a `vault:` line in ~/.dom/AGENTS.md");
       return;
     }
-    const abs = path.resolve(cfg.obsidianVault);
+    const abs = path.resolve(vault);
     if (!existsSync(abs)) {
       sysLog(`vault path does not exist: ${abs}`);
       return;

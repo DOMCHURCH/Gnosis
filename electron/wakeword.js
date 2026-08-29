@@ -15,54 +15,21 @@
 import { spawn, execFile } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { candidates, argsFor } from "./python.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE = path.join(here, "openwakeword_bridge.py");
 
-/**
- * Every interpreter on the launcher's list, newest first.
- *
- * This exists because probing only `python` / `py` / `python3` is not enough on
- * Windows and quietly misses real installations. `py` runs the launcher's
- * DEFAULT version, `python` is whatever venv happens to be on PATH, and a user
- * who ran `pip install` from a specific interpreter — say 3.12 while the
- * default is 3.14 — ends up with the package installed and the app insisting it
- * is not. `py -0p` is the authoritative list, so ask it.
- */
-function launcherPythons() {
-  return new Promise((resolve) => {
-    execFile("py", ["-0p"], { timeout: 15000, windowsHide: true }, (err, stdout) => {
-      if (err) return resolve([]);
-      const paths = [];
-      // Lines look like:  -V:3.12          C:\path\to\python.exe
-      const LINE = /\s([A-Za-z]:\\[^\s][^\r\n]*?python\.exe)\s*$/i;
-      for (const line of String(stdout).split(/\r?\n/)) {
-        const m = line.match(LINE);
-        if (m) paths.push(m[1]);
-      }
-      resolve(paths);
-    });
-  });
-}
-
-/** Interpreters to try, in order. GNOSIS_PYTHON wins if it is set. */
-async function candidates() {
-  // An explicit GNOSIS_PYTHON is a decision, not a hint: if the user pinned an
-  // interpreter and it lacks openwakeword, quietly succeeding with a DIFFERENT
-  // one hides their mistake and runs code they did not choose.
-  if (process.env.GNOSIS_PYTHON) return [process.env.GNOSIS_PYTHON];
-  const launcher = process.platform === "win32" ? await launcherPythons() : [];
-  // Dedup while keeping order: the plain names first, then every interpreter
-  // the Windows launcher knows about.
-  return [...new Set(["python", "py", "python3", ...launcher])];
-}
+// Interpreter discovery used to live here, and the TTS side carried a stale copy
+// of an older, broken version of it. It now lives in python.js so both features
+// find the same interpreters — see that file for why `py -0p` is load-bearing.
 
 /** Ask an interpreter whether it can import openwakeword. */
 function probe(exe) {
   return new Promise((resolve) => {
-    const args = exe === "py" ? ["-3", "-c", "import openwakeword;print('ok')"] : ["-c", "import openwakeword;print('ok')"];
+    const args = [...argsFor(exe), "-c", "import openwakeword;print('ok')"];
     execFile(exe, args, { timeout: 20000, windowsHide: true }, (err, stdout) => {
-      resolve(String(stdout ?? "").includes("ok") ? { ok: true, exe, args: exe === "py" ? ["-3"] : [] } : { ok: false, exe, error: err?.message });
+      resolve(String(stdout ?? "").includes("ok") ? { ok: true, exe, args: argsFor(exe) } : { ok: false, exe, error: err?.message });
     });
   });
 }

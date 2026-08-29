@@ -5,7 +5,12 @@
 // Pipeline:
 //   wake word ("hey jarvis")  ->  overlay appears, tray pulses
 //   record until 1.5s silence ->  transcribe            ->  run as a turn
-//   agent replies             ->  spoken via Windows SAPI + shown in the chat
+//   agent replies             ->  spoken via Kokoro (SAPI if it is missing)
+//
+// That last step is GATED. TTS fires for a turn the wake word armed and for no
+// other: type into the chat and nothing is spoken, because the person typing is
+// already reading. The gate is voicegate.js — separate so the rule can be tested
+// without Electron, and verify/s84-voice-gating.mjs is that test.
 //
 // The wake word runs on openWakeWord — open source, local, and needing no
 // account or API key. Only transcription needs a key (GROQ_API_KEY for Whisper);
@@ -19,6 +24,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startWakeWord, findPython, probeRuntime } from "./wakeword.js";
 import { synthesize, probeKokoro } from "./kokoro.js";
+import { createReplyGate } from "./voicegate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -146,6 +152,9 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     runtime: null,   // probeRuntime(): installed? models downloaded? which python?
     tts: null,       // which TTS engine will actually be used
     lastWake: null,
+    // Which engine last spoke, and when. Empty until a voice turn has completed —
+    // which is itself the answer to "does TTS fire on ordinary chat messages?".
+    lastSpoke: null,
     lastError: null,
   };
 
@@ -266,6 +275,25 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (overlay && !overlay.isDestroyed()) overlay.hide();
   }
 
+  // The reply half of the pipeline: armed by the wake word, and by nothing else.
+  // See voicegate.js for why that gate is a separate, testable module. Feeding it
+  // the bus rather than a callback means the spoken answer is the SAME text the
+  // chat rail shows — one source, so the two can never disagree.
+  const gate = createReplyGate(
+    (reply) => {
+      toOverlay("voice:state", { state: "speaking", text: reply });
+      void (async () => {
+        const { config } = await readEnv();
+        const spoken = await speak(reply, { voice: config.kokoroVoice, play });
+        diag.lastSpoke = `${spoken.engine ?? "none"} @ ${new Date().toISOString()}`;
+        if (!spoken.ok) diag.lastError = spoken.error ?? spoken.fallbackReason ?? "TTS failed";
+        sleep();
+      })();
+    },
+    () => sleep(),
+  );
+  bridge?.bus?.subscribe((e) => gate.handle(e));
+
   /** A finished utterance: transcribe, run it, speak the reply. */
   async function handleUtterance(wavBase64) {
     const { env } = await readEnv();
@@ -294,13 +322,18 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     try {
       const agents = bridge?.getAgents?.() ?? [];
       const tabId = agents[0]?.id ?? 0;
+      // Arm BEFORE handing the turn over: onInput runs the engine synchronously
+      // far enough to emit its first lines, and arming afterwards would miss them.
+      gate.arm(tabId);
       bridge?.onInput?.(tabId, prefix + t.text);
+      // The overlay stays up until turn.end — the gate speaks the reply and calls
+      // sleep(). A timer here would hide it mid-answer.
     } catch {
       /* no engine wired (boot failed) */
+      gate.disarm();
+      toOverlay("voice:state", { state: "error", text: "no agent is running" });
+      setTimeout(sleep, 3500);
     }
-
-    toOverlay("voice:state", { state: "speaking", text: t.text });
-    setTimeout(sleep, 2500);
   }
 
   // --- IPC from the engine/overlay renderers --------------------------------
@@ -322,7 +355,9 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     diag.micReason = s?.reason ?? "";
   });
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
-  ipcMain.on("voice:cancel", () => sleep());
+  // Cancel means "never mind" — the turn may still be running, but its answer is
+  // no longer wanted out loud.
+  ipcMain.on("voice:cancel", () => { gate.disarm(); sleep(); });
   ipcMain.on("voice:engine-status", (_e, s) => {
     status = { ...status, ...s };
   });
@@ -451,6 +486,8 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
 
   function stop() {
     enabled = false;
+    gate.disarm(); // voice off must not leave a turn primed to talk
+
     detector?.stop();
     detector = null;
     setListening(false);

@@ -19,34 +19,52 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { candidates, argsFor } from "./python.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE = path.join(here, "kokoro_bridge.py");
 
-function candidates() {
-  const explicit = process.env.GNOSIS_PYTHON;
-  return [...(explicit ? [explicit] : []), "python", "py", "python3"];
+/** Where the ONNX weights live. The bridge looks here too; passing it explicitly
+ * means a packaged app is not relying on the child's idea of the home directory. */
+const MODEL_DIR = path.join(os.homedir(), ".dom", "kokoro");
+
+/** The environment every bridge call needs. */
+function bridgeEnv(extra = {}) {
+  return { ...process.env, PYTHONUNBUFFERED: "1", GNOSIS_KOKORO_DIR: MODEL_DIR, ...extra };
 }
 
-function argsFor(exe) {
-  return exe === "py" ? ["-3"] : [];
-}
-
-/** Which Python (if any) can import kokoro, and what voices it offers. */
+/**
+ * Which Python (if any) can synthesise, and what voices it offers.
+ *
+ * The interpreter list comes from python.js — the SAME probing the wake word
+ * uses. It used to be a private copy of the older, broken version ("python",
+ * "py", "python3"), which is why Kokoro reported itself uninstalled on a machine
+ * where the wake word was running happily on the interpreter that had it: `py`
+ * is the launcher default (3.14 here) and `python` is whatever venv is on PATH,
+ * so neither was the 3.12 that `pip install` had actually written to.
+ *
+ * The last failure is kept and reported. "Not installed" and "installed but the
+ * weights are missing" need different fixes, and collapsing them to one message
+ * sends the user to reinstall a package that was never the problem.
+ */
 export async function probeKokoro() {
-  for (const exe of candidates()) {
+  let lastError = null;
+  for (const exe of await candidates()) {
     const info = await new Promise((resolve) => {
-      execFile(exe, [...argsFor(exe), BRIDGE, "--probe"], { timeout: 60000, windowsHide: true }, (_err, stdout) => {
+      execFile(exe, [...argsFor(exe), BRIDGE, "--probe"], { timeout: 60000, windowsHide: true, env: bridgeEnv() }, (_err, stdout) => {
         const line = String(stdout ?? "").trim().split(/\r?\n/).filter(Boolean).pop();
         try { resolve(line ? JSON.parse(line) : null); } catch { resolve(null); }
       });
     });
-    if (info?.installed) return { ok: true, exe, args: argsFor(exe), voices: info.voices ?? [], default: info.default ?? null, python: info.python };
+    if (info?.installed) {
+      return { ok: true, exe, args: argsFor(exe), voices: info.voices ?? [], default: info.default ?? null, python: info.python, backend: info.backend ?? null };
+    }
+    if (info?.error) lastError = info.error;
   }
   return {
     ok: false,
     voices: [],
-    reason: "Install Kokoro for better voice: pip install kokoro-tts",
+    reason: lastError ?? "Install Kokoro for a better voice: pip install kokoro-onnx (then put kokoro-v1.0.onnx and voices-v1.0.bin in ~/.dom/kokoro)",
   };
 }
 
@@ -66,12 +84,10 @@ export async function synthesize(text, { voice, speed } = {}) {
     const child = spawn(py.exe, [...py.args, BRIDGE, "--speak", out], {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
-      env: {
-        ...process.env,
-        PYTHONUNBUFFERED: "1",
+      env: bridgeEnv({
         ...(voice ? { GNOSIS_KOKORO_VOICE: voice } : {}),
         ...(speed ? { GNOSIS_KOKORO_SPEED: String(speed) } : {}),
-      },
+      }),
     });
     let stdout = "";
     let stderr = "";
@@ -84,7 +100,7 @@ export async function synthesize(text, { voice, speed } = {}) {
       const line = stdout.trim().split(/\r?\n/).filter(Boolean).pop();
       let msg = null;
       try { msg = line ? JSON.parse(line) : null; } catch { /* not JSON */ }
-      if (code === 0 && msg?.type === "spoken") resolve({ ok: true, path: out, voice: msg.voice });
+      if (code === 0 && msg?.type === "spoken") resolve({ ok: true, path: out, voice: msg.voice, backend: msg.backend ?? null });
       else resolve({ ok: false, reason: msg?.message ?? stderr.trim().split("\n").slice(-1)[0] ?? `kokoro exited ${code}` });
     });
     child.on("error", (e) => { clearTimeout(timer); resolve({ ok: false, reason: e.message }); });

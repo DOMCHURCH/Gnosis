@@ -32,7 +32,15 @@ The desktop app includes:
 - Integrated terminal panel
 - Voice mode — say "hey jarvis" to activate (no API key required for wake word,
   `GROQ_API_KEY` for transcription). "hey jarvis" is openWakeWord's closest
-  available model; a custom "hey gnosis" model is future work
+  available model; a custom "hey gnosis" model is future work. The agent speaks
+  its reply back only for turns you started by voice — typing in the chat never
+  triggers speech
+- Local text-to-speech via Kokoro, with Windows SAPI as the fallback. Install it
+  with `pip install kokoro-onnx soundfile`, then put `kokoro-v1.0.onnx` and
+  `voices-v1.0.bin` (from the [kokoro-tts
+  release](https://github.com/nazdridoy/kokoro-tts/releases/tag/v1.0.0)) in
+  `~/.dom/kokoro/`. The settings panel's voice diagnostics reports which engine
+  is actually in use and names what is missing if it is not Kokoro
 - Settings panel for API keys and configuration
 - System tray with agent status
 - Auto-updates when new versions are released

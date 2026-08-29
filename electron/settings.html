@@ -447,7 +447,10 @@
           }
           if (d.tts.default) sel.value = d.tts.default;
         }
-        $("tts-engine").textContent = voices.length ? "" : "Kokoro not installed — using SAPI";
+        // The probe already knows WHY it fell back — "not installed" and
+        // "installed but the weights are missing" need different fixes, and the
+        // old flat message sent people to reinstall a package that was fine.
+        $("tts-engine").textContent = voices.length ? "" : (d.tts?.reason ?? "Kokoro unavailable — using SAPI");
         $("wake-phrase").textContent = d.wakePhrase
           ? `Wake phrase is currently “${d.wakePhrase}” (openWakeWord's closest available model). Custom “hey gnosis” training coming later.`
           : "";
