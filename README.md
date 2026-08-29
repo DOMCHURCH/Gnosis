@@ -24,21 +24,19 @@ watch your agents work as blocky figures moving around a 3D office floor.
 Download the installer for a native desktop experience — no terminal setup
 required:
 
-**[Download the latest Windows installer](https://github.com/DOMCHURCH/Gnosis/releases)**
-— `Gnosis-Setup-1.1.0.exe`
+**[Download Gnosis-Setup-1.1.0.exe](https://github.com/DOMCHURCH/Gnosis/releases/download/v1.1.1/Gnosis-Setup-1.1.0.exe)** (Windows, 120MB)
 
-The desktop app includes everything:
+The desktop app includes:
 
-- The full browser UI with the Three.js office floor
+- Three.js 3D office floor showing agents working in real time
 - Integrated terminal panel
-- Settings panel for API keys and config
-- System tray with agent status indicator
+- Voice mode — say "hey gnosis" to activate (no API key required for wake word,
+  `GROQ_API_KEY` for transcription)
+- Settings panel for API keys and configuration
+- System tray with agent status
+- Auto-updates when new versions are released
 
-It runs the same engine and the same web UI as `gnosis serve` — the window is
-pointed at a local, token-gated server the app starts for itself, so nothing is
-exposed that the CLI would not expose. Sessions open in `~/Gnosis`.
-
-For CLI use, the npm package still works:
+For CLI use:
 
 ```sh
 npm install -g @dominquechurch/gnosis
