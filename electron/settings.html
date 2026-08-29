@@ -215,6 +215,10 @@
           Say “hey gnosis” to talk to the agent. Not available in the browser UI or the CLI: the microphone
           lives in the desktop shell and is never exposed to the served page.
         </p>
+        <p class="note">
+          Wake-word detection uses <strong>openWakeWord</strong> — open source, runs locally, and needs
+          <strong>no API key</strong>. Transcription uses the <code>GROQ_API_KEY</code> above.
+        </p>
         <div class="row">
           <button class="toggle" id="voice-toggle" type="button" aria-pressed="false" title="Enable voice" aria-label="Enable voice"><span class="knob"></span></button>
           <span class="state" id="voice-state" style="margin: 0"></span>

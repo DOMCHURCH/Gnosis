@@ -7,20 +7,17 @@
 //   record until 1.5s silence ->  transcribe            ->  run as a turn
 //   agent replies             ->  spoken via Windows SAPI + shown in the chat
 //
-// TWO LEGS NEED KEYS AND ARE INERT WITHOUT THEM:
-//   * wake word — Porcupine needs a Picovoice AccessKey (PICOVOICE_ACCESS_KEY).
-//     Without it there is no always-listening trigger; the overlay can still be
-//     opened deliberately (Ctrl+Shift+V, or the tray) and everything downstream
-//     of it works.
-//   * transcription — Groq Whisper needs GROQ_API_KEY. Without it the overlay
-//     says so instead of pretending to hear.
-// Both are reported through voiceStatus() so the settings window can tell the
-// user exactly which piece is missing, rather than failing silently.
+// The wake word runs on openWakeWord — open source, local, and needing no
+// account or API key. Only transcription needs a key (GROQ_API_KEY for Whisper);
+// without it the overlay says so instead of pretending to hear. Status is
+// reported through voiceStatus() so settings can name the missing piece rather
+// than failing silently.
 
 import { BrowserWindow, ipcMain, Notification } from "electron";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { startWakeWord, findPython } from "./wakeword.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -92,6 +89,7 @@ async function transcribe(wavBase64, apiKey) {
 export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   let overlay = null;
   let engine = null; // the hidden always-listening renderer
+  let detector = null; // the openWakeWord child process
   let enabled = false;
   let status = { enabled: false, wakeWord: false, transcription: false, reason: "not started" };
 
@@ -200,6 +198,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
 
   // --- IPC from the engine/overlay renderers --------------------------------
   ipcMain.on("voice:wake", () => wake());
+  // Raw PCM from the renderer's microphone, forwarded to openWakeWord. Arrives
+  // continuously while voice is enabled, so it does nothing but hand bytes on.
+  ipcMain.on("voice:audio", (_e, buf) => {
+    if (detector && buf) detector.write(Buffer.from(buf));
+  });
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
   ipcMain.on("voice:cancel", () => sleep());
   ipcMain.on("voice:engine-status", (_e, s) => {
@@ -214,28 +217,48 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   });
 
   async function start() {
-    const { env, config } = await readEnv();
+    const { env } = await readEnv();
     enabled = true;
-    const wakeKey = env.PICOVOICE_ACCESS_KEY ?? config.picovoiceAccessKey ?? null;
+
+    // openWakeWord: no key, just the library. Report the install command if it
+    // is missing rather than a bare "unavailable".
+    detector?.stop();
+    detector = await startWakeWord({
+      onWake: () => wake(),
+      onStatus: (s) => {
+        status = {
+          ...status,
+          enabled: true,
+          wakeWord: !!s.ready,
+          transcription: !!env.GROQ_API_KEY,
+          reason: s.ready
+            ? env.GROQ_API_KEY
+              ? "ready — listening for “hey gnosis”"
+              : "wake word ready, but no GROQ_API_KEY, so speech cannot be transcribed."
+            : s.reason,
+        };
+      },
+    });
+
     status = {
       enabled: true,
-      wakeWord: !!wakeKey,
+      wakeWord: !!detector.ok,
       transcription: !!env.GROQ_API_KEY,
-      reason: !wakeKey
-        ? "No PICOVOICE_ACCESS_KEY — the wake phrase is off; open voice with Ctrl+Shift+V."
-        : !env.GROQ_API_KEY
-          ? "No GROQ_API_KEY — speech cannot be transcribed."
-          : "ready",
+      reason: detector.ok ? "starting the wake-word detector…" : detector.reason,
     };
+
+    // The renderer owns the microphone; it streams PCM here for the detector.
     const e = makeEngine();
     e.webContents.once("did-finish-load", () => {
-      e.webContents.send("voice:configure", { accessKey: wakeKey, keyword: "hey gnosis" });
+      e.webContents.send("voice:configure", { streamToDetector: detector.ok });
     });
     return status;
   }
 
   function stop() {
     enabled = false;
+    detector?.stop();
+    detector = null;
     setListening(false);
     if (overlay && !overlay.isDestroyed()) overlay.destroy();
     if (engine && !engine.isDestroyed()) engine.destroy();
@@ -251,6 +274,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (config.voiceEnabled) await start();
     else status = { enabled: false, wakeWord: false, transcription: false, reason: "disabled in settings" };
   })();
+
+  // Exposed so settings can show whether the wake-word runtime is present
+  // before the user turns voice on.
+  ipcMain.handle("voice:probe", async () => findPython());
 
   return {
     start,

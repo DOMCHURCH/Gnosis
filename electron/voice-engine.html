@@ -11,7 +11,8 @@
       // the visible part is voice-overlay.html.
       //
       // Two jobs:
-      //   1. wake word — Porcupine, if an AccessKey was configured
+      //   1. stream 16 kHz PCM to the main process, which feeds openWakeWord
+      //      (a local, key-free detector running as a Python child process)
       //   2. utterance capture — record until 1.5s of silence, emit WAV
       //
       // Silence detection is a plain RMS gate rather than a real VAD. That is
@@ -25,7 +26,8 @@
       let stream = null;
       let ctx = null;
       let analyser = null;
-      let porcupine = null;
+      let streamNode = null;   // continuous tap feeding the wake-word detector
+      let recording = false;   // suspends the tap while an utterance is captured
 
       async function mic() {
         if (stream) return stream;
@@ -81,6 +83,7 @@
 
       async function record() {
         await mic();
+        recording = true;
         const chunks = [];
         const proc = ctx.createScriptProcessor(4096, 1, 1);
         const src = ctx.createMediaStreamSource(stream);
@@ -112,6 +115,7 @@
 
         try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch {}
 
+        recording = false;
         if (!heardAnything) { window.voice.cancel(); return; }
         const total = chunks.reduce((n, c) => n + c.length, 0);
         const flat = new Float32Array(total);
@@ -123,28 +127,42 @@
       window.voice.onRecord(() => { record().catch((e) => window.voice.engineStatus({ reason: String(e.message) })); });
 
       window.voice.onConfigure(async (cfg) => {
-        // No AccessKey, no wake word. Everything downstream still works through
-        // the manual trigger, so this is a degraded mode, not a broken one.
-        if (!cfg?.accessKey) {
-          window.voice.engineStatus({ wakeWord: false, reason: "No PICOVOICE_ACCESS_KEY — wake phrase disabled." });
+        if (!cfg?.streamToDetector) {
+          window.voice.engineStatus({ wakeWord: false, reason: "wake-word detector unavailable" });
           return;
         }
         try {
-          // Loaded lazily and by name so the app does not hard-depend on a
-          // package that is useless without a key.
-          const { PorcupineWorker } = await import("@picovoice/porcupine-web");
-          const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
-          porcupine = await PorcupineWorker.create(
-            cfg.accessKey,
-            [{ builtin: "Hey Google" }], // placeholder: "hey gnosis" needs a trained .ppn
-            () => window.voice.wake(),
-          );
-          await WebVoiceProcessor.subscribe(porcupine);
-          window.voice.engineStatus({ wakeWord: true, reason: "listening for the wake phrase" });
+          await mic();
+          // A continuous tap on the microphone, downsampled to the 16 kHz
+          // signed-16-bit mono that openWakeWord requires, handed to the main
+          // process a chunk at a time. The detector lives there because it is a
+          // Python process, and a renderer cannot own one.
+          const tap = ctx.createScriptProcessor(4096, 1, 1);
+          const src = ctx.createMediaStreamSource(stream);
+          src.connect(tap);
+          const mute = ctx.createGain();
+          mute.gain.value = 0;
+          tap.connect(mute);
+          mute.connect(ctx.destination);
+          tap.onaudioprocess = (e) => {
+            // While capturing an utterance the recorder owns the microphone;
+            // feeding the detector at the same time would let the user's own
+            // command re-trigger the wake word.
+            if (recording) return;
+            const input = e.inputBuffer.getChannelData(0);
+            const pcm = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+              const c = Math.max(-1, Math.min(1, input[i]));
+              pcm[i] = c < 0 ? c * 0x8000 : c * 0x7fff;
+            }
+            window.voice.audio(pcm.buffer);
+          };
+          streamNode = { tap, src, mute };
+          window.voice.engineStatus({ wakeWord: true, reason: "microphone open, streaming to the detector" });
         } catch (e) {
           window.voice.engineStatus({
             wakeWord: false,
-            reason: "Porcupine unavailable: " + String(e?.message ?? e),
+            reason: "microphone unavailable: " + String(e?.message ?? e),
           });
         }
       });

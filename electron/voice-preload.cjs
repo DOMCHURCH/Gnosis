@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("voice", {
   // engine -> main
   wake: () => ipcRenderer.send("voice:wake"),
   utterance: (wavBase64) => ipcRenderer.send("voice:utterance", wavBase64),
+  /** Continuous 16 kHz mono PCM for the wake-word detector. */
+  audio: (pcmBuffer) => ipcRenderer.send("voice:audio", pcmBuffer),
   cancel: () => ipcRenderer.send("voice:cancel"),
   engineStatus: (s) => ipcRenderer.send("voice:engine-status", s),
   // main -> engine
