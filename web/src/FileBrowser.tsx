@@ -76,6 +76,15 @@ export function FilesBody(props: { tabId: number | null; fileEpoch: number; onAt
 
 // Shared tree renderer. `onAttach` is optional — the Obsidian tab omits the + button.
 export function TreeList(props: { nodes: TreeNode[]; depth: number; expanded: Record<string, boolean>; setExpanded: (fn: (e: Record<string, boolean>) => Record<string, boolean>) => void; onFile: (n: TreeNode) => void; onAttach?: (path: string) => void }) {
+  // Native right-click menu, desktop only: a browser has no Menu to pop, and
+  // "Reveal in Explorer" means nothing there.
+  const shell = (window as unknown as { gnosisShell?: { showMenu(kind: string, p: Record<string, unknown>): void } }).gnosisShell;
+  const onContext = (n: TreeNode) => (e: React.MouseEvent) => {
+    if (!shell || n.type !== "file") return;
+    e.preventDefault();
+    e.stopPropagation();
+    shell.showMenu("file", { path: n.path, name: n.name });
+  };
   const { nodes, depth, expanded } = props;
   return (
     <>
@@ -83,7 +92,7 @@ export function TreeList(props: { nodes: TreeNode[]; depth: number; expanded: Re
         const isOpen = !!expanded[n.path];
         return (
           <div key={n.path}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: depth * 12, cursor: "pointer" }}>
+            <div onContextMenu={onContext(n)} style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: depth * 12, cursor: "pointer" }}>
               <div
                 onClick={() => (n.type === "dir" ? props.setExpanded((e) => ({ ...e, [n.path]: !e[n.path] })) : props.onFile(n))}
                 style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 5, padding: "3px 4px", overflow: "hidden" }}

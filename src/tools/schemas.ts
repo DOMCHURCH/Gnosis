@@ -318,3 +318,11 @@ export function toJsonSchema(schema: z.ZodTypeAny): ToolJsonSchema {
   scrub(properties);
   return { type: "object", properties, required, additionalProperties: false };
 }
+
+/** focus_window: bring another application to the foreground, or list what is open. */
+export const focusWindowSchema = z.object({
+  action: z.enum(["focus", "list"]).describe("focus a window, or list the open ones"),
+  app: z.string().optional().describe("process name or window-title substring, e.g. \"chrome\", \"code\""),
+  pid: z.number().optional().describe("exact process id, when you already have one from action=list"),
+});
+export type FocusWindowArgs = z.infer<typeof focusWindowSchema>;

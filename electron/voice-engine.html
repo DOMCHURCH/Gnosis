@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Gnosis voice engine</title>
+  </head>
+  <body>
+    <script>
+      // The microphone lives here, in a hidden renderer, because getUserMedia
+      // needs a DOM and the main process does not have one. Nothing is shown;
+      // the visible part is voice-overlay.html.
+      //
+      // Two jobs:
+      //   1. wake word — Porcupine, if an AccessKey was configured
+      //   2. utterance capture — record until 1.5s of silence, emit WAV
+      //
+      // Silence detection is a plain RMS gate rather than a real VAD. That is
+      // enough for "stop when they stop talking" in a quiet room, and it costs
+      // no model and no network.
+
+      const SILENCE_MS = 1500;
+      const SILENCE_RMS = 0.012; // below this counts as room tone
+      const MAX_UTTERANCE_MS = 20000; // never record forever
+
+      let stream = null;
+      let ctx = null;
+      let analyser = null;
+      let porcupine = null;
+
+      async function mic() {
+        if (stream) return stream;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        });
+        ctx = new AudioContext({ sampleRate: 16000 });
+        const src = ctx.createMediaStreamSource(stream);
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        src.connect(analyser);
+        return stream;
+      }
+
+      function rms() {
+        if (!analyser) return 0;
+        const buf = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        return Math.sqrt(sum / buf.length);
+      }
+
+      /** Encode Float32 mono PCM as a 16-bit WAV — what Whisper wants. */
+      function toWav(samples, sampleRate) {
+        const buf = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buf);
+        const str = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+        str(0, "RIFF");
+        view.setUint32(4, 36 + samples.length * 2, true);
+        str(8, "WAVE");
+        str(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        str(36, "data");
+        view.setUint32(40, samples.length * 2, true);
+        let o = 44;
+        for (const s of samples) {
+          const c = Math.max(-1, Math.min(1, s));
+          view.setInt16(o, c < 0 ? c * 0x8000 : c * 0x7fff, true);
+          o += 2;
+        }
+        let bin = "";
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin);
+      }
+
+      async function record() {
+        await mic();
+        const chunks = [];
+        const proc = ctx.createScriptProcessor(4096, 1, 1);
+        const src = ctx.createMediaStreamSource(stream);
+        src.connect(proc);
+        // Sink to a muted gain node: ScriptProcessor only runs when connected to
+        // the destination, but we must not play the microphone back.
+        const mute = ctx.createGain();
+        mute.gain.value = 0;
+        proc.connect(mute);
+        mute.connect(ctx.destination);
+
+        const started = Date.now();
+        let lastVoice = Date.now();
+        let heardAnything = false;
+
+        await new Promise((done) => {
+          proc.onaudioprocess = (e) => {
+            const input = e.inputBuffer.getChannelData(0);
+            chunks.push(new Float32Array(input));
+            const level = rms();
+            if (level > SILENCE_RMS) { lastVoice = Date.now(); heardAnything = true; }
+            const quietFor = Date.now() - lastVoice;
+            if ((heardAnything && quietFor > SILENCE_MS) || Date.now() - started > MAX_UTTERANCE_MS) {
+              proc.onaudioprocess = null;
+              done();
+            }
+          };
+        });
+
+        try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch {}
+
+        if (!heardAnything) { window.voice.cancel(); return; }
+        const total = chunks.reduce((n, c) => n + c.length, 0);
+        const flat = new Float32Array(total);
+        let o = 0;
+        for (const c of chunks) { flat.set(c, o); o += c.length; }
+        window.voice.utterance(toWav(flat, ctx.sampleRate));
+      }
+
+      window.voice.onRecord(() => { record().catch((e) => window.voice.engineStatus({ reason: String(e.message) })); });
+
+      window.voice.onConfigure(async (cfg) => {
+        // No AccessKey, no wake word. Everything downstream still works through
+        // the manual trigger, so this is a degraded mode, not a broken one.
+        if (!cfg?.accessKey) {
+          window.voice.engineStatus({ wakeWord: false, reason: "No PICOVOICE_ACCESS_KEY — wake phrase disabled." });
+          return;
+        }
+        try {
+          // Loaded lazily and by name so the app does not hard-depend on a
+          // package that is useless without a key.
+          const { PorcupineWorker } = await import("@picovoice/porcupine-web");
+          const { WebVoiceProcessor } = await import("@picovoice/web-voice-processor");
+          porcupine = await PorcupineWorker.create(
+            cfg.accessKey,
+            [{ builtin: "Hey Google" }], // placeholder: "hey gnosis" needs a trained .ppn
+            () => window.voice.wake(),
+          );
+          await WebVoiceProcessor.subscribe(porcupine);
+          window.voice.engineStatus({ wakeWord: true, reason: "listening for the wake phrase" });
+        } catch (e) {
+          window.voice.engineStatus({
+            wakeWord: false,
+            reason: "Porcupine unavailable: " + String(e?.message ?? e),
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -19,6 +19,10 @@ export function ThreeFloor(props: {
   plan?: TaskPlan | null;
   onSelectFig: (id: string | null) => void;
   onDeskClick: (zone: ZoneId, slot: number) => void;
+  /** Right-click on a figure / on bare floor. Optional: the SVG fallback and
+   * the browser build have no native menu to show. */
+  onAgentContext?: (d: { id: string; tabId?: number; name?: string }) => void;
+  onZoneContext?: (d: { zone: ZoneId; zoneLabel: string; slot: number | null }) => void;
 }) {
   const host = useRef<HTMLDivElement | null>(null);
   const scene = useRef<ReturnType<typeof createOfficeScene> | null>(null);
@@ -45,11 +49,17 @@ export function ThreeFloor(props: {
       const d = (e as CustomEvent).detail as { zone: ZoneId; slot: number };
       cb.current.onDeskClick(d.zone, d.slot);
     };
+    const onAgentCtx = (e: Event) => cb.current.onAgentContext?.((e as CustomEvent).detail);
+    const onZoneCtx = (e: Event) => cb.current.onZoneContext?.((e as CustomEvent).detail);
     el.addEventListener("agentClick", onAgent);
     el.addEventListener("deskClick", onDesk);
+    el.addEventListener("agentContext", onAgentCtx);
+    el.addEventListener("zoneContext", onZoneCtx);
     return () => {
       el.removeEventListener("agentClick", onAgent);
       el.removeEventListener("deskClick", onDesk);
+      el.removeEventListener("agentContext", onAgentCtx);
+      el.removeEventListener("zoneContext", onZoneCtx);
       const w = window as unknown as Record<string, unknown>;
       if (w.domThreeScene === s) delete w.domThreeScene;
       s.destroy();

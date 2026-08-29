@@ -14,6 +14,7 @@ import {
   oracleSchema,
   memorySchema,
   officeSchema,
+  focusWindowSchema,
   taskSchema,
   todoSchema,
   viewImageSchema,
@@ -37,6 +38,7 @@ import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
 import { runMemory } from "./memory.js";
 import { runOffice } from "./office.js";
+import { runFocusWindow } from "./focuswindow.js";
 import { runAskUser } from "./askuser.js";
 
 /** Progressive-write channel for the edit tool. Set by the engine (after the
@@ -369,6 +371,20 @@ export const TOOLS: Record<string, ToolDef> = {
     // Changes nothing on disk — only what the browser draws — so no permission gate.
     mutating: false,
     run: runOffice,
+  },
+  focus_window: {
+    name: "focus_window",
+    description:
+      "Windows only. Bring another application's window to the foreground, or list the windows that are open. " +
+      "Windows blocks a background process from stealing focus, so a synthesised click lands on whatever is " +
+      "already in front — NOT on the app you think you are driving. Call action=focus with `app` before the first " +
+      "click on any application that is not already in the foreground, and again after anything that may have " +
+      "changed focus. action=list gives the process names and titles you can match on.",
+    schema: focusWindowSchema,
+    // Raises a window that is already running and visible. Changes nothing on
+    // disk, so it does not sit behind the write-permission gate.
+    mutating: false,
+    run: runFocusWindow,
   },
 };
 

@@ -37,6 +37,22 @@ asarUnpack:
   - "**/node_modules/node-pty/**"
   - "**/*.node"
 
+# gnosis:// links. Declared here so the NSIS installer writes the registry keys
+# that make Windows hand them to us; app.setAsDefaultProtocolClient covers the
+# dev/unpackaged case at runtime.
+protocols:
+  - name: Gnosis
+    schemes:
+      - gnosis
+
+# Where auto-update looks for new builds. electron-updater reads this to build
+# the feed URL, and the generated latest.yml has to be uploaded alongside the
+# .exe on the release for a check to resolve.
+publish:
+  provider: github
+  owner: DOMCHURCH
+  repo: Gnosis
+
 win:
   target: nsis
   icon: electron/icon.ico

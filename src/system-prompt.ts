@@ -78,12 +78,13 @@ function windowsFocusNotes(): string[] {
     "minimised. If the user says they cannot SEE what you did, the usual cause is not focus — it is that the",
     "server is driving its OWN browser instance with a separate profile, which is a different window from the",
     "one they are looking at. Say that, rather than fighting the window manager.",
-    "Second: if a window genuinely must come forward, `Start-Process <app>.exe` does NOT do it. On an app that",
-    "is already running it starts a SECOND instance and leaves the existing window exactly where it was. Raising",
-    "a real window takes ShowWindow(SW_RESTORE) plus SetForegroundWindow called while attached to the foreground",
-    "thread's input queue (AttachThreadInput), via Add-Type P/Invoke. Write that to a .ps1 and run the file —",
-    "and know that antivirus sometimes blocks such a script outright, so if it is refused, say so and ask the",
-    "user to click the window themselves instead of retrying variations of it.",
+    "Second: when a window genuinely must come forward, use the focus_window tool. Do NOT use `Start-Process`",
+    "— on an app that is already running it starts a SECOND instance and leaves the existing window where it",
+    "was — and do not hand-write an AttachThreadInput script: focus_window already is that, done correctly.",
+    "focus_window(action=\"focus\", app=\"chrome\") raises a window; focus_window(action=\"list\") gives you the",
+    "process names and titles that are open right now. Call focus before the FIRST click on any application",
+    "that is not already in front, and again after anything that might have moved focus — otherwise the click",
+    "lands on whatever Windows has in front, which is not the app you think you are driving.",
   ];
 }
 

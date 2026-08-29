@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld("gnosis", {
   openSettings: () => ipcRenderer.send("settings:open"),
   relaunch: () => ipcRenderer.send("app:relaunch"),
   closeSettings: () => ipcRenderer.send("settings:close"),
+  setVoiceEnabled: (on) => ipcRenderer.invoke("settings:set-voice", on),
 });

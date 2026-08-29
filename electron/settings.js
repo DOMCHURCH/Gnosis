@@ -11,6 +11,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseEnv, mergeEnv, maskSecret } from "./env-file.js";
+import { SHORTCUTS } from "./shortcuts.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -77,7 +78,7 @@ export function openSettings(parent) {
 }
 
 /** Register the handlers once, at startup. */
-export function registerSettingsIpc({ getMainWindow }) {
+export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnabled }) {
   ipcMain.handle("settings:load", async () => {
     const env = parseEnv(await readEnvText());
     const keys = {};
@@ -92,6 +93,9 @@ export function registerSettingsIpc({ getMainWindow }) {
       // silently wins over anything saved here. Saying so beats the user editing
       // this file three times and wondering why nothing changes.
       envOverride: !!process.env.OPENROUTER_API_KEY,
+      // Reference only — the accelerators themselves live in shortcuts.js.
+      shortcuts: SHORTCUTS.map((x) => ({ keys: x.keys, label: x.label })),
+      voice: voiceStatus?.() ?? { enabled: false, wakeWord: false, transcription: false, reason: "unavailable" },
     };
   });
 
@@ -116,6 +120,18 @@ export function registerSettingsIpc({ getMainWindow }) {
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e?.message ?? String(e) };
+    }
+  });
+
+  // Voice is a desktop-only capability, so its switch lives in the desktop-only
+  // settings window rather than anywhere the served UI could reach.
+  ipcMain.handle("settings:set-voice", async (_e, on) => {
+    try {
+      const { saveConfig } = await import("../dist/config.js");
+      await saveConfig({ voiceEnabled: !!on });
+      return (await setVoiceEnabled?.(!!on)) ?? { enabled: !!on };
+    } catch (e) {
+      return { enabled: false, reason: String(e?.message ?? e) };
     }
   });
 

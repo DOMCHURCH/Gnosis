@@ -8,6 +8,7 @@
 // deliberately free of data dependencies that could throw.
 
 import { useEffect, useState } from "react";
+import { Z } from "./layers";
 import { MARK_ROWS } from "./logo.generated";
 
 export interface ShellBridge {
@@ -18,6 +19,29 @@ export interface ShellBridge {
   openSettings(): void;
   isMaximized(): Promise<boolean>;
   onMaximizeChange(cb: (v: boolean) => void): () => void;
+
+  /** Renderer state that must outlive the ephemeral port localStorage is keyed to. */
+  getUiState(): Promise<Record<string, unknown>>;
+  setUiState(patch: Record<string, unknown>): void;
+
+  /** Native right-click menus: the renderer says what was clicked, main draws. */
+  showMenu(kind: "zone" | "agent" | "file", payload: Record<string, unknown>): void;
+  onMenuCommand(cb: (m: { command: string; payload: Record<string, unknown> }) => void): () => void;
+
+  onShortcut(cb: (action: string) => void): () => void;
+  onDeepLink(cb: (d: { action: string; name?: string; path?: string }) => void): () => void;
+  onNotificationActivate(cb: (p: { tabId?: number; kind?: string }) => void): () => void;
+
+  onUpdateReady(cb: (i: { version: string | null }) => void): () => void;
+  onUpdateAvailable(cb: (i: { version: string | null }) => void): () => void;
+  restartToUpdate(): void;
+  checkForUpdate(): Promise<{ ok: boolean; version?: string | null; error?: string }>;
+
+  voiceStatus(): Promise<{ enabled: boolean; wakeWord: boolean; transcription: boolean; reason: string }>;
+  speak(text: string): Promise<{ ok: boolean; error?: string }>;
+
+  focusWindow(arg: { app?: string; pid?: number }): Promise<Record<string, unknown>>;
+  runningApps(): Promise<Record<string, unknown>>;
 }
 
 /** The shell bridge, or null in a browser. */
@@ -101,7 +125,7 @@ export function TopBar(props: { shell: ShellBridge; modelId: string | null; cost
         left: 0,
         right: 0,
         height: 44,
-        zIndex: 90,
+        zIndex: Z.titleBar,
         display: "flex",
         alignItems: "center",
         gap: 12,

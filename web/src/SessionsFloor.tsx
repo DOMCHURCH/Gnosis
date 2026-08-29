@@ -17,6 +17,7 @@ import type { FileOutput } from "./filekind";
 import { messageStyle } from "./chatgroups.js";
 import { centerScrollLeft } from "./sessions.js";
 import { Z, GUTTER } from "./layers";
+import { DropZone } from "./DropZone";
 
 export interface ChatMsg { key: string; from: string; color: string; time: string; kind: string; segments: ChatSegment[]; border: string; isApproval: boolean; permId?: string; resolved?: string; tool?: ToolPayload; fileOutput?: FileOutput | null; autoSaved?: string; askId?: string; options?: string[]; answered?: string; verdict?: "pass" | "fail" | "unknown"; confidence?: number; }
 export interface SelDetail {
@@ -44,6 +45,9 @@ export interface SessionsProps {
   onSelectFig: (id: string | null) => void;
   /** Click an empty desk (or a collapsed zone) to place a manual agent there. */
   onDeskClick: (zone: ZoneId, slot: number) => void;
+  /** Right-click on the 3D floor. Absent in a browser — there is no native menu. */
+  onAgentContext?: (d: { id: string; tabId?: number; name?: string }) => void;
+  onZoneContext?: (d: { zone: ZoneId; zoneLabel: string; slot: number | null }) => void;
   onClose: () => void;
   onApprove: () => void;
   onDeny: () => void;
@@ -268,7 +272,7 @@ export function SessionsFloor(props: SessionsProps) {
                   </div>
                 )}
                 <div ref={mobileScrollRef} onScroll={bumpFloor} style={{ overflowX: "auto", overflowY: "hidden" }}>
-                  <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+                  <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} onAgentContext={props.onAgentContext} onZoneContext={props.onZoneContext} />
                 </div>
                 <FloorMinimap L={L} scrollRef={mobileScrollRef} epoch={floorEpoch} mobile />
               </div>
@@ -419,7 +423,7 @@ export function SessionsFloor(props: SessionsProps) {
                   )}
                   <div ref={floorScrollRef} onScroll={bumpFloor} style={{ overflowX: zoom > 1 ? "auto" : "hidden", overflowY: "hidden" }}>
                     <div style={{ position: "relative", width: `${zoom * 100}%` }}>
-                      <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} />
+                      <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} onAgentContext={props.onAgentContext} onZoneContext={props.onZoneContext} />
                     </div>
                   </div>
                   <FloorMinimap L={L} scrollRef={floorScrollRef} epoch={floorEpoch} />
@@ -469,10 +473,15 @@ export function SessionsFloor(props: SessionsProps) {
 
             {props.streamPanel}
 
-            <div ref={dockRef} style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
+            <DropZone
+              ref={dockRef}
+              testId="chat-drop"
+              onFiles={props.onAddFiles}
+              style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}
+            >
               {!narrow && <div onMouseDown={startResize} title="drag to resize the chat" style={{ height: 8, flex: "0 0 auto", cursor: "ns-resize", background: "#121219", borderBottom: "1px solid #2C2C3E" }} />}
               <ChatPanel {...props} detached={false} canDetach={!narrow} onToggleDetach={detach} />
-            </div>
+            </DropZone>
           </div>
           )}
           {/* Background jobs: inline when there's room; a bottom sheet on narrow/mobile. */}

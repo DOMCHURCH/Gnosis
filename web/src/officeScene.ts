@@ -237,6 +237,8 @@ export function createOfficeScene(container: HTMLElement) {
 
   // --- rooms ---------------------------------------------------------------
   const zoneLabels: Record<string, HTMLElement> = {};
+  // Kept so a right-click on bare floor can be raycast against the rooms.
+  const zoneFloors: THREE.Mesh[] = [];
   const roomDisposables: { dispose(): void }[] = [];
   for (const z of ZONES) {
     const r = zoneRect(z);
@@ -251,6 +253,10 @@ export function createOfficeScene(container: HTMLElement) {
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(r.cx, 0, r.cz);
     floor.receiveShadow = true;
+    // Lets a right-click on bare floor say which room it landed in.
+    floor.userData.zoneId = z.id;
+    floor.userData.zoneLabel = z.label ?? z.id;
+    zoneFloors.push(floor);
     scene.add(floor);
     roomDisposables.push(floorGeo, floorMat, floorTex);
 
@@ -593,8 +599,38 @@ export function createOfficeScene(container: HTMLElement) {
     const free = hit?.object?.userData?.freeDesk as { zone: string; slot: number } | undefined;
     if (free) container.dispatchEvent(new CustomEvent("deskClick", { detail: free, bubbles: true }));
   };
+  // Right-click uses the same hit test as selection, so the menu can never be
+  // about a different thing than the one under the cursor.
+  const onContext = (ev: MouseEvent) => {
+    ev.preventDefault();
+    const rect = renderer.domElement.getBoundingClientRect();
+    ndc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects([...pickables, emptyRoot, ...zoneFloors], true);
+    const agentHit = hits.find((h) => h.object?.userData?.agentId);
+    if (agentHit) {
+      const id = agentHit.object.userData.agentId as string;
+      container.dispatchEvent(new CustomEvent("agentContext", {
+        detail: { id, tabId: entries.get(id)?.agent.id, name: entries.get(id)?.agent.name },
+        bubbles: true,
+      }));
+      return;
+    }
+    const zoneHit = hits.find((h) => h.object?.userData?.zoneId || h.object?.userData?.freeDesk);
+    const free = zoneHit?.object?.userData?.freeDesk as { zone: string; slot: number } | undefined;
+    const zoneId = free?.zone ?? (zoneHit?.object?.userData?.zoneId as string | undefined);
+    if (zoneId) {
+      container.dispatchEvent(new CustomEvent("zoneContext", {
+        detail: { zone: zoneId, zoneLabel: zoneHit?.object?.userData?.zoneLabel ?? zoneId, slot: free?.slot ?? null },
+        bubbles: true,
+      }));
+    }
+  };
+
   renderer.domElement.addEventListener("pointerdown", onDown);
   renderer.domElement.addEventListener("pointerup", onUp);
+  renderer.domElement.addEventListener("contextmenu", onContext);
 
   // --- loop -----------------------------------------------------------------
   let raf = 0;
@@ -649,6 +685,7 @@ export function createOfficeScene(container: HTMLElement) {
   function destroy() {
     cancelAnimationFrame(raf);
     ro.disconnect();
+    renderer.domElement.removeEventListener("contextmenu", onContext);
     renderer.domElement.removeEventListener("pointerdown", onDown);
     renderer.domElement.removeEventListener("pointerup", onUp);
     clear();

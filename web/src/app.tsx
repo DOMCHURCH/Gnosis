@@ -22,6 +22,7 @@ import type { VaultTree } from "./filetypes";
 import type { ConnectionsData, MemoryData } from "./types";
 import { floorFigures, sessionsModel, planOfficePlacement, STATE_COLOR } from "./sessions.js";
 import { TopBar, shellBridge } from "./TopBar";
+import { UpdateToast } from "./UpdateToast";
 import { toolList, toolStats, sparkline } from "./telemetry.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
@@ -384,6 +385,105 @@ ${text}` });
   // The terminal dock's open state lives here so its toggle can sit in the chrome
   // band with FLOOR/KANBAN/SERVE instead of floating over the page's bottom-left.
   const [terminalOpen, setTerminalOpen] = useState(false);
+
+  // The shell's listeners are bound once and live for the window's lifetime, so
+  // they read the active agent through a ref rather than closing over a value
+  // that was current only at mount.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
+  // --- desktop shell integration -------------------------------------------
+  // All of this is a no-op in a browser: `shell` is null and every effect below
+  // returns immediately.
+
+  // UI state lives in the main process, not localStorage: the desktop app is
+  // served from an ephemeral port, so its origin — and its localStorage — is
+  // different on every launch.
+  const uiRestored = useRef(false);
+  useEffect(() => {
+    if (!shell || uiRestored.current) return;
+    uiRestored.current = true;
+    void shell.getUiState().then((ui) => {
+      if (typeof ui?.terminalOpen === "boolean") setTerminalOpen(ui.terminalOpen);
+      if (ui?.view === "kanban" || ui?.view === "floor") setView(ui.view);
+    });
+  }, [shell]);
+  useEffect(() => { shell?.setUiState({ terminalOpen, view }); }, [shell, terminalOpen, view]);
+
+  // Keyboard shortcuts, dispatched from the main process's accelerator table.
+  useEffect(() => {
+    if (!shell) return;
+    return shell.onShortcut((action) => {
+      const id = activeIdRef.current;
+      switch (action) {
+        case "new-session": if (id != null) send({ type: "command", tabId: id, command: "/new" }); break;
+        case "new-terminal": setTerminalOpen(true); break;
+        case "model-picker": if (id != null) send({ type: "command", tabId: id, command: "/model" }); break;
+        case "clear-chat": if (id != null) send({ type: "command", tabId: id, command: "/clear" }); break;
+        case "screenshot": if (id != null) send({ type: "input", tabId: id, text: "Take a screenshot of my screen with the computer tool and describe it." }); break;
+        case "escape": setQr(null); setServeMenu(false); setTerminalOpen(false); break;
+        default: break;
+      }
+    });
+  }, [shell]);
+
+  // gnosis:// links.
+  useEffect(() => {
+    if (!shell) return;
+    return shell.onDeepLink((d) => {
+      const id = activeIdRef.current;
+      if (d.action === "session" && d.name) send({ type: "command", tabId: id ?? 0, command: `/new ${d.name}` });
+      else if (d.action === "file" && d.path) setDraft((t) => (t.trim() ? t.replace(/\s*$/, "") + " " : "") + "@" + d.path + " ");
+      // "serve" needs nothing: reaching this renderer at all means it is serving.
+    });
+  }, [shell]);
+
+  // Clicking a toast focuses the agent that raised it.
+  useEffect(() => {
+    if (!shell) return;
+    return shell.onNotificationActivate((p) => {
+      if (typeof p?.tabId === "number") { select(p.tabId); setSelFig(null); }
+    });
+  }, [shell]);
+
+  // Native right-click menu commands come back here to be acted on.
+  useEffect(() => {
+    if (!shell) return;
+    return shell.onMenuCommand(({ command, payload }) => {
+      const id = activeIdRef.current;
+      const tabId = typeof payload?.tabId === "number" ? (payload.tabId as number) : id;
+      switch (command) {
+        case "zone.add":
+          if (id != null) send({ type: "command", tabId: id, command: `/new agent in ${payload.zone}` });
+          break;
+        case "zone.fill":
+          if (id != null) send({ type: "input", tabId: id, text: `Fill the ${payload.zone} zone with agents.` });
+          break;
+        case "floor.clear":
+          if (id != null) send({ type: "input", tabId: id, text: "Clear the floor." });
+          break;
+        case "agent.open":
+        case "agent.message":
+          // Both land you in that agent's rail; "send message" just puts the
+          // cursor where you would type it.
+          if (tabId != null) { select(tabId); setSelFig(null); }
+          break;
+        case "agent.remove":
+          // Same confirmation the close button uses — a right-click should not
+          // be able to end a session in one click.
+          if (tabId != null && window.confirm(`Close session "${state.agents[tabId]?.name ?? tabId}"? This ends it.`)) {
+            send({ type: "agent.close", tabId });
+          }
+          break;
+        case "file.open":
+        case "file.attach":
+          if (typeof payload?.path === "string") attachFile(payload.path as string);
+          break;
+        default: break; // copyPath / reveal are handled in the main process
+      }
+    });
+  }, [shell]);
+
   const [qr, setQr] = useState<{ title: string; codes: QrCode[] } | null>(null);
   // Every reachable URL, in one list. LOCAL and LAN are both always available (LAN
   // needs no flag — the token is the gate); PUBLIC appears only with a live tunnel.
@@ -431,6 +531,7 @@ ${text}` });
     return (
       <>
         {topBar}
+        {shell && <UpdateToast shell={shell} />}
         {viewToggle}
         {qrPopover}
         <KanbanBoard state={state} overrides={kanbanOverrides} onMove={moveKanban} onOpen={openFromKanban} />
@@ -444,6 +545,7 @@ ${text}` });
   return (
     <>
       {topBar}
+      {shell && <UpdateToast shell={shell} />}
       {viewToggle}
       {qrPopover}
       <SessionsFloor
@@ -456,6 +558,8 @@ ${text}` });
         activeTabId={activeId}
         requestFiles={requestFiles}
         onSelectFloor={(id) => { select(id); setSelFig(null); }}
+        onAgentContext={shell ? (d) => shell.showMenu("agent", { ...d }) : undefined}
+        onZoneContext={shell ? (d) => shell.showMenu("zone", { ...d }) : undefined}
         onAddFloor={() => send({ type: "agent.create" })}
         onSelectFig={onSelectFig}
         onDeskClick={onDeskClick}

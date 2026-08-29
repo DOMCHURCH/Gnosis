@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Gnosis voice</title>
+    <style>
+      :root { --cyan: #22d3ee; --magenta: #e879f9; --text: #c9d1d9; --dim: #6b7280; }
+      html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
+      body {
+        font: 10px/1.5 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+        letter-spacing: 0.12em;
+        -webkit-app-region: drag;
+      }
+      .clay {
+        height: 100%;
+        margin: 6px;
+        border-radius: 18px;
+        background: linear-gradient(160deg, rgba(28, 28, 40, 0.97), rgba(16, 16, 23, 0.97));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.07),
+          0 0 30px -12px var(--cyan);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 14px;
+        box-sizing: border-box;
+      }
+      .mic {
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 40% 35%, var(--cyan), var(--magenta));
+        box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.45);
+        animation: pulse 1.7s ease-out infinite;
+      }
+      .mic svg { width: 16px; height: 16px; fill: #0d0d12; }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
+        70% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+      }
+      .body { flex: 1 1 auto; min-width: 0; }
+      #label {
+        color: var(--text);
+        text-transform: uppercase;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #sub { color: var(--dim); font-size: 9px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      canvas { display: block; width: 100%; height: 22px; margin-top: 4px; }
+      body.thinking .mic { animation-duration: 0.9s; }
+      body.error .mic { background: radial-gradient(circle at 40% 35%, #f87171, #b91c1c); animation: none; }
+      @media (prefers-reduced-motion: reduce) { .mic { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="clay">
+      <div class="mic">
+        <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
+      </div>
+      <div class="body">
+        <div id="label">what do you need?</div>
+        <div id="sub"></div>
+        <canvas id="wave" width="240" height="22"></canvas>
+      </div>
+    </div>
+
+    <script>
+      const label = document.getElementById("label");
+      const sub = document.getElementById("sub");
+      const cv = document.getElementById("wave");
+      const g = cv.getContext("2d");
+
+      // The waveform is decorative — the overlay is not the microphone owner
+      // (voice-engine.html is), so this animates a synthesised trace rather than
+      // opening a second capture of the same device.
+      let phase = 0;
+      let amp = 0.35;
+      function draw() {
+        const w = cv.width, h = cv.height;
+        g.clearRect(0, 0, w, h);
+        const grad = g.createLinearGradient(0, 0, w, 0);
+        grad.addColorStop(0, "#22d3ee");
+        grad.addColorStop(1, "#e879f9");
+        g.strokeStyle = grad;
+        g.lineWidth = 1.5;
+        g.beginPath();
+        for (let x = 0; x < w; x++) {
+          const t = x / w;
+          const env = Math.sin(Math.PI * t); // taper at both ends
+          const y = h / 2 + Math.sin(t * 22 + phase) * Math.sin(t * 7 - phase * 0.6) * env * amp * h * 0.42;
+          x === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+        }
+        g.stroke();
+        phase += 0.16;
+        requestAnimationFrame(draw);
+      }
+      draw();
+
+      window.voice.onState((s) => {
+        document.body.className = s.state ?? "";
+        const titles = { listening: "what do you need?", thinking: "thinking…", speaking: "answering…", error: "voice error" };
+        label.textContent = titles[s.state] ?? "what do you need?";
+        sub.textContent = s.state === "listening" ? "" : (s.text ?? "");
+        amp = s.state === "listening" ? 0.35 : s.state === "thinking" ? 0.12 : 0.22;
+      });
+    </script>
+  </body>
+</html>

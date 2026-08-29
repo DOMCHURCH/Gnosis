@@ -34,10 +34,21 @@ export const Z = {
   dock: 40,
   /** The detached chat window — a window you dragged out sits above the docks. */
   float: 45,
+  /** The drop-to-attach overlay, inside the chat panel it belongs to. Above the
+   * panel's own content, below anything that covers the page. */
+  dropZone: 25,
   /** Modals, bottom sheets and lightboxes: deliberately over the whole page. */
   overlay: 50,
+  /** The desktop shell's title bar. Above modals, not below them: the window is
+   * frameless there, so these ARE the close and minimise buttons. A modal that
+   * covered them would leave the user with a window they cannot put away. Still
+   * under permission prompts, which nothing may cover. */
+  titleBar: 55,
   /** Permission prompts. Always on top: nothing may cover a decision. */
   permission: 60,
+  /** The update toast. Above prompts only because it is transient, dismissible,
+   * and never blocks one — it sits in a corner, not over the dialog. */
+  updateToast: 70,
 } as const;
 
 /**

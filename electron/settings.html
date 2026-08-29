@@ -159,6 +159,16 @@
       .toggle:focus-visible { outline: 2px solid rgba(34, 211, 238, 0.5); outline-offset: 2px; }
 
       .state { font-size: 10px; color: var(--dim); margin-top: 10px; }
+      table { border-collapse: collapse; width: 100%; font-size: 10px; }
+      td { padding: 5px 0; color: var(--dim); }
+      td.k {
+        width: 130px; color: var(--cyan); font-size: 9px; letter-spacing: 0.08em;
+        white-space: nowrap;
+      }
+      td.k span {
+        background: var(--inset); border: 1px solid var(--line); border-radius: 7px;
+        padding: 3px 8px; box-shadow: var(--press);
+      }
       .state.set { color: var(--green); }
       .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
       #status { min-height: 18px; font-size: 10px; margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -197,6 +207,24 @@
           <button id="br-clear" type="button">Clear</button>
         </div>
         <div class="state" id="br-state"></div>
+      </section>
+
+      <section class="magenta">
+        <h2>Voice <span style="color: var(--dim); text-transform: none; letter-spacing: 0.04em">— desktop app only</span></h2>
+        <p class="note">
+          Say “hey gnosis” to talk to the agent. Not available in the browser UI or the CLI: the microphone
+          lives in the desktop shell and is never exposed to the served page.
+        </p>
+        <div class="row">
+          <button class="toggle" id="voice-toggle" type="button" aria-pressed="false" title="Enable voice" aria-label="Enable voice"><span class="knob"></span></button>
+          <span class="state" id="voice-state" style="margin: 0"></span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Keyboard shortcuts</h2>
+        <p class="note">Active while a Gnosis window has focus.</p>
+        <table id="shortcuts"></table>
       </section>
 
       <p class="note" id="override" style="display: none"></p>
@@ -253,6 +281,23 @@
             "Heads up: an OPENROUTER_API_KEY environment variable is set, and it takes precedence over this file. Whatever you save here stays inert until that variable is unset.";
           w.style.display = "block";
         }
+        // Shortcut reference.
+        const tbl = $("shortcuts");
+        tbl.innerHTML = "";
+        for (const sc of s.shortcuts ?? []) {
+          const tr = document.createElement("tr");
+          const k = document.createElement("td");
+          k.className = "k";
+          const kb = document.createElement("span");
+          kb.textContent = sc.keys;
+          k.appendChild(kb);
+          const l = document.createElement("td");
+          l.textContent = sc.label;
+          tr.append(k, l);
+          tbl.appendChild(tr);
+        }
+        paintVoice(s.voice);
+
         $("others").textContent = s.otherKeys.length
           ? `${s.otherKeys.length} other entr${s.otherKeys.length === 1 ? "y" : "ies"} in this file (${s.otherKeys.join(", ")}) ${s.otherKeys.length === 1 ? "is" : "are"} left untouched when you save.`
           : "";
@@ -292,6 +337,22 @@
         b.className = "primary";
         b.addEventListener("click", () => window.gnosis.relaunch());
         status.appendChild(b);
+      });
+
+      function paintVoice(v) {
+        const t = $("voice-toggle");
+        const st = $("voice-state");
+        t.setAttribute("aria-pressed", String(!!v?.enabled));
+        st.textContent = v?.reason ?? "unavailable";
+        // Green only when every leg is actually working; "on but no wake word"
+        // is a real distinction the user needs to see.
+        st.className = "state" + (v?.enabled && v?.wakeWord && v?.transcription ? " set" : "");
+        st.style.margin = "0";
+      }
+      $("voice-toggle").addEventListener("click", async () => {
+        const on = $("voice-toggle").getAttribute("aria-pressed") !== "true";
+        $("voice-toggle").setAttribute("aria-pressed", String(on));
+        paintVoice(await window.gnosis.setVoiceEnabled(on));
       });
 
       $("cancel").addEventListener("click", () => window.gnosis.closeSettings());

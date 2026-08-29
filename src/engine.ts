@@ -62,7 +62,11 @@ const MAX_FIX_ITERATIONS = 3;
 // Plan mode is for reading and proposing, so everything that acts is excluded —
 // `office` included: staffing the floor is a change to what the user sees, not part
 // of planning.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle", "memory", "office"]);
+// focus_window is here even though it is `mutating: false`: that flag is about
+// the FILESYSTEM, and plan mode is a promise that the turn changes nothing the
+// user can see. Yanking a window to the front is very much something they can
+// see.
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle", "memory", "office", "focus_window"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];

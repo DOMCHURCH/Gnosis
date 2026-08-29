@@ -6,6 +6,10 @@
 // renderer is the identical single-file bundle a browser gets, so anything that
 // works in `dom serve` works here by construction — and a bug fixed in one is
 // fixed in both.
+//
+// What lives here is only what a browser tab genuinely cannot do: window chrome,
+// the tray, OS notifications, native menus, protocol handling, auto-update, and
+// reaching other applications on the machine.
 
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "node:path";
@@ -13,6 +17,14 @@ import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTray } from "./tray.js";
 import { openSettings, registerSettingsIpc } from "./settings.js";
+import { restoredBounds, track, getUiState, setUiState } from "./window-state.js";
+import { registerShortcuts } from "./shortcuts.js";
+import { registerNotifications } from "./notifications.js";
+import { registerDeepLinks } from "./deeplinks.js";
+import { registerUpdater } from "./updater.js";
+import { registerContextMenus } from "./context-menus.js";
+import { registerWin32Focus } from "./win32-focus.js";
+import { registerVoice } from "./voice.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +49,7 @@ async function rootCwd() {
 /** Boot the agent and its server. Port 0 (ephemeral) rather than 7777: the
  * desktop app must not fight a `dom serve` the user already has running, and
  * nothing here needs a fixed port — the URL goes straight to the window. */
-async function startGnosis() {
+async function startGnosis(cwd) {
   const { boot } = await import("../dist/startup.js");
   const { createBridge, EventBus } = await import("../dist/events.js");
   const { startServer } = await import("../dist/server.js");
@@ -56,7 +68,7 @@ async function startGnosis() {
       json: false,
       serve: true,
     },
-    await rootCwd(),
+    cwd,
   );
 
   const bridge = createBridge(new EventBus());
@@ -65,13 +77,12 @@ async function startGnosis() {
   // before printing it: the server is already listening, and a renderer that
   // connects first would get an opening snapshot with an empty agent roster.
   wireServeHost(engine, bridge);
-  return { server, bridge };
+  return { server, bridge, engine };
 }
 
 function createWindow() {
   return new BrowserWindow({
-    width: 1440,
-    height: 900,
+    ...restoredBounds(),
     minWidth: 900,
     minHeight: 600,
     // The UI is dark; painting the frame dark too avoids a white flash on open.
@@ -86,8 +97,8 @@ function createWindow() {
     backgroundMaterial: "acrylic",
     webPreferences: {
       // The renderer is ordinary web content talking to localhost over HTTP.
-      // It has never needed Node, so it does not get Node — only the window
-      // chrome bridge, which is the narrowest surface that can draw a title bar.
+      // It has never needed Node, so it does not get Node — only the shell
+      // bridge, which is the narrowest surface that can draw a title bar.
       preload: path.join(here, "shell-preload.cjs"),
       nodeIntegration: false,
       contextIsolation: true,
@@ -95,13 +106,14 @@ function createWindow() {
   });
 }
 
-/** The title-bar buttons the renderer draws. Kept next to the window they act
- * on rather than in settings.js, which owns a different (privileged) surface. */
+/** The title-bar buttons the renderer draws, plus the UI state it asks us to
+ * remember for it. Kept next to the window they act on. */
 function registerWindowChrome(getWin) {
-  const on = (channel, fn) => ipcMain.on(channel, () => {
-    const w = getWin();
-    if (w && !w.isDestroyed()) fn(w);
-  });
+  const on = (channel, fn) =>
+    ipcMain.on(channel, () => {
+      const w = getWin();
+      if (w && !w.isDestroyed()) fn(w);
+    });
   on("win:minimize", (w) => w.minimize());
   on("win:toggle-maximize", (w) => (w.isMaximized() ? w.unmaximize() : w.maximize()));
   // Close means "close to tray" here, exactly like the frame button it replaces.
@@ -110,6 +122,9 @@ function registerWindowChrome(getWin) {
     const w = getWin();
     return !!w && !w.isDestroyed() && w.isMaximized();
   });
+  // Renderer state that outlives the ephemeral port its localStorage is keyed to.
+  ipcMain.handle("ui:get", () => getUiState());
+  ipcMain.on("ui:set", (_e, patch) => setUiState(patch));
 }
 
 // One agent per machine. A second launch would boot a second engine against the
@@ -120,6 +135,8 @@ if (!app.requestSingleInstanceLock()) {
   let server = null;
   let tray = null;
   let win = null;
+  let voice = null;
+  let rootDir = process.cwd();
   // Closing the window hides to the tray; only an explicit Quit really exits.
   // Without this the tray's whole point evaporates — an agent working in the
   // background is exactly when you want the window out of the way.
@@ -132,10 +149,21 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   };
 
+  /** Hand an action to the renderer, showing the window first — every one of
+   * these is something the user expects to SEE happen. */
+  const toRenderer = (channel, payload) => {
+    if (!win || win.isDestroyed()) return;
+    showWindow();
+    win.webContents.send(channel, payload);
+  };
+
   app.on("second-instance", showWindow);
+
+  const deepLinks = registerDeepLinks((action) => toRenderer("deeplink", action));
 
   app.whenReady().then(async () => {
     win = createWindow();
+    track(win);
     win.once("ready-to-show", () => win.show());
     // Links to the outside world belong in the user's real browser, not in a
     // window that has no address bar to escape from.
@@ -159,7 +187,8 @@ if (!app.requestSingleInstanceLock()) {
     let bridge = null;
     let bootFailed = false;
     try {
-      const started = await startGnosis();
+      rootDir = await rootCwd();
+      const started = await startGnosis(rootDir);
       server = started.server;
       bridge = started.bridge;
       await win.loadURL(server.url);
@@ -174,23 +203,53 @@ if (!app.requestSingleInstanceLock()) {
       bootFailed = true;
     }
 
-    // Built after boot so it can read the live bus; built even when boot failed
-    // (bridge stays null) so there is always a way to quit from the tray.
-    registerSettingsIpc({ getMainWindow: () => win });
+    registerSettingsIpc({
+      getMainWindow: () => win,
+      voiceStatus: () => voice?.status() ?? null,
+      setVoiceEnabled: (on) => (on ? voice?.start() : (voice?.stop(), voice?.status())),
+    });
     registerWindowChrome(() => win);
+    registerContextMenus({ getRoot: () => rootDir });
+    registerWin32Focus();
+    registerUpdater(() => win);
+    registerShortcuts({
+      send: (action) => toRenderer("shortcut", action),
+      onSettings: () => openSettings(win),
+    });
+
     tray = createTray(bridge?.bus ?? null, {
       onShow: showWindow,
       onSettings: () => openSettings(win),
       onQuit: () => app.quit(),
     });
+
+    // Toasts while the window is not focused; clicking one brings you to the
+    // agent that raised it.
+    registerNotifications(bridge?.bus ?? null, {
+      onActivate: (payload) => toRenderer("notification-activate", payload),
+    });
+
+    // Voice is desktop-only by construction: it lives in the main process and
+    // is never exposed to the served page.
+    voice = registerVoice({
+      getWindow: () => win,
+      showWindow,
+      setListening: (on) => tray?.setListening(on),
+      bridge,
+    });
+
     // A failed boot is almost always a missing key. Put the one window that can
     // fix it on screen rather than making the user find it in the tray menu.
     if (bootFailed) openSettings(win);
 
+    // A gnosis:// link that launched us cold: the renderer has to exist first.
+    if (deepLinks.pending) {
+      win.webContents.once("did-finish-load", () => deepLinks.route(deepLinks.pending));
+    }
+
     // The shell's composition root, hung on `app` so the pieces that come later
-    // (voice mode driving tray.setListening, the settings panel needing the
-    // bridge) have one place to reach for them instead of re-deriving state.
-    app.gnosis = { tray, bridge, server, showWindow };
+    // have one place to reach for them instead of re-deriving state.
+    app.gnosis = { tray, bridge, server, showWindow, voice, rootDir };
   });
 
   // The window is hidden, not closed, so this fires only after a real quit has
@@ -201,6 +260,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("before-quit", () => {
     quitting = true;
+    voice?.stop();
     tray?.destroy();
     // Ends the session: stops the HTTP/WS server and reaps every live pty.
     void server?.close();
