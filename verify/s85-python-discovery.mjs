@@ -83,5 +83,26 @@ if (wakePy.ok && ttsPy.ok) {
   console.log("SKIP both-features check (one of the packages is not installed here)");
 }
 
+// --- the bridges must be reachable from OUTSIDE Electron -----------------------
+// Python is an ordinary process with an ordinary open(): it cannot read out of
+// app.asar. Left packed, it reports `can't open file '...app.asar\electron\
+// openwakeword_bridge.py'` and both the wake word and Kokoro die in the packaged
+// app while working perfectly under `npm run app` — which is exactly the kind of
+// bug that only ever shows up on a user's machine. Both halves have to hold: the
+// file is unpacked by electron-builder, and the path points at the unpacked copy.
+{
+  const { asarPath } = await import("../electron/python.js");
+  const packed = path.join("C:", "app", "resources", "app.asar", "electron", "openwakeword_bridge.py");
+  ok("asarPath redirects a packed path", asarPath(packed).includes("app.asar.unpacked"));
+  const dev = path.join("C:", "dev", "electron", "x.py");
+  ok("...and leaves an unpacked path alone", asarPath(dev) === dev);
+
+  const builder = read("electron-builder.yml");
+  ok("electron-builder unpacks the python scripts", /asarUnpack:[\s\S]*electron\/\*\.py/.test(builder));
+
+  ok("wakeword.js routes its bridge through asarPath", /BRIDGE = asarPath\(/.test(wake));
+  ok("kokoro.js routes its bridge through asarPath", /BRIDGE = asarPath\(/.test(kokoro));
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall python-discovery checks passed");
 process.exit(fails ? 1 : 0);

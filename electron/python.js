@@ -13,6 +13,24 @@
 // wake word was already running on. One module now, so a fix lands in both.
 
 import { execFile } from "node:child_process";
+import path from "node:path";
+
+/**
+ * A path a NON-Electron program can actually open.
+ *
+ * Everything under app.asar is inside an archive. Electron patches its own `fs`
+ * to read through it, which is why every path in this app looks normal from the
+ * inside — but Python is an ordinary process with an ordinary open(), and it
+ * reports `can't open file '...\app.asar\electron\openwakeword_bridge.py'`.
+ *
+ * electron-builder's `asarUnpack` writes the real file to app.asar.unpacked/
+ * alongside the archive, keeping the same relative path. So the fix is both
+ * halves: unpack it (electron-builder.yml) and point at the unpacked copy (here).
+ * A no-op in dev, where nothing is packed.
+ */
+export function asarPath(p) {
+  return p.includes(`app.asar${path.sep}`) ? p.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`) : p;
+}
 
 /** Every interpreter on the Windows launcher's list, newest first. [] elsewhere. */
 export function launcherPythons() {

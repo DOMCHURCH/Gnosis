@@ -19,10 +19,10 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { candidates, argsFor } from "./python.js";
+import { candidates, argsFor, asarPath } from "./python.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const BRIDGE = path.join(here, "kokoro_bridge.py");
+const BRIDGE = asarPath(path.join(here, "kokoro_bridge.py"));
 
 /** Where the ONNX weights live. The bridge looks here too; passing it explicitly
  * means a packaged app is not relying on the child's idea of the home directory. */

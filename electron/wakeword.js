@@ -15,10 +15,10 @@
 import { spawn, execFile } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { candidates, argsFor } from "./python.js";
+import { candidates, argsFor, asarPath } from "./python.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const BRIDGE = path.join(here, "openwakeword_bridge.py");
+const BRIDGE = asarPath(path.join(here, "openwakeword_bridge.py"));
 
 // Interpreter discovery used to live here, and the TTS side carried a stale copy
 // of an older, broken version of it. It now lives in python.js so both features

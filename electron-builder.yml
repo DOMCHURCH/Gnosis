@@ -36,6 +36,13 @@ npmRebuild: false
 asarUnpack:
   - "**/node_modules/node-pty/**"
   - "**/*.node"
+  # The Python bridges are launched as `python <path>`, and Python cannot read
+  # out of an asar — only Electron's own patched fs can. Left packed, the
+  # interpreter reports "can't open file '...\app.asar\electron\
+  # openwakeword_bridge.py'", so the wake word and Kokoro both die in the
+  # packaged app while working perfectly under `npm run app`. Unpacking puts the
+  # real files on disk; see asarPath() in electron/python.js for the other half.
+  - "**/electron/*.py"
 
 # gnosis:// links. Declared here so the NSIS installer writes the registry keys
 # that make Windows hand them to us; app.setAsDefaultProtocolClient covers the
