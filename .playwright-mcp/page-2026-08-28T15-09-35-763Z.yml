@@ -1,0 +1,37 @@
+- generic [active] [ref=f4e1]:
+  - generic:
+    - generic:
+      - generic: WASD or ↑←↓→ — drive
+      - generic: Space — handbrake / drift
+      - generic: Shift — boost
+      - generic: R — reset car P — pause
+    - generic:
+      - generic: DRIFT
+      - generic: "0"
+      - generic: ×1.0
+      - generic: — no combo —
+    - generic:
+      - generic: "0"
+      - generic: KM/H
+      - generic: "N"
+    - generic:
+      - generic: R
+      - generic: "N"
+      - generic: "1"
+      - generic: "2"
+      - generic: "3"
+      - generic: "4"
+      - generic: "5"
+      - generic: "6"
+    - generic: MAP
+  - generic [ref=f4e4]:
+    - heading "SUNSET CRUISER" [level=2] [ref=f4e5]
+    - heading "Open Road" [level=1] [ref=f4e6]
+    - paragraph [ref=f4e7]: A scenic procedural driving game built with three.js. Wind through 30 curves, drift through the dusk, and rack up combo points without spinning out.
+    - generic [ref=f4e8]:
+      - generic [ref=f4e9]: WASD / Arrows — drive
+      - generic [ref=f4e10]: Space — drift
+      - generic [ref=f4e11]: Shift — boost
+      - generic [ref=f4e12]: R — reset
+      - generic [ref=f4e13]: P — pause
+    - button "PRESS TO DRIVE" [ref=f4e14] [cursor=pointer]

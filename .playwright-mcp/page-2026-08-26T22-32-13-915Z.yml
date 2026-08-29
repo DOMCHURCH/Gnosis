@@ -1,0 +1,106 @@
+- generic [ref=e12]:
+  - generic [ref=e14]:
+    - generic [ref=e15]: See everyday moments from your close friends.
+    - generic [ref=e25]:
+      - img "Instagram" [ref=e26]
+      - generic [ref=e34]: Get the full experience with the tablet app
+      - button "Open Instagram" [ref=e36] [cursor=pointer]
+      - generic [ref=e37]:
+        - button "Log in" [ref=e38] [cursor=pointer]
+        - generic [ref=e40]: or
+        - link "Sign up" [ref=e42] [cursor=pointer]:
+          - /url: /accounts/emailsignup/?next=
+  - separator [ref=e46]
+  - contentinfo [ref=e48]:
+    - generic [ref=e49]:
+      - generic [ref=e51]:
+        - link "Meta" [ref=e53] [cursor=pointer]:
+          - /url: https://about.meta.com/
+        - link "About" [ref=e56] [cursor=pointer]:
+          - /url: https://about.instagram.com/
+        - link "Blog" [ref=e59] [cursor=pointer]:
+          - /url: https://about.instagram.com/blog/
+        - link "Jobs" [ref=e62] [cursor=pointer]:
+          - /url: https://about.instagram.com/about-us/careers
+        - link "Help" [ref=e65] [cursor=pointer]:
+          - /url: https://help.instagram.com/
+        - link "API" [ref=e68] [cursor=pointer]:
+          - /url: https://developers.facebook.com/docs/instagram
+        - link "Privacy" [ref=e71] [cursor=pointer]:
+          - /url: /legal/privacy/
+        - link "Terms" [ref=e74] [cursor=pointer]:
+          - /url: /legal/terms/
+        - link "Locations" [ref=e77] [cursor=pointer]:
+          - /url: /explore/locations/
+        - link "Popular" [ref=e80] [cursor=pointer]:
+          - /url: /popular/
+        - link "Instagram Lite" [ref=e83] [cursor=pointer]:
+          - /url: /web/lite/
+        - link "Meta AI" [ref=e86] [cursor=pointer]:
+          - /url: https://www.meta.ai/?utm_source=foa_web_footer
+        - link "Threads" [ref=e89] [cursor=pointer]:
+          - /url: https://www.threads.com/
+        - link "Contact Uploading & Non-Users" [ref=e92] [cursor=pointer]:
+          - /url: https://www.facebook.com/help/instagram/261704639352628
+        - link "Meta Verified" [ref=e95] [cursor=pointer]:
+          - /url: /accounts/meta_verified/?entrypoint=web_footer
+      - generic [ref=e97]:
+        - generic [ref=e98] [cursor=pointer]:
+          - generic [ref=e99]:
+            - generic [ref=e100]: English
+            - img "Down chevron icon" [ref=e103]
+          - combobox "Switch Display Language" [ref=e105]:
+            - option "Afrikaans"
+            - option "العربية"
+            - option "Čeština"
+            - option "Dansk"
+            - option "Deutsch"
+            - option "Ελληνικά"
+            - option "English" [selected]
+            - option "English (UK)"
+            - option "Español (España)"
+            - option "Español"
+            - option "فارسی"
+            - option "Suomi"
+            - option "Français"
+            - option "עברית"
+            - option "Bahasa Indonesia"
+            - option "Italiano"
+            - option "日本語"
+            - option "한국어"
+            - option "Bahasa Melayu"
+            - option "Norsk"
+            - option "Nederlands"
+            - option "Polski"
+            - option "Português (Brasil)"
+            - option "Português (Portugal)"
+            - option "Русский"
+            - option "Svenska"
+            - option "ภาษาไทย"
+            - option "Filipino"
+            - option "Türkçe"
+            - option "中文(简体)"
+            - option "中文(台灣)"
+            - option "বাংলা"
+            - option "ગુજરાતી"
+            - option "हिन्दी"
+            - option "Hrvatski"
+            - option "Magyar"
+            - option "ಕನ್ನಡ"
+            - option "മലയാളം"
+            - option "मराठी"
+            - option "नेपाली"
+            - option "ਪੰਜਾਬੀ"
+            - option "සිංහල"
+            - option "Slovenčina"
+            - option "தமிழ்"
+            - option "తెలుగు"
+            - option "اردو"
+            - option "Tiếng Việt"
+            - option "中文(香港)"
+            - option "Български"
+            - option "Français (Canada)"
+            - option "Română"
+            - option "Српски"
+            - option "Українська"
+        - generic [ref=e106]: © 2026 Instagram from Meta

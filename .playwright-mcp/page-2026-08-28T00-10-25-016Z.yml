@@ -1,0 +1,1609 @@
+- generic [active] [ref=e1]:
+  - complementary "Choose country or region" [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: Choose another country or region to see content specific to your location and shop online.
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - button " Canada (English) " [ref=e7]:
+            - generic [ref=e8]:
+              - generic [ref=e9]: 
+              - generic [ref=e10]: Canada (English)
+            - text: 
+          - text: 
+        - button "Continue" [ref=e11] [cursor=pointer]
+        - button "Close country or region selector" [ref=e12] [cursor=pointer]
+  - navigation "Global" [ref=e17]:
+    - list [ref=e19]:
+      - listitem [ref=e20]:
+        - link "Apple" [ref=e21] [cursor=pointer]:
+          - /url: /
+      - listitem [ref=e22]:
+        - generic [ref=e24]:
+          - list [ref=e26]:
+            - listitem [ref=e27]:
+              - link "Store" [ref=e28] [cursor=pointer]:
+                - /url: /us/shop/goto/store
+            - listitem:
+              - button "Store menu"
+          - list [ref=e31]:
+            - listitem [ref=e32]:
+              - link "Mac" [ref=e33] [cursor=pointer]:
+                - /url: /mac/
+            - listitem:
+              - button "Mac menu"
+          - list [ref=e36]:
+            - listitem [ref=e37]:
+              - link "iPad" [ref=e38] [cursor=pointer]:
+                - /url: /ipad/
+            - listitem:
+              - button "iPad menu"
+          - list [ref=e41]:
+            - listitem [ref=e42]:
+              - link "iPhone" [ref=e43] [cursor=pointer]:
+                - /url: /iphone/
+            - listitem:
+              - button "iPhone menu"
+          - list [ref=e46]:
+            - listitem [ref=e47]:
+              - link "Watch" [ref=e48] [cursor=pointer]:
+                - /url: /watch/
+            - listitem:
+              - button "Watch menu"
+          - list [ref=e51]:
+            - listitem [ref=e52]:
+              - link "Vision" [ref=e53] [cursor=pointer]:
+                - /url: /apple-vision-pro/
+            - listitem:
+              - button "Vision menu"
+          - list [ref=e56]:
+            - listitem [ref=e57]:
+              - link "AirPods" [ref=e58] [cursor=pointer]:
+                - /url: /airpods/
+            - listitem:
+              - button "AirPods menu"
+          - list [ref=e61]:
+            - listitem [ref=e62]:
+              - link "TV and Home" [ref=e63] [cursor=pointer]:
+                - /url: /tv-home/
+                - generic [ref=e64]: TV & Home
+            - listitem:
+              - button "TV and Home menu"
+          - list [ref=e66]:
+            - listitem [ref=e67]:
+              - link "Entertainment" [ref=e68] [cursor=pointer]:
+                - /url: /entertainment/
+            - listitem:
+              - button "Entertainment menu"
+          - list [ref=e71]:
+            - listitem [ref=e72]:
+              - link "Accessories" [ref=e73] [cursor=pointer]:
+                - /url: /us/shop/goto/buy_accessories
+            - listitem:
+              - button "Accessories menu"
+          - list [ref=e76]:
+            - listitem [ref=e77]:
+              - link "Support" [ref=e78] [cursor=pointer]:
+                - /url: https://support.apple.com/?cid=gn-ols-home-hp-tab
+            - listitem:
+              - button "Support menu"
+      - listitem [ref=e80]:
+        - button "Search apple.com" [ref=e81] [cursor=pointer]
+      - listitem [ref=e82]:
+        - button "Shopping Bag" [ref=e84] [cursor=pointer]
+  - navigation "Local" [ref=e86]:
+    - generic [ref=e89]:
+      - link "Mac Studio" [ref=e91] [cursor=pointer]:
+        - /url: /mac-studio/
+      - generic [ref=e92]:
+        - generic [ref=e93]:
+          - list:
+            - listitem [ref=e94]:
+              - link "Overview" [disabled] [ref=e95]
+            - listitem [ref=e96]:
+              - link "Tech Specs" [ref=e97] [cursor=pointer]:
+                - /url: /mac-studio/specs/
+            - listitem [ref=e98]:
+              - link "Compare" [ref=e99] [cursor=pointer]:
+                - /url: /mac-studio/compare/
+            - listitem [ref=e100]:
+              - link "Switch from PC to Mac" [ref=e101] [cursor=pointer]:
+                - /url: /mac-studio/mac-does-that/
+        - link "Pre-order Mac Studio" [ref=e104] [cursor=pointer]:
+          - /url: /us/shop/goto/buy_mac/mac_studio
+          - text: Pre-order
+          - generic [ref=e105]: Mac Studio
+  - main [ref=e106]:
+    - paragraph [ref=e113]:
+      - text: Introducing Apple Upgrade. Lease a new Mac with low monthly payments for 24 or 36 months and upgrade at the end of your term.
+      - superscript [ref=e114]:
+        - link "Footnote § symbol" [ref=e116] [cursor=pointer]:
+          - /url: "#footnote-upgrade-2026"
+          - text: §
+      - link "Learn more, Apple Upgrade" [ref=e117] [cursor=pointer]:
+        - /url: /us/shop/goto/apple_upgrade
+        - text: Learn more
+        - generic [ref=e118]: 
+    - generic [ref=e120]:
+      - generic [ref=e125]:
+        - heading "Mac Studio" [level=1] [ref=e126]
+        - paragraph [ref=e127]: Brawn of a new age.
+        - img "Front view of Mac Studio" [ref=e129]
+        - generic [ref=e130]:
+          - paragraph [ref=e131]: Mac Studio now with M5 Max and M5 Ultra.
+          - paragraph [ref=e133]:
+            - text: From $2499
+            - generic [ref=e134]:
+              - text: or $208.25/mo. for 12 mo.
+              - link "Footnote * symbol" [ref=e136] [cursor=pointer]:
+                - /url: "#footnote-1"
+                - text: "*"
+            - generic [ref=e137]:
+              - text: Lease from $48.99/mo.
+              - generic [ref=e138]:
+                - text: for 36 mo. with Apple Upgrade
+                - superscript [ref=e139]:
+                  - link "Footnote ◊ symbol" [ref=e140] [cursor=pointer]:
+                    - /url: "#footnote-2"
+                    - text: ◊
+          - paragraph [ref=e141]:
+            - generic [ref=e142]: Available starting September twenty-second
+            - text: Available starting 9.22
+      - generic [ref=e146]:
+        - heading "Performance" [level=2] [ref=e147]
+        - paragraph [ref=e148]: Choose yoursuperpower.
+        - paragraph [ref=e149]: Powered by M5 Max and M5 Ultra, Mac Studio is the ultimate pro desktop. With mind-bending graphics, faster memory and storage, and unprecedented AI capabilities, Mac Studio ignites a whole new world of possibilities.
+        - generic [ref=e150]:
+          - generic [ref=e151]:
+            - img "M5 Max chip" [ref=e153]:
+              - img "M5 Max chip" [ref=e156]
+            - list "M5 Max features" [ref=e157]:
+              - listitem [ref=e158]: 18‑core CPU
+              - listitem [ref=e159]: Up to 40‑core GPU
+              - listitem [ref=e160]: Up to 128GB unified memory
+              - listitem [ref=e161]: Up to 614GB/smemory bandwidth
+              - listitem [ref=e162]: 16‑core Neural Engine
+          - generic [ref=e163]:
+            - img "M5 Ultra chip" [ref=e165]:
+              - img "M5 Ultra chip" [ref=e168]
+            - list "M5 Ultra features" [ref=e169]:
+              - listitem [ref=e170]: Up to 36‑core CPU
+              - listitem [ref=e171]: Up to 80‑core GPU
+              - listitem [ref=e172]:
+                - text: Up to 512GB unified memory
+                - superscript [ref=e173]:
+                  - link "Footnote 1" [ref=e174] [cursor=pointer]:
+                    - /url: "#footnote-4"
+                    - text: "1"
+              - listitem [ref=e175]: 1.2TB/smemory bandwidth
+              - listitem [ref=e176]: 32‑core Neural Engine
+        - paragraph [ref=e177]:
+          - button "Watch the film, Mac Studio" [ref=e178] [cursor=pointer]: Watch the film
+    - generic [ref=e181]:
+      - generic [ref=e185]:
+        - heading "M5 Max" [level=3] [ref=e186]
+        - paragraph [ref=e188]: Built for creators, developers, engineers, and all kinds of pros, M5 Max delivers exceptional performance and on-device AI compute. Edit high-resolution RAW stacks, compile massive codebases, push real-time 3D and motion graphics, and run large language models locally.
+      - generic [ref=e190]:
+        - button "Play 3D graphics animation video" [ref=e199] [cursor=pointer]
+        - list "M5 Max capabilities" [ref=e209]:
+          - listitem [ref=e210]:
+            - generic [ref=e211]:
+              - text: Up to 2.5x faster CPU performance than M1 Max
+              - superscript [ref=e212]:
+                - link "Footnote 2" [ref=e213] [cursor=pointer]:
+                  - /url: "#footnote-5"
+                  - text: "2"
+          - listitem [ref=e214]:
+            - generic [ref=e215]:
+              - text: Up to 4.9x faster GPU performance than M1 Max
+              - superscript [ref=e216]:
+                - link "Footnote 3" [ref=e217] [cursor=pointer]:
+                  - /url: "#footnote-6"
+                  - text: "3"
+          - listitem [ref=e218]:
+            - generic [ref=e219]:
+              - text: Up to 10.7x faster AI performance than M1 Max
+              - superscript [ref=e220]:
+                - link "Footnote 4" [ref=e221] [cursor=pointer]:
+                  - /url: "#footnote-7"
+                  - text: "4"
+          - listitem [ref=e222]:
+            - generic [ref=e223]: Third-generation ray-tracing engine
+          - listitem [ref=e224]:
+            - generic [ref=e225]: Support for up to 5 displays
+          - listitem [ref=e226]:
+            - generic [ref=e227]:
+              - text: Simultaneously play up to 19 streams of 8K ProRes 422 video at 30 fps
+              - superscript [ref=e228]:
+                - link "Footnote 5" [ref=e229] [cursor=pointer]:
+                  - /url: "#footnote-8"
+                  - text: "5"
+      - group "stats performance graph for M5 Max" [ref=e235]:
+        - generic [ref=e237]:
+          - tablist [ref=e238]:
+            - tab "LLM prompt processing"
+            - text: /
+            - tab "AI training" [ref=e239] [cursor=pointer]
+            - text: /
+            - tab "Video editing" [ref=e240] [cursor=pointer]
+            - text: /
+            - tab "DNA sequencing" [ref=e241] [cursor=pointer]
+            - text: /
+            - tab "AI image generation" [ref=e242] [cursor=pointer]
+            - text: /
+            - tab "3D rendering" [ref=e243] [cursor=pointer]
+            - text: /
+            - tab "Code compiling" [ref=e244] [cursor=pointer]
+            - text: /
+            - tab "Gaming" [ref=e245] [cursor=pointer]
+          - text:  
+        - generic [ref=e246]:
+          - generic [ref=e247]:
+            - paragraph [ref=e248]:
+              - text: Faster time to first token performance in LM Studio
+              - superscript [ref=e249]:
+                - link "Footnote 4" [ref=e250] [cursor=pointer]:
+                  - /url: "#footnote-7"
+                  - text: "4"
+            - generic [ref=e252]:
+              - generic [ref=e253]:
+                - separator [ref=e255]
+                - generic [ref=e256]: Mac Studio with M5 Max
+              - figure [ref=e257]:
+                - generic [ref=e259]:
+                  - generic [ref=e260]: "10.7"
+                  - generic [ref=e261]: x
+              - generic [ref=e262]:
+                - separator [ref=e264]
+                - generic [ref=e265]: Mac Studio with M4 Max
+              - figure [ref=e266]:
+                - generic [ref=e268]:
+                  - generic [ref=e269]: "2.8"
+                  - generic [ref=e270]: x
+              - generic [ref=e271]:
+                - separator [ref=e273]
+                - generic [ref=e274]: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: Faster CopyCat ML training performance in Foundry Nuke
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "14.1"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "4.9"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: Faster Magic Mask performance in Blackmagic DaVinci Resolve Studio
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "5.3"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.8"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: Faster basecalling performance in Oxford Nanopore MinKNOW
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "3.5"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.8"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: Faster text-to-image performance
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "7.4"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "2.1"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: Faster render performance in Redshift
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "4.9"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "3.5"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: Faster project build performance in Xcode
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "2.5"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "2.1"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Max
+          - generic:
+            - paragraph:
+              - text: "Faster gaming performance with ray tracing in Cyberpunk 2077: Ultimate Edition"
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Max
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.5"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M4 Max
+      - generic [ref=e278]:
+        - heading "M5 Ultra" [level=3] [ref=e279]
+        - paragraph [ref=e281]: M5 Ultra fuses two M5 Max chips into a single SoC, creating the most powerful Apple silicon GPU ever, the most CPU cores of any Mac, and our most capable chip for AI. Color-grade uncompressed 8K footage, perform computational fluid dynamics, and run frontier-class models on device — no cloud tokens needed.
+      - generic [ref=e283]:
+        - button "Play 3D graphics animation video" [ref=e292] [cursor=pointer]
+        - list "M5 Ultra capabilities" [ref=e301]:
+          - listitem [ref=e302]:
+            - generic [ref=e303]:
+              - text: Up to 2.4x faster CPU performance than M1 Ultra
+              - superscript [ref=e304]:
+                - link "Footnote 11" [ref=e305] [cursor=pointer]:
+                  - /url: "#footnote-14"
+                  - text: "11"
+          - listitem [ref=e306]:
+            - generic [ref=e307]:
+              - text: Up to 4.7x faster GPU performance than M1 Ultra
+              - superscript [ref=e308]:
+                - link "Footnote 12" [ref=e309] [cursor=pointer]:
+                  - /url: "#footnote-15"
+                  - text: "12"
+          - listitem [ref=e310]:
+            - generic [ref=e311]:
+              - text: Up to 9.8x faster AI performance than M1 Ultra
+              - superscript [ref=e312]:
+                - link "Footnote 13" [ref=e313] [cursor=pointer]:
+                  - /url: "#footnote-16"
+                  - text: "13"
+          - listitem [ref=e314]:
+            - generic [ref=e315]: Third-generation ray-tracing engine
+          - listitem [ref=e316]:
+            - generic [ref=e317]: Support for up to 8 displays
+          - listitem [ref=e318]:
+            - generic [ref=e319]:
+              - text: Simultaneously play up to 33 streams of 8K ProRes 422 video at 30 fps
+              - superscript [ref=e320]:
+                - link "Footnote 14" [ref=e321] [cursor=pointer]:
+                  - /url: "#footnote-17"
+                  - text: "14"
+      - group "stats performance graph for M5 Ultra" [ref=e327]:
+        - generic [ref=e329]:
+          - tablist [ref=e330]:
+            - tab "LLM prompt processing"
+            - text: /
+            - tab "AI training" [ref=e331] [cursor=pointer]
+            - text: /
+            - tab "DNA sequencing" [ref=e332] [cursor=pointer]
+            - text: /
+            - tab "AI image generation" [ref=e333] [cursor=pointer]
+            - text: /
+            - tab "3D rendering" [ref=e334] [cursor=pointer]
+            - text: /
+            - tab "Code compiling" [ref=e335] [cursor=pointer]
+            - text: /
+            - tab "Gaming" [ref=e336] [cursor=pointer]
+          - text:  
+        - generic [ref=e337]:
+          - generic [ref=e338]:
+            - paragraph [ref=e339]:
+              - text: Faster time to first token performance in LM Studio
+              - superscript [ref=e340]:
+                - link "Footnote 13" [ref=e341] [cursor=pointer]:
+                  - /url: "#footnote-16"
+                  - text: "13"
+            - generic [ref=e343]:
+              - generic [ref=e344]:
+                - separator [ref=e346]
+                - generic [ref=e347]: Mac Studio with M5 Ultra
+              - figure [ref=e348]:
+                - generic [ref=e350]:
+                  - generic [ref=e351]: "9.8"
+                  - generic [ref=e352]: x
+              - generic [ref=e353]:
+                - separator [ref=e355]
+                - generic [ref=e356]: Mac Studio with M3 Ultra
+              - figure [ref=e357]:
+                - generic [ref=e359]:
+                  - generic [ref=e360]: "2.4"
+                  - generic [ref=e361]: x
+              - generic [ref=e362]:
+                - separator [ref=e364]
+                - generic [ref=e365]: Mac Studio with M1 Ultra (baseline)
+          - generic:
+            - paragraph:
+              - text: Faster CopyCat ML training performance in Foundry Nuke
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "15.4"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M3 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "4.6"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Ultra
+          - generic:
+            - paragraph:
+              - text: Faster basecalling performance in Oxford Nanopore MinKNOW
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "3.3"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M3 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.6"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Ultra
+          - generic:
+            - paragraph:
+              - text: Faster text-to-image performance
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "8.2"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M3 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.9"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Ultra
+          - generic:
+            - paragraph:
+              - text: Faster render performance in Redshift
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "4.7"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M3 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "2.8"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Ultra
+          - generic:
+            - paragraph:
+              - text: Faster project build performance in Xcode
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "2.4"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M3 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.8"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M1 Ultra
+          - generic:
+            - paragraph:
+              - text: "Faster gaming performance with ray tracing in Cyberpunk 2077: Ultimate Edition"
+              - superscript
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M5 Ultra
+                - figure:
+                  - generic:
+                    - generic:
+                      - generic: "1.8"
+                      - generic: x
+                - generic:
+                  - generic:
+                    - separator
+                  - generic: Mac Studio with M3 Ultra
+    - generic [ref=e366]:
+      - generic [ref=e368]:
+        - heading "AI" [level=2] [ref=e369]
+        - paragraph [ref=e370]: Workload whisperer.
+        - paragraph [ref=e372]: Apple silicon, and every major subsystem that powers it, is designed for AI — creating a platform that comprehensively unites hardware, software, and ecosystem. So you can run demanding on-device AI workloads with incredible power efficiency. And as always, security and privacy are designed in, not just bolted on.
+      - generic [ref=e375]:
+        - generic [ref=e377]:
+          - tablist "AI features" [ref=e378]:
+            - link "AI apps":
+              - /url: "#ai-gallery-item-1"
+            - link "AI models" [ref=e379] [cursor=pointer]:
+              - /url: "#ai-gallery-item-2"
+            - link "AI features in apps" [ref=e380] [cursor=pointer]:
+              - /url: "#ai-gallery-item-3"
+          - generic:
+            - button [disabled] [ref=e381]: 
+            - button [disabled] [ref=e382]: 
+        - generic [ref=e383]:
+          - generic [ref=e384]:
+            - generic [ref=e385]:
+              - img "Studio Display XDR, screen shows architectural drawings in Draw Things, Pages, and Keynote, Mac Studio, front view" [ref=e387]
+              - paragraph [ref=e388]: Draw Things app, shown with Keynote and Pages
+            - paragraph [ref=e390]: Mac Studio is optimized to handle the most advanced AI apps. Run LLMs locally using LM Studio Bionic. Create stunning images in Draw Things. And use exo to cluster multiple AI workstations.
+          - generic [ref=e391]:
+            - generic [ref=e392]:
+              - img "Studio Display XDR, screen shows data about honeybee health in the apps LM Studio Bionic and MATLAB, Mac Studio, front view" [ref=e394]
+              - paragraph [ref=e395]: LM Studio Bionic (Inkling-Small model) and MATLAB
+            - paragraph [ref=e397]: Run frontier-class AI models entirely on device. Deploy LLMs like Gemma, Kimi, and Mistral. Generate images with Stable Diffusion and FLUX. And use models to build agentic workflows end-to-end locally.
+          - generic [ref=e398]:
+            - generic [ref=e399]:
+              - img "Studio Display XDR, screen shows document in process in Claude Agent in XCode, Mac Studio, front view" [ref=e401]
+              - paragraph [ref=e402]: Claude Agent in Xcode
+            - paragraph [ref=e404]: Create precise subject selections in seconds with Magic Mask in DaVinci Resolve. Rotoscope complex scenes faster using the Roto Brush tool in Adobe After Effects. And leverage coding agents and models, including local models, to be more productive in Xcode.
+      - generic [ref=e405]:
+        - generic [ref=e407]:
+          - heading "Apple Intelligence and Siri AI. More personal. More powerful." [level=3] [ref=e408]
+          - paragraph [ref=e409]: Siri AI coming in English later this year.
+          - paragraph [ref=e410]:
+            - text: Apple Intelligence helps you write, express yourself, and get things done effortlessly.
+            - superscript [ref=e411]:
+              - link "Footnote 19" [ref=e412] [cursor=pointer]:
+                - /url: "#footnote-22"
+                - text: "19"
+            - text: Turn notes into a sprint agenda, surface an old edit just by describing the scene, or use Visual Intelligence to get details about a shoot location. And Siri AI is more helpful than ever, with richer answers, natural conversations, and a dedicated app.
+            - superscript [ref=e413]:
+              - link "Footnote 20" [ref=e414] [cursor=pointer]:
+                - /url: "#footnote-23"
+                - text: "20"
+          - paragraph [ref=e415]:
+            - link "Learn more about Apple Intelligence and Siri AI" [ref=e416] [cursor=pointer]:
+              - /url: /apple-intelligence/
+              - text: Learn more about Apple Intelligence and Siri AI
+              - generic [ref=e417]: 
+        - generic [ref=e418]:
+          - generic [ref=e420]:
+            - generic [ref=e421]:
+              - heading "Siri AI." [level=4] [ref=e422]
+              - paragraph [ref=e423]: An entirely new version of Siri, powered by Apple Intelligence. It’s a profoundly more personal and capable assistant, and much more conversational, with a dedicated Siri app. And you can write and edit with Siri virtually anywhere you type, and use Visual Intelligence with Siri to learn about what’s in front of you.
+            - img "Siri and Visual Intelligence demo, user query for a topic in a PDF on a Mac screen, What are some other examples of superhydrophobicity in nature?, Siri response" [ref=e425]
+          - generic [ref=e427]:
+            - generic [ref=e428]:
+              - heading "Describe a shortcut." [level=4] [ref=e429]
+              - paragraph [ref=e430]: Automate daily tasks with a simple description. Just describe what you need and Shortcuts connects actions across multiple apps to get it done.
+            - img "Shortcuts on Mac screen, instructions to run certain tasks upon connecting a display" [ref=e432]
+          - generic [ref=e434]:
+            - generic [ref=e435]:
+              - heading "Safari." [level=4] [ref=e436]
+              - paragraph [ref=e437]: You can automatically group your tabs into topics, so related pages are easier to find. And Safari Notify Me monitors pages for changes — such as software releases — and alerts you when it’s time to act.
+            - img "Safari tab groupings on a Mac screen, with tabs for Jazz Community, Coffee Shops, Bay Area Book Festival" [ref=e439]
+      - generic [ref=e444]:
+        - img "Animation of Apple logo with padlock locking into place atop the logo" [ref=e447]
+        - heading "Great powers come with great privacy." [level=3] [ref=e450]
+        - paragraph [ref=e452]: Apple Intelligence and Siri AI are designed to protect your privacy at every step. With powerful on-device processing, Apple Intelligence is aware of your personal information without collecting your personal information. And with groundbreaking Private Cloud Compute, Apple Intelligence can draw on larger server-based models, without making your data accessible to Apple or anyone else.
+    - generic [ref=e453]:
+      - generic [ref=e456]:
+        - heading "Design" [level=2] [ref=e457]
+        - paragraph [ref=e458]: Defies its dimensions.
+        - img "Measurement of Mac Studio showing a width of 7.7 inches and height of 3.7 inches" [ref=e461]:
+          - generic [ref=e462]:
+            - generic [ref=e463]: "Width:"
+            - text: 7.7”
+          - generic [ref=e464]:
+            - generic [ref=e465]: "Height:"
+            - text: 3.7”
+      - generic [ref=e482]:
+        - paragraph [ref=e484]: Fits right in.
+        - generic [ref=e485]:
+          - img "Studio Display XDR, screen shows Adobe Premiere and image of athlete running in the rain on a sports field, Mac Studio, front view" [ref=e487]
+          - paragraph [ref=e489]: Adobe Premiere
+        - paragraph [ref=e491]: Mac Studio packs extreme performance into an unbelievably small footprint. Designed to fit perfectly under most displays, it puts tremendous power and connectivity within arm’s reach.
+      - generic [ref=e494]:
+        - img "The thermal system for Mac Studio" [ref=e497]
+        - paragraph [ref=e498]: Plays it cool and quiet.
+        - paragraph [ref=e499]: Within the 7.7-inch-square enclosure lies a thermal system that allows Mac Studio to fly through intensive tasks at lightning-fast speeds. And even with all that power, it stays remarkably quiet, so you can process batch video renders or coding agent tasks without interrupting your focus.
+    - generic [ref=e500]:
+      - generic [ref=e501]:
+        - generic [ref=e503]:
+          - figure [ref=e505]
+          - generic [ref=e506]:
+            - heading "Ports and Connectivity" [level=2] [ref=e507]
+            - paragraph [ref=e508]: Ready to rig and roll.
+        - generic [ref=e510]:
+          - paragraph [ref=e511]:
+            - text: Create the studio of your dreams with a versatile array of high-speed ports. At up to 120Gb/s, Thunderbolt 5 handles everything from high-bandwidth external storage and video synchronization with genlock to low-latency clustered compute and daisy-chaining multiple displays. Mac Studio also supports PCIe expansion with an external chassis. And it now supports both Wi‑Fi 7 and Bluetooth 6.
+            - superscript [ref=e512]:
+              - link "Footnote 21" [ref=e513] [cursor=pointer]:
+                - /url: "#footnote-24"
+                - text: "21"
+          - generic [ref=e514]:
+            - generic [ref=e515]:
+              - img "Four Mac Studio icons stacked two by two" [ref=e517]
+              - paragraph [ref=e518]:
+                - text: Supports clustered compute for up to 3x faster distributed AI inference.
+                - superscript [ref=e519]:
+                  - link "Footnote 22" [ref=e520] [cursor=pointer]:
+                    - /url: "#footnote-25"
+                    - text: "22"
+            - generic [ref=e521]:
+              - paragraph [ref=e522]: PCIe
+              - paragraph [ref=e523]: Thunderbolt 5 enables high-speed PCI Express expansion with an external chassis.
+      - generic [ref=e531]:
+        - heading "Front Ports" [level=3] [ref=e532]
+        - list [ref=e534]:
+          - listitem [ref=e535]: 2x USB-C or 2x Thunderbolt 5
+          - listitem [ref=e536]: 1x SDXC
+    - generic [ref=e538]:
+      - generic [ref=e540]:
+        - generic [ref=e541]:
+          - heading "Displays" [level=2] [ref=e542]
+          - paragraph [ref=e543]: Perfect pairing.
+        - img "Studio Display, screen shows DaVinci Resolve Studio with abstract multicolor zoomed-in image, Mac Studio, front view, Studio Display XDR, screen shows Houdini and Maxon Redshift with same image zoomed in closer" [ref=e546]
+        - paragraph [ref=e548]: DaVinci Resolve Studio, Houdini, Maxon Redshift
+        - paragraph [ref=e549]: Add Studio Display to see your work spring to life with spectacular color and detail, or pair with Studio Display XDR for the pinnacle of pro precision. Both feature a camera, mics, speakers, and Thunderbolt 5 for everything from livestreaming to expanding your setup with even more ports. Your choice is stunning either way.
+        - paragraph [ref=e550]:
+          - link "Learn more about Apple displays" [ref=e551] [cursor=pointer]:
+            - /url: /displays/
+            - text: Learn more about Apple displays
+            - generic [ref=e552]: 
+      - group "Gallery of Mac Studio and Studio Display in different workspaces." [ref=e555]:
+        - tablist [ref=e558]:
+          - link "Workspace 1" [ref=e559] [cursor=pointer]:
+            - /url: "#studio-display-gallery-1"
+          - link "Workspace 2" [ref=e561] [cursor=pointer]:
+            - /url: "#studio-display-gallery-2"
+          - link "Workspace 3" [ref=e563] [cursor=pointer]:
+            - /url: "#studio-display-gallery-3"
+        - generic:
+          - list:
+            - listitem:
+              - button "Previous" [ref=e565] [cursor=pointer]: 
+            - listitem:
+              - button "Next" [ref=e566] [cursor=pointer]: 
+        - generic [ref=e567]:
+          - img "A professional connected to Mac Studio, editing files using three displays" [ref=e570]
+          - img "A musician using a piano to create audio mixes with Mac Studio and Studio Display" [ref=e573]
+          - img "A professional working with Mac Studio and two Studio Display monitors" [ref=e576]
+      - generic [ref=e579]:
+        - generic [ref=e580]:
+          - paragraph [ref=e581]: Transform your studio.
+          - paragraph [ref=e582]: With its strikingly compact form factor and abundance of ports, Mac Studio lets you reimagine your workspace and unleash your creativity.
+        - generic [ref=e583]:
+          - generic [ref=e586]:
+            - text: x8
+            - generic [ref=e587]: displays
+          - paragraph [ref=e588]: Connect up to eight displays with M5 Ultra or up to five displays with M5 Max.
+    - generic [ref=e592]:
+      - generic [ref=e593]:
+        - heading "Accessories" [level=2] [ref=e594]
+        - paragraph [ref=e595]: Complete your setup.
+      - img "Top view of Magic Keyboard and Magic Mouse" [ref=e598]
+      - generic [ref=e599]:
+        - paragraph [ref=e600]: Magic accessories are wireless, rechargeable, precise, and designed to work seamlessly with one another. Take your creativity to the next level by adding Magic Mouse, Magic Trackpad, or Magic Keyboard with Touch ID.
+        - generic [ref=e601]:
+          - generic [ref=e602]:
+            - heading "Touch ID" [level=3] [ref=e603]
+            - img "Close up view of Touch ID on Magic Keyboard" [ref=e605]
+          - generic [ref=e606]:
+            - heading "Magic Trackpad" [level=3] [ref=e607]
+            - img "Side view of the Magic Trackpad" [ref=e609]
+    - generic [ref=e611]:
+      - heading "macOS" [level=2] [ref=e612]
+      - paragraph [ref=e613]: Let your pro apps fly.
+      - generic [ref=e614]:
+        - paragraph [ref=e615]: macOS is designed to make the most of the incredible graphics, memory, and machine learning capabilities of Apple silicon. Choose from tens of thousands of natively optimized apps — including powerful AI-ready and pro apps like Final Cut Pro, DaVinci Resolve, and Adobe Photoshop. Get the apps you need for everything you want to create in one simple subscription with Apple Creator Studio.
+        - link "Learn more about macOS" [ref=e616] [cursor=pointer]:
+          - /url: /os/macos/
+          - text: Learn more about macOS
+          - generic [ref=e617]: 
+      - generic [ref=e618]:
+        - img "Studio Display XDR, screen shows Unity Editor" [ref=e620]
+        - paragraph [ref=e622]: Unity Editor
+    - generic [ref=e624]:
+      - heading "There’s never been a better time to upgrade." [level=2] [ref=e625]
+      - generic [ref=e626]:
+        - generic [ref=e627]:
+          - generic [ref=e628]: "Select your current model:"
+          - button "Additional help" [ref=e630] [cursor=pointer]
+        - generic [ref=e633]:
+          - generic [ref=e636]:
+            - combobox [ref=e637]:
+              - option "Mac Studio (M1 Max)" [selected]
+              - option "Mac Studio (M1 Ultra)"
+              - option "Mac Pro (M2 Ultra)"
+            - generic: 
+          - generic [ref=e638]:
+            - list "Mac Studio (M1 Max)" [ref=e639]:
+              - paragraph [ref=e640]: Here’s what you get with the new Mac Studio with M5 Max.
+              - list [ref=e641]:
+                - listitem [ref=e642]:
+                  - paragraph [ref=e645]:
+                    - text: Up to
+                    - generic [ref=e646]: 2.5x faster
+                    - text: multithreaded CPU performance for demanding workflows.
+                    - superscript [ref=e647]:
+                      - link "Footnote 2" [ref=e648] [cursor=pointer]:
+                        - /url: "#footnote-5"
+                        - text: "2"
+                - listitem [ref=e649]:
+                  - paragraph [ref=e652]:
+                    - text: Up to
+                    - generic [ref=e653]: 10.7x faster
+                    - text: AI compute with Neural Accelerators in the GPU.
+                    - superscript [ref=e654]:
+                      - link "Footnote 4" [ref=e655] [cursor=pointer]:
+                        - /url: "#footnote-7"
+                        - text: "4"
+                - listitem [ref=e656]:
+                  - paragraph [ref=e662]: Up to 3x more I/O bandwidth with 120Gb/s Thunderbolt 5.
+                - listitem [ref=e663]:
+                  - paragraph [ref=e669]: Up to 128GB unified memory with 50% higher memory bandwidth.
+            - list "Mac Studio (M1 Ultra)" [ref=e670]:
+              - paragraph [ref=e671]: Here’s what you get with the new Mac Studio with M5 Ultra.
+              - list [ref=e672]:
+                - listitem [ref=e673]:
+                  - paragraph [ref=e676]:
+                    - text: Up to
+                    - generic [ref=e677]: 2.4x faster
+                    - text: multithreaded CPU performance for demanding workflows.
+                    - superscript [ref=e678]:
+                      - link "Footnote 11" [ref=e679] [cursor=pointer]:
+                        - /url: "#footnote-14"
+                        - text: "11"
+                - listitem [ref=e680]:
+                  - paragraph [ref=e683]:
+                    - text: Up to
+                    - generic [ref=e684]: 9.8x faster
+                    - text: AI compute with Neural Accelerators in the GPU.
+                    - superscript [ref=e685]:
+                      - link "Footnote 13" [ref=e686] [cursor=pointer]:
+                        - /url: "#footnote-16"
+                        - text: "13"
+                - listitem [ref=e687]:
+                  - paragraph [ref=e693]: Up to 3x more I/O bandwidth with 120Gb/s Thunderbolt 5.
+                - listitem [ref=e694]:
+                  - paragraph [ref=e700]: Up to 512GB unified memory with 50% higher memory bandwidth.
+            - list "Mac Pro (M2 Ultra)" [ref=e701]:
+              - paragraph [ref=e702]: Here’s what you get with the new Mac Studio with M5 Ultra.
+              - list [ref=e703]:
+                - listitem [ref=e704]:
+                  - paragraph [ref=e707]:
+                    - text: Up to
+                    - generic [ref=e708]: 36-core
+                    - text: CPU for demanding workflows. The most ever in a Mac.
+                - listitem [ref=e709]:
+                  - paragraph [ref=e712]:
+                    - text: Up to
+                    - generic [ref=e713]: 4x faster
+                    - text: AI compute with Neural Accelerators in the GPU.
+                - listitem [ref=e714]:
+                  - paragraph [ref=e720]: Up to 3x more I/O bandwidth with 120Gb/s Thunderbolt 5.
+                - listitem [ref=e721]:
+                  - paragraph [ref=e727]: Up to 512GB unified memory with 50% higher memory bandwidth.
+      - generic [ref=e728]:
+        - img "Apple Trade In" [ref=e731]
+        - generic [ref=e733]:
+          - paragraph [ref=e734]:
+            - text: Get credit toward a new Mac Studio when you trade in an eligible device.
+            - superscript [ref=e735]:
+              - link "Footnote 23" [ref=e736] [cursor=pointer]:
+                - /url: "#footnote-26"
+                - text: "23"
+          - link "See what your device is worth" [ref=e737] [cursor=pointer]:
+            - /url: /us/shop/goto/trade_in#mac
+            - text: See what your device is worth
+            - generic [ref=e738]: 
+    - generic [ref=e741]:
+      - generic [ref=e743]:
+        - generic [ref=e744]:
+          - heading "Use AR to see Mac Studio in your workspace." [level=2] [ref=e747]
+          - generic [ref=e748]:
+            - paragraph [ref=e749]: Open this page using Safari on your iPhone or iPad.
+            - text:  
+        - img "Preview of Mac Studio being viewed in AR experience on iPhone" [ref=e752]
+      - generic [ref=e755]:
+        - heading "Which desktop is right for you?" [level=2] [ref=e756]
+        - generic [ref=e757]:
+          - link "help me choose the best Mac" [ref=e758] [cursor=pointer]:
+            - /url: /mac/best-mac/#help-me-choose
+            - text: Help me choose
+            - generic [ref=e759]: 
+          - link "Compare all Mac models" [ref=e760] [cursor=pointer]:
+            - /url: /mac/compare/
+            - text: Compare all Mac models
+            - generic [ref=e761]: 
+        - generic [ref=e762]:
+          - img "Mac mini, front, two Thunderbolt ports, status indicator light and 3.5 millimeter headphone jack, tapered black base at bottom, flat top, rounded sides, straight edges, Silver color" [ref=e764]
+          - img "Available in Silver" [ref=e766]
+          - heading "New Mac mini" [level=3] [ref=e767]:
+            - generic [ref=e768]: New
+            - text: Mac mini
+          - paragraph [ref=e769]: The mini-est, most affordable Mac desktop with mighty performance.
+          - paragraph [ref=e770]:
+            - text: From $899 or $74.91/mo. for 12 mo.
+            - link "Footnote * symbol" [ref=e773] [cursor=pointer]:
+              - /url: "#footnote-1"
+              - text: "*"
+          - paragraph [ref=e774]: Apple M6 chipor Apple M5 Pro chip
+          - paragraph [ref=e775]:
+            - text: Apple Intelligence
+            - superscript [ref=e776]:
+              - link "Footnote 19" [ref=e777] [cursor=pointer]:
+                - /url: "#footnote-22"
+                - text: "19"
+            - text: and Siri AI
+            - superscript [ref=e778]:
+              - link "Footnote 20" [ref=e779] [cursor=pointer]:
+                - /url: "#footnote-23"
+                - text: "20"
+          - paragraph [ref=e780]: 12- to 18-core CPU
+          - paragraph [ref=e781]: 12- to 20-core GPU
+          - paragraph [ref=e782]: 16GB to 64GB unified memory
+          - paragraph [ref=e783]:
+            - text: 256GB to 8TB storage
+            - superscript [ref=e784]:
+              - link "Footnote 24" [ref=e785] [cursor=pointer]:
+                - /url: "#footnote-27"
+                - text: "24"
+          - link "Pre-order, Mac mini" [ref=e787] [cursor=pointer]:
+            - /url: /us/shop/goto/buy_mac/mac_mini
+            - text: Pre-order
+          - link "Learn more, Mac mini" [ref=e789] [cursor=pointer]:
+            - /url: /mac-mini/
+            - text: Learn more
+            - generic [ref=e790]: 
+          - img "Mac Studio, front, two USB-C ports, SDXC card slot, status indicator light, tapered base at bottom, flat top, rounded sides, straight edges, silver color" [ref=e792]
+          - img "Available in Silver" [ref=e794]
+          - heading "New Mac Studio" [level=3] [ref=e795]:
+            - generic [ref=e796]: New
+            - text: Mac Studio
+          - paragraph [ref=e797]: Powerful performance and connectivity for pros.
+          - paragraph [ref=e798]:
+            - text: From $2499 or $208.25/mo. for 12 mo.
+            - link "Footnote * symbol" [ref=e801] [cursor=pointer]:
+              - /url: "#footnote-1"
+              - text: "*"
+          - paragraph [ref=e802]:
+            - text: Lease from $48.99/mo. for 36 mo. with Apple Upgrade
+            - superscript [ref=e804]:
+              - link "Footnote ◊ symbol" [ref=e805] [cursor=pointer]:
+                - /url: "#footnote-2"
+                - text: ◊
+          - paragraph [ref=e806]: Apple M5 Max chip or Apple M5 Ultra chip
+          - paragraph [ref=e807]:
+            - text: Apple Intelligence
+            - superscript [ref=e808]:
+              - link "Footnote 19" [ref=e809] [cursor=pointer]:
+                - /url: "#footnote-22"
+                - text: "19"
+            - text: and Siri AI
+            - superscript [ref=e810]:
+              - link "Footnote 20" [ref=e811] [cursor=pointer]:
+                - /url: "#footnote-23"
+                - text: "20"
+          - paragraph [ref=e812]: 18- to 36-core CPU
+          - paragraph [ref=e813]: 32- to 80-core GPU
+          - paragraph [ref=e814]: 36GB to 512GB unified memory
+          - paragraph [ref=e815]:
+            - text: 512GB to 16TB storage
+            - superscript [ref=e816]:
+              - link "Footnote 24" [ref=e817] [cursor=pointer]:
+                - /url: "#footnote-27"
+                - text: "24"
+          - link "Pre-order, Mac Studio" [ref=e819] [cursor=pointer]:
+            - /url: /us/shop/goto/buy_mac/mac_studio
+            - text: Pre-order
+      - generic [ref=e821]:
+        - generic [ref=e822]:
+          - heading "Apple Upgrade" [level=2] [ref=e823]
+          - heading "Lease a new Mac." [level=3] [ref=e824]
+          - paragraph [ref=e825]:
+            - text: Get a new Mac with low monthly payments for 24 or 36 months and upgrade at the end of your term.
+            - superscript [ref=e826]:
+              - link "Footnote § symbol" [ref=e828] [cursor=pointer]:
+                - /url: "#footnote-upgrade-2026"
+                - text: §
+          - paragraph [ref=e829]:
+            - link "Learn more, Apple Upgrade program" [ref=e830] [cursor=pointer]:
+              - /url: /us/shop/goto/apple_upgrade
+              - text: Learn more
+              - generic [ref=e831]: 
+        - img "Closed MacBook Pro, top view, atop a stacking, spiral-design of MacBook Pro multicolor shadows" [ref=e834]
+      - generic [ref=e836]:
+        - generic [ref=e837]:
+          - heading "Accessories" [level=2] [ref=e838]
+          - heading "Explore Mac accessories." [level=3] [ref=e839]
+          - paragraph [ref=e840]:
+            - link "Shop, Mac accessories" [ref=e841] [cursor=pointer]:
+              - /url: /us/shop/goto/mac/accessories
+              - text: Shop
+        - img "Collection of accessories including Magic Keyboard with Touch ID, Magic Mouse, Magic Track Pad, Thunderbolt 5 Pro cable, and AirPods Pro" [ref=e844]
+      - generic [ref=e847]:
+        - heading "Designed with the planet in mind." [level=2] [ref=e850]:
+          - text: Designed with the
+          - generic [ref=e851]: planet
+          - text: in mind.
+        - paragraph [ref=e852]: 100% recycled materials in its magnets and in the solder of the main logic board. Responsibly sourced packaging. A lower-carbon supply chain. Mac Studio was engineered to minimize its environmental impact.
+        - paragraph [ref=e853]:
+          - link "Learn more about Apple and the environment" [ref=e854] [cursor=pointer]:
+            - /url: /environment/
+            - text: Learn more about Apple and the environment
+            - generic [ref=e855]: 
+      - generic [ref=e857]:
+        - generic [ref=e858]:
+          - heading "Apple Trade In" [level=2] [ref=e859]
+          - heading "Get credit toward a new Mac Studio." [level=3] [ref=e860]
+          - paragraph [ref=e861]:
+            - text: Just trade in your eligible computer for credit or recycle it for free. It’s good for you and the planet.
+            - superscript [ref=e862]:
+              - link "Footnote 23" [ref=e863] [cursor=pointer]:
+                - /url: "#footnote-26"
+                - text: "23"
+          - paragraph [ref=e864]:
+            - link "See what your device is worth" [ref=e865] [cursor=pointer]:
+              - /url: /us/shop/goto/trade_in#mac
+              - text: See what your device is worth
+              - generic [ref=e866]: 
+        - img "Front view of Mac Studio." [ref=e869]
+      - generic [ref=e871]:
+        - generic [ref=e872]:
+          - heading "Apple Card" [level=2] [ref=e873]
+          - heading "Get 3% Daily Cash back with Apple Card." [level=3] [ref=e874]
+          - paragraph [ref=e875]:
+            - text: And pay over time, interest-free when you choose to check out at Apple with Apple Card Monthly Installments.
+            - link "Footnote † symbol" [ref=e877] [cursor=pointer]:
+              - /url: "#footnote-3"
+              - text: †
+          - paragraph [ref=e878]:
+            - link "Learn more, Apple Card" [ref=e879] [cursor=pointer]:
+              - /url: /apple-card/
+              - text: Learn more
+              - generic [ref=e880]: 
+        - img "An iPhone with financial information and Apple Card on screen" [ref=e883]
+      - generic [ref=e886]:
+        - heading "Apple at Work" [level=2] [ref=e887]
+        - paragraph [ref=e888]: Get the power to take your business to the next level.
+        - list [ref=e889]:
+          - listitem [ref=e890]:
+            - link "Learn about Apple at Work" [ref=e891] [cursor=pointer]:
+              - /url: /business/
+              - text: Learn about Apple at Work
+              - generic [ref=e892]: 
+          - listitem [ref=e893]:
+            - link "Learn more about Mac for business" [ref=e894] [cursor=pointer]:
+              - /url: /business/mac/
+              - text: Learn more about Mac for business
+              - generic [ref=e895]: 
+      - generic [ref=e900]:
+        - heading "Apple and Education" [level=2] [ref=e901]
+        - paragraph [ref=e902]: Helping educators and students move the world forward.
+        - paragraph [ref=e903]:
+          - link "Learn about Apple and Education" [ref=e904] [cursor=pointer]:
+            - /url: /education/
+            - text: Learn about Apple and Education
+            - generic [ref=e905]: 
+    - generic [ref=e908]:
+      - generic [ref=e910]:
+        - heading "Mac Studio and the environment." [level=2] [ref=e911]
+        - list [ref=e913]:
+          - listitem [ref=e914]:
+            - link "Learn more in our Product Environmental Report (PDF), opens in a new window" [ref=e915] [cursor=pointer]:
+              - /url: /environment/pdf/products/desktops/Mac_Studio_PER_Aug2026.pdf
+              - text: Learn more in our Product Environmental Report (PDF)
+      - generic "Environment gallery" [ref=e916]:
+        - list [ref=e918]:
+          - listitem [ref=e919]:
+            - generic [ref=e920]:
+              - heading "Made with 35% recycled material by weight." [level=3] [ref=e923]
+              - button "Learn more about recycled material" [ref=e924] [cursor=pointer]
+              - text: 
+          - listitem [ref=e929]:
+            - generic [ref=e930]:
+              - heading "Manufactured with 40% renewable electricity." [level=3] [ref=e933]
+              - button "Learn more about renewable electricity" [ref=e934] [cursor=pointer]
+              - text: 
+          - listitem [ref=e939]:
+            - generic [ref=e940]:
+              - heading "Ships in 100% fiber-based packaging." [level=3] [ref=e943]
+              - button "Learn more about packaging" [ref=e944] [cursor=pointer]
+              - text: 
+        - list [ref=e950]:
+          - listitem [ref=e951]:
+            - button "Previous item in Environment gallery" [ref=e952] [cursor=pointer]
+          - listitem [ref=e956]:
+            - button "Next item in Environment gallery" [ref=e957] [cursor=pointer]
+    - generic [ref=e961]:
+      - heading "Our values lead the way." [level=2] [ref=e964]
+      - generic "Values gallery" [ref=e965]:
+        - list [ref=e967]:
+          - listitem [ref=e968]:
+            - generic [ref=e969]:
+              - heading "A plan as innovative as our products." [level=3] [ref=e971]
+              - paragraph [ref=e972]: We’re committed to bringing net emissions to zero across our entire carbon footprint by 2030.
+              - paragraph [ref=e973]:
+                - link "Learn more about environment" [ref=e974] [cursor=pointer]:
+                  - /url: /environment/
+                  - text: Learn more about environment
+                  - generic [ref=e975]: 
+              - link [ref=e976] [cursor=pointer]:
+                - /url: /environment/
+          - listitem [ref=e977]:
+            - generic [ref=e978]:
+              - heading "Privacy. That’s Apple." [level=3] [ref=e980]
+              - paragraph [ref=e981]: Privacy is a fundamental human right. Every product and service is designed to help keep your data safe and secure.
+              - paragraph [ref=e982]:
+                - link "Learn more about privacy" [ref=e983] [cursor=pointer]:
+                  - /url: /privacy/
+                  - text: Learn more about privacy
+                  - generic [ref=e984]: 
+              - link [ref=e985] [cursor=pointer]:
+                - /url: /privacy/
+          - listitem [ref=e986]:
+            - generic [ref=e987]:
+              - heading "Innovation that’s accessible by design." [level=3] [ref=e989]
+              - paragraph [ref=e990]: Our products and services are designed for everyone, with built-in features to help you do what you love, your way.
+              - paragraph [ref=e991]:
+                - link "Learn more about accessibility" [ref=e992] [cursor=pointer]:
+                  - /url: /accessibility/
+                  - text: Learn more about accessibility
+                  - generic [ref=e993]: 
+              - link [ref=e994] [cursor=pointer]:
+                - /url: /accessibility/
+        - list [ref=e996]:
+          - listitem [ref=e997]:
+            - button "Previous item in Values gallery" [ref=e998] [cursor=pointer]
+          - listitem [ref=e1002]:
+            - button "Next item in Values gallery" [ref=e1003] [cursor=pointer]
+  - contentinfo [ref=e1007]:
+    - generic [ref=e1008]:
+      - heading "Apple Footer" [level=2] [ref=e1009]
+      - generic [ref=e1011]:
+        - generic [ref=e1013]:
+          - figure [ref=e1014]
+          - heading "Lease with Apple Upgrade" [level=3] [ref=e1015]
+          - paragraph [ref=e1016]:
+            - text: Now you can lease a new Apple product with low monthly payments and terms that work for you.
+            - superscript [ref=e1017]: §
+          - link "Learn more, Apple Upgrade" [ref=e1018] [cursor=pointer]:
+            - /url: /us/shop/goto/apple_upgrade
+            - text: Learn more
+        - generic [ref=e1020]:
+          - figure [ref=e1021]
+          - heading "Pay monthly at 0% APR" [level=3] [ref=e1022]
+          - paragraph [ref=e1023]: You can pay over time when you choose to check out at Apple with Apple Card Monthly Installments.†
+          - link "Learn more Pay monthly at 0% APR" [ref=e1024] [cursor=pointer]:
+            - /url: /apple-card/monthly-installments/
+            - text: Learn more
+            - generic [ref=e1025]: Pay monthly at 0% APR
+        - generic [ref=e1028]:
+          - figure [ref=e1029]
+          - heading "Fast delivery or pickup" [level=3] [ref=e1030]
+          - paragraph [ref=e1031]: Enjoy two-hour delivery from an Apple Store, free delivery, or easy pickup.
+          - link "Learn more Fast delivery or pickup" [ref=e1032] [cursor=pointer]:
+            - /url: /us/shop/goto/shipping_and_returns
+            - text: Learn more
+            - generic [ref=e1033]: Fast delivery or pickup
+        - generic [ref=e1036]:
+          - figure [ref=e1037]
+          - heading "Get help buying" [level=3] [ref=e1038]
+          - paragraph [ref=e1039]: Have a question? Call a Specialist or chat online.
+          - link "Contact us" [ref=e1040] [cursor=pointer]:
+            - /url: https://contactretail.apple.com/?pg=COM:mac-studio&ap=COM&c=us&l=en&ag=FASTPASS
+      - region "Footnotes" [ref=e1042]:
+        - list [ref=e1043]:
+          - listitem [ref=e1044]: "§ Apple Upgrade is a device leasing program available in the U.S. (excluding U.S. territories). Leases are provided by Klarna; subject to eligibility and credit approval, including final approval at checkout. To be eligible, you must be a U.S. resident, at least 18 years old (or the legal age in your state), have an accepted credit or debit card, and have an Apple ID. Additional eligibility criteria apply. Device must be in good condition upon return; damage fees may apply. For iPhone only: In order to lease an iPhone, you must select an eligible carrier (but you cannot use a prepaid carrier plan). Upgrades require entering into a new lease and are subject to eligibility and credit approval. Apple Upgrade is not available on refurbished devices or online at the following special stores: Apple Employee Purchase Plan; participating corporate Employee Purchase Programs; Apple at Work for small businesses or enterprises; Government, Education, or Veterans and Military Purchase Programs."
+        - list [ref=e1045]:
+          - listitem [ref=e1046]:
+            - text: "* Financing available to qualified customers, subject to credit approval and credit limit, and requires you to select Apple Card Monthly Installments (ACMI) as your payment type at checkout at Apple. Financing terms vary by product. Taxes and shipping on items purchased using ACMI are subject to your card’s variable APR, not the ACMI 0% APR. ACMI is not available for purchases made at special storefronts or when using such special discounts in-store at Apple, except ACMI is available at the Education storefront and with the Education discount. The last month’s payment for each product will be the product’s purchase price, less all other payments at the monthly payment amount. ACMI is subject to change at any time for any reason, including but not limited to installment term lengths and eligible products. See the"
+            - link "Apple Card Customer Agreement" [ref=e1047] [cursor=pointer]:
+              - /url: https://www.goldmansachs.com/terms-and-conditions/Apple-Card-Customer-Agreement.pdf
+            - text: for more information about ACMI.
+        - list [ref=e1048]:
+          - listitem [ref=e1049]: "◊ Apple Upgrade Lease: This offer is for a consumer lease, not a purchase or loan. Lease provided by Klarna Inc. for 12-, 24-, or 36-month term. 12- and 36-month terms not available for all device models. Your first monthly payment is due approximately 30 days after device is shipped or available for pickup. Lease approval is subject to eligibility and is based on creditworthiness. Monthly payments are based on the selected device and lease term. For example:For an iPhone 17 Pro 256GB with a purchase price of $1099 (excluding taxes and any trade-in credit), the typical monthly payment is $31.99 (excluding taxes and any trade-in credit) for a 24-month lease term and $45.99 (excluding taxes and any trade-in credit) for a 12-month lease term.For an Apple Watch Series 11 42mm with a purchase price of $399 (excluding taxes and any trade-in credit), the typical monthly payment is $11.99 (excluding taxes and any trade-in credit) for a 24-month lease term and $21.99 (excluding taxes and any trade-in credit) for a 12-month lease term.For an iPad Pro 256GB with a purchase price of $1199 (excluding taxes and any trade-in credit), the typical monthly payment is $24.99 (excluding taxes and any trade-in credit) for a 36-month lease term and $31.99 (excluding taxes and any trade-in credit) for a 24-month lease term.For a MacBook Pro 16GB with a purchase price of $1999 (excluding taxes and any trade-in credit), the typical monthly payment is $38.99 (excluding taxes and any trade-in credit) for a 36-month lease term and $53.99 (excluding taxes and any trade-in credit) for a 24-month lease term.No security deposit required. A trade-in device may reduce monthly payments. Advertised monthly payment amount may not include a trade-in device’s estimated value. Upgrades are not guaranteed and are subject to eligibility and approval.For iPhone only: In order to lease an iPhone, you must select an eligible carrier (but you cannot use a prepaid carrier plan). A leased iPhone is always unlocked, so you can switch carriers at any time, subject to your carrier’s terms.Terminating your Apple Upgrade Lease: Closing your lease and returning your device terminates your lease. You may incur substantial fees if you terminate your lease before the end of your initial lease term. You may have the option to upgrade to a new device by entering into a new lease agreement and returning your prior device. If you upgrade, your new monthly payments may be greater than your prior monthly payments. If you do not upgrade, terminate your lease, or purchase your device by the end of the initial lease term, the lease will convert to a month-to-month lease for up to six months. Your monthly payments may increase during the month-to-month periods. If you take no action at the end of your extension period, you will be charged the purchase fee under your lease. You will not own your device at the end of your lease, unless you pay the purchase fee. Insurance is not included in your lease, and you may incur damage fees if the device is lost, stolen, or not returned in the condition required by the lease.Apple Upgrade Lease Eligibility: Leases are only available to U.S. residents (excluding residents of U.S. territories). Leased devices are only available for shipping to U.S. addresses (excluding U.S territories) or pick up at Apple Retail stores in the U.S. (excluding U.S. territories). To be eligible for a lease, you must be at least 18 years old (or the legal age in your state of residence), have a valid Social Security Number or individual taxpayer identification number (ITIN), have an accepted credit or debit card, have an Apple Account in good standing, have a Klarna Account, and be able to receive security verification codes via text message. Leases are not available on refurbished accessories or online at the following special stores: Apple Employee Purchase Plan; participating corporate Employee Purchase Programs; Apple at Work for small businesses or enterprises; Government, Education, or Veterans and Military Purchase Programs."
+        - list [ref=e1050]:
+          - listitem [ref=e1051]: 512GB memory option for M5 Ultra coming late October.
+          - listitem [ref=e1052]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. Open source project built with Xcode 27 beta 3 with Apple Clang 21.0.0. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1053]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. Redshift v2026.7.1 tested using a 29.2MB scene utilizing hardware-accelerated ray tracing on systems with M5 Max and M4 Max. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1054]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. Time to first token measured with an 8K-token prompt using a 14-billion parameter model with 4-bit quantization, and LM Studio v0.4.19+2. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1055]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, 128GB of unified memory, and 8TB SSD. Final Cut Pro 12.3 tested using a 1-minute picture-in-picture project with multiple streams of Apple ProRes 422 video at 8192x4320 resolution and 30 frames per second. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1056]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. Tested with NukeX 17.0v3 and CopyCat with crop size of 512 pixels and batch size of 48. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1057]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. Tested with prerelease DaVinci Resolve Studio 21.0.2 using Magic Mask and a 12-second UHD project at 3840x2160 resolution and 24 frames per second. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1058]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. Tested with Oxford Nanopore Technologies MinKNOW 26.01 basecalling model. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1059]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, as well as production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, and Mac Studio systems with Apple M1 Max, 10-core CPU, 32-core GPU, and 64GB of unified memory, all configured with 8TB SSD. AI image generation measured with a 12-billion parameter model and MLX framework. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1060]: "Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Max, 18-core CPU, 40-core GPU, and 128GB of unified memory, and production Mac Studio systems with Apple M4 Max, 16-core CPU, 40-core GPU, and 128GB of unified memory, both configured with 8TB SSD. Cyberpunk 2077: Ultimate Edition performance tested at 2560x1400 resolution, with ultra preset, MetalFX set to balanced, and ray tracing on. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio."
+          - listitem [ref=e1061]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, as well as production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, and Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU, and 128GB of unified memory, all configured with 8TB SSD. Open source project built with Xcode 27 beta 3 with Apple Clang 21.0.0. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1062]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, as well as production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, and Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU, and 128GB of unified memory, all configured with 8TB SSD. Redshift v2026.7.1 tested using a 29.2MB scene utilizing hardware-accelerated ray tracing on systems with M5 Ultra and M3 Ultra. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1063]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, as well as production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, and Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU, and 128GB of unified memory, all configured with 8TB SSD. Time to first token measured with an 8K-token prompt using a 14-billion parameter model with 4-bit quantization, and LM Studio v0.4.19+2. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1064]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, 512GB of unified memory, and 8TB SSD. Final Cut Pro 12.3 tested using a 1-minute picture-in-picture project with multiple streams of Apple ProRes 422 video at 8192x4320 resolution and 30 frames per second. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1065]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, as well as production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, and Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU, and 128GB of unified memory, all configured with 8TB SSD. Tested with NukeX 17.0v3 and CopyCat with crop size of 512 pixels and batch size of 48. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1066]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, as well as production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, and Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU, and 128GB of unified memory, all configured with 8TB SSD. Tested with Oxford Nanopore Technologies MinKNOW 26.01 basecalling model. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1067]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, as well as production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, and Mac Studio systems with Apple M1 Ultra, 20-core CPU, 64-core GPU, and 128GB of unified memory, all configured with 8TB SSD. AI image generation measured with a 12-billion parameter model and MLX framework. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1068]: "Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, and 512GB of unified memory, and production Mac Studio systems with Apple M3 Ultra, 32-core CPU, 80-core GPU, and 512GB of unified memory, both configured with 8TB SSD. Cyberpunk 2077: Ultimate Edition performance tested at 2560x1400 resolution, with ultra preset, MetalFX set to balanced, and ray tracing on. Mac Studio systems tested with an attached 5K display. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio."
+          - listitem [ref=e1069]: Apple Intelligence is available with Siri and device language set to Chinese (Simplified), Chinese (Traditional), Danish, Dutch, English, French, German, Italian, Japanese, Korean, Norwegian, Portuguese, Spanish, Swedish, Turkish, or Vietnamese. Some features may not be available in all regions or languages. Some devices may not be available in all regions.
+          - listitem [ref=e1070]: Siri AI will be available in beta later this year and requires an Apple Intelligence–enabled device set to a supported language. Available in English to start. Siri AI will not initially be available in the EU on iOS, iPadOS, and watchOS.
+          - listitem [ref=e1071]:
+            - text: Wi-Fi 7 availability varies by country. For more information, visit
+            - link "support.apple.com/148165" [ref=e1072] [cursor=pointer]:
+              - /url: https://support.apple.com/148165
+            - text: .
+          - listitem [ref=e1073]: Testing conducted by Apple in July 2026 using preproduction Mac Studio systems with Apple M5 Ultra, 36-core CPU, 80-core GPU, 512GB of unified memory, and 1TB SSD. LLM summarization completion time measured with a 32K-token prompt using a 72-billion parameter dense model, mlx-lm, and MLX framework; performance compared between a single system and a 4-node full-mesh cluster with each system connected to the other three via Thunderbolt 5 and RDMA. Performance tests are conducted using specific computer systems and reflect the approximate performance of Mac Studio.
+          - listitem [ref=e1074]: Trade-in values will vary based on the condition, year, and configuration of your eligible trade-in device. Not all devices are eligible for credit. You must be at least the age of majority to be eligible to trade in for credit or for an Apple Gift Card. Trade-in value may be applied toward qualifying new device purchase, or added to an Apple Gift Card. Actual value awarded is based on receipt of a qualifying device matching the description provided when estimate was made. Sales tax may be assessed on full value of a new device purchase. In-store trade-in requires presentation of a valid photo ID (local law may require saving this information). Offer may not be available in all stores, and may vary between in-store and online trade-in. Some stores may have additional requirements. Apple or its trade-in partners reserve the right to refuse, cancel, or limit quantity of any trade-in transaction for any reason. More details are available from Apple’s trade-in partner for trade-in and recycling of eligible devices. Restrictions and limitations may apply.
+          - listitem [ref=e1075]: 1GB = 1 billion bytes and 1TB = 1 trillion bytes; actual formatted capacity less.
+        - list [ref=e1076]:
+          - listitem [ref=e1077]:
+            - text: † Apple Card Monthly Installments (ACMI) is a 0% APR payment option that is only available if you select it at checkout in the U.S. for eligible products purchased at Apple Store locations,
+            - link "apple.com" [ref=e1078] [cursor=pointer]:
+              - /url: /
+            - text: ", the Apple Store app, or by calling 1‑800‑MY‑APPLE, and is subject to credit approval and credit limit. See"
+            - link "here" [ref=e1079] [cursor=pointer]:
+              - /url: https://support.apple.com/102730
+            - text: "for more information about eligible products. Existing customers: See your Customer Agreement for your variable APR. As of July 1, 2026, the variable APR on new Apple Card accounts ranges from 17.49% to 27.74%. You must elect to use ACMI at checkout. If you buy an ACMI‑eligible product with a one-time payment on Apple Card at checkout, that purchase is subject to your Apple Card’s variable APR, not the ACMI 0% APR. Taxes and shipping on items purchased using ACMI are subject to your Apple Card’s variable APR, not the ACMI 0% APR. In order to buy an iPhone with ACMI, you must select one of the following carriers (prepaid carrier plans are not supported): AT&T, T‑Mobile, or Verizon. An iPhone purchased with ACMI is always unlocked, so you can switch carriers at any time, subject to your carrier’s terms. ACMI is not available for purchases made at the following special storefronts or when using these discounts in-store at Apple: Apple Employee Purchase Plan; participating corporate Employee Purchase Programs; Apple at Work for small businesses; Government and Veterans and Military Purchase Programs; or on refurbished devices. The last month’s payment for each product will be the product’s purchase price, less all other payments at the monthly payment amount. ACMI is subject to change at any time for any reason, including but not limited to installment term lengths and eligible products. See the"
+            - link "Apple Card Customer Agreement" [ref=e1080] [cursor=pointer]:
+              - /url: https://www.goldmansachs.com/terms-and-conditions/Apple-Card-Customer-Agreement.pdf
+            - text: for more information about ACMI.
+        - list [ref=e1081]:
+          - listitem [ref=e1082]:
+            - paragraph [ref=e1083]: To access and use all Apple Card features and products available only to Apple Card users, you must add Apple Card to Wallet on an iPhone or iPad that supports and has the latest version of iOS or iPadOS. Apple Card is subject to credit approval, available only for qualifying applicants in the United States, and issued by Goldman Sachs Bank USA, Salt Lake City Branch.
+            - paragraph [ref=e1084]: Apple Payments Services LLC, a subsidiary of Apple Inc., is a service provider of Goldman Sachs Bank USA for Apple Card and Savings accounts. Neither Apple Inc. nor Apple Payments Services LLC is a bank.
+            - paragraph [ref=e1085]: All communications from Apple and Goldman Sachs Bank USA about Apple Card (including transactional and marketing communications) and customer service support are available in English. Certain communications about Apple Card can be viewed in another language depending on your device language settings. If you reside in the U.S. Virgin Islands, American Samoa, Guam, Northern Mariana Islands, or U.S. Minor Outlying Islands, please call Goldman Sachs at 877-255-5923 with questions about Apple Card.
+          - listitem [ref=e1086]: Features are subject to change. Some features, applications, and services may not be available in all regions or all languages.
+          - listitem [ref=e1087]: "Honeybee health data rendered through MATLAB® from dataset by: Lower, Emily; Kollaparthi, Sai; Rogers, Richard; Hassler, Edgar; Cazier, Joseph (2025). “Predicting Honeybee Health: The Healthy Colony Checklist, Hive Scale, and Weather Data.” Mendeley Data, V. 1, doi: 10.17632/pbbwvjxgbc.1. Licensed under CC by 4.0 Deed."
+          - listitem [ref=e1088]: Some apps and services may require a subscription.
+      - navigation "Breadcrumbs" [ref=e1089]:
+        - link "Apple" [ref=e1090] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e1091]: 
+        - generic [ref=e1093]:
+          - list:
+            - listitem [ref=e1094]:
+              - link "Mac" [ref=e1095] [cursor=pointer]:
+                - /url: /mac/
+            - listitem [ref=e1096]: Mac Studio
+      - navigation "Apple Directory" [ref=e1097]:
+        - generic [ref=e1098]:
+          - generic:
+            - heading "Shop and Learn" [level=3] [ref=e1099]
+            - list [ref=e1101]:
+              - listitem [ref=e1102]:
+                - link "Store" [ref=e1103] [cursor=pointer]:
+                  - /url: /us/shop/goto/store
+              - listitem [ref=e1104]:
+                - link "Mac" [ref=e1105] [cursor=pointer]:
+                  - /url: /mac/
+              - listitem [ref=e1106]:
+                - link "iPad" [ref=e1107] [cursor=pointer]:
+                  - /url: /ipad/
+              - listitem [ref=e1108]:
+                - link "iPhone" [ref=e1109] [cursor=pointer]:
+                  - /url: /iphone/
+              - listitem [ref=e1110]:
+                - link "Watch" [ref=e1111] [cursor=pointer]:
+                  - /url: /watch/
+              - listitem [ref=e1112]:
+                - link "Vision" [ref=e1113] [cursor=pointer]:
+                  - /url: /apple-vision-pro/
+              - listitem [ref=e1114]:
+                - link "AirPods" [ref=e1115] [cursor=pointer]:
+                  - /url: /airpods/
+              - listitem [ref=e1116]:
+                - link "TV & Home" [ref=e1117] [cursor=pointer]:
+                  - /url: /tv-home/
+              - listitem [ref=e1118]:
+                - link "AirTag" [ref=e1119] [cursor=pointer]:
+                  - /url: /airtag/
+              - listitem [ref=e1120]:
+                - link "Accessories" [ref=e1121] [cursor=pointer]:
+                  - /url: /us/shop/goto/buy_accessories
+              - listitem [ref=e1122]:
+                - link "Gift Cards" [ref=e1123] [cursor=pointer]:
+                  - /url: /us/shop/goto/giftcards
+          - generic:
+            - heading "Apple Wallet" [level=3] [ref=e1124]
+            - list [ref=e1126]:
+              - listitem [ref=e1127]:
+                - link "Wallet" [ref=e1128] [cursor=pointer]:
+                  - /url: /wallet/
+              - listitem [ref=e1129]:
+                - link "Apple Card" [ref=e1130] [cursor=pointer]:
+                  - /url: /apple-card/
+              - listitem [ref=e1131]:
+                - link "Apple Pay" [ref=e1132] [cursor=pointer]:
+                  - /url: /apple-pay/
+              - listitem [ref=e1133]:
+                - link "Apple Cash" [ref=e1134] [cursor=pointer]:
+                  - /url: /apple-cash/
+        - generic [ref=e1135]:
+          - generic:
+            - heading "Account" [level=3] [ref=e1136]
+            - list [ref=e1138]:
+              - listitem [ref=e1139]:
+                - link "Manage Your Apple Account" [ref=e1140] [cursor=pointer]:
+                  - /url: https://account.apple.com/
+              - listitem [ref=e1141]:
+                - link "Apple Store Account" [ref=e1142] [cursor=pointer]:
+                  - /url: /us/shop/goto/account
+              - listitem [ref=e1143]:
+                - link "iCloud.com" [ref=e1144] [cursor=pointer]:
+                  - /url: https://www.icloud.com
+          - generic:
+            - heading "Entertainment" [level=3] [ref=e1145]
+            - list [ref=e1147]:
+              - listitem [ref=e1148]:
+                - link "Apple One" [ref=e1149] [cursor=pointer]:
+                  - /url: /apple-one/
+              - listitem [ref=e1150]:
+                - link "Apple TV" [ref=e1151] [cursor=pointer]:
+                  - /url: /apple-tv/
+              - listitem [ref=e1152]:
+                - link "Apple Music" [ref=e1153] [cursor=pointer]:
+                  - /url: /apple-music/
+              - listitem [ref=e1154]:
+                - link "Apple Arcade" [ref=e1155] [cursor=pointer]:
+                  - /url: /apple-arcade/
+              - listitem [ref=e1156]:
+                - link "Apple Fitness+" [ref=e1157] [cursor=pointer]:
+                  - /url: /apple-fitness-plus/
+              - listitem [ref=e1158]:
+                - link "Apple News+" [ref=e1159] [cursor=pointer]:
+                  - /url: /apple-news/
+              - listitem [ref=e1160]:
+                - link "Apple Podcasts" [ref=e1161] [cursor=pointer]:
+                  - /url: /apple-podcasts/
+              - listitem [ref=e1162]:
+                - link "Apple Books" [ref=e1163] [cursor=pointer]:
+                  - /url: /apple-books/
+              - listitem [ref=e1164]:
+                - link "App Store" [ref=e1165] [cursor=pointer]:
+                  - /url: /app-store/
+        - generic [ref=e1166]:
+          - generic:
+            - heading "Apple Store" [level=3] [ref=e1167]
+            - list [ref=e1169]:
+              - listitem [ref=e1170]:
+                - link "Find a Store" [ref=e1171] [cursor=pointer]:
+                  - /url: /retail/
+              - listitem [ref=e1172]:
+                - link "Genius Bar" [ref=e1173] [cursor=pointer]:
+                  - /url: /retail/geniusbar/
+              - listitem [ref=e1174]:
+                - link "Today at Apple" [ref=e1175] [cursor=pointer]:
+                  - /url: /today/
+              - listitem [ref=e1176]:
+                - link "Group Reservations" [ref=e1177] [cursor=pointer]:
+                  - /url: /today/groups/
+              - listitem [ref=e1178]:
+                - link "Apple Camp" [ref=e1179] [cursor=pointer]:
+                  - /url: /today/camp/
+              - listitem [ref=e1180]:
+                - link "Apple Store App" [ref=e1181] [cursor=pointer]:
+                  - /url: https://apps.apple.com/us/app/apple-store/id375380948
+              - listitem [ref=e1182]:
+                - link "Certified Refurbished" [ref=e1183] [cursor=pointer]:
+                  - /url: /us/shop/goto/special_deals
+              - listitem [ref=e1184]:
+                - link "Apple Upgrade" [ref=e1185] [cursor=pointer]:
+                  - /url: /us/shop/goto/apple_upgrade
+              - listitem [ref=e1186]:
+                - link "Apple Trade In" [ref=e1187] [cursor=pointer]:
+                  - /url: /us/shop/goto/trade_in
+              - listitem [ref=e1188]:
+                - link "Financing" [ref=e1189] [cursor=pointer]:
+                  - /url: /us/shop/goto/payment_plan
+              - listitem [ref=e1190]:
+                - link "Carrier Deals at Apple" [ref=e1191] [cursor=pointer]:
+                  - /url: /us/shop/goto/buy_iphone/carrier_offers
+              - listitem [ref=e1192]:
+                - link "Order Status" [ref=e1193] [cursor=pointer]:
+                  - /url: /us/shop/goto/order/list
+              - listitem [ref=e1194]:
+                - link "Shopping Help" [ref=e1195] [cursor=pointer]:
+                  - /url: /us/shop/goto/help
+        - generic [ref=e1196]:
+          - generic:
+            - heading "For Business" [level=3] [ref=e1197]
+            - list [ref=e1199]:
+              - listitem [ref=e1200]:
+                - link "Apple and Business" [ref=e1201] [cursor=pointer]:
+                  - /url: /business/
+              - listitem [ref=e1202]:
+                - link "Shop for Business" [ref=e1203] [cursor=pointer]:
+                  - /url: /retail/business/
+          - generic:
+            - heading "For Education" [level=3] [ref=e1204]
+            - list [ref=e1206]:
+              - listitem [ref=e1207]:
+                - link "Apple and Education" [ref=e1208] [cursor=pointer]:
+                  - /url: /education/
+              - listitem [ref=e1209]:
+                - link "Shop for K-12" [ref=e1210] [cursor=pointer]:
+                  - /url: /education/k12/how-to-buy/
+              - listitem [ref=e1211]:
+                - link "Shop for College" [ref=e1212] [cursor=pointer]:
+                  - /url: /us/shop/goto/educationrouting
+          - generic:
+            - heading "For Healthcare" [level=3] [ref=e1213]
+            - list [ref=e1215]:
+              - listitem [ref=e1216]:
+                - link "Apple and Healthcare" [ref=e1217] [cursor=pointer]:
+                  - /url: /healthcare/
+          - generic:
+            - heading "For Government" [level=3] [ref=e1218]
+            - list [ref=e1220]:
+              - listitem [ref=e1221]:
+                - link "Apple and Government" [ref=e1222] [cursor=pointer]:
+                  - /url: /government/
+              - listitem [ref=e1223]:
+                - link "Shop for Veterans and Military" [ref=e1224] [cursor=pointer]:
+                  - /url: /us/shop/goto/eppstore/veteransandmilitary
+              - listitem [ref=e1225]:
+                - link "Shop for State and Local Employees" [ref=e1226] [cursor=pointer]:
+                  - /url: /us_epp_67909/store
+              - listitem [ref=e1227]:
+                - link "Shop for Federal Employees" [ref=e1228] [cursor=pointer]:
+                  - /url: /us_epp_55499/store
+        - generic [ref=e1229]:
+          - generic:
+            - heading "Apple Values" [level=3] [ref=e1230]
+            - list [ref=e1232]:
+              - listitem [ref=e1233]:
+                - link "Accessibility" [ref=e1234] [cursor=pointer]:
+                  - /url: /accessibility/
+              - listitem [ref=e1235]:
+                - link "Education" [ref=e1236] [cursor=pointer]:
+                  - /url: /education-initiative/
+              - listitem [ref=e1237]:
+                - link "Environment" [ref=e1238] [cursor=pointer]:
+                  - /url: /environment/
+              - listitem [ref=e1239]:
+                - link "Inclusion and Diversity" [ref=e1240] [cursor=pointer]:
+                  - /url: /diversity/
+              - listitem [ref=e1241]:
+                - link "Privacy" [ref=e1242] [cursor=pointer]:
+                  - /url: /privacy/
+              - listitem [ref=e1243]:
+                - link "Racial Equity and Justice" [ref=e1244] [cursor=pointer]:
+                  - /url: /racial-equity-justice-initiative/
+              - listitem [ref=e1245]:
+                - link "Supply Chain Innovation" [ref=e1246] [cursor=pointer]:
+                  - /url: /supply-chain/
+          - generic:
+            - heading "About Apple" [level=3] [ref=e1247]
+            - list [ref=e1249]:
+              - listitem [ref=e1250]:
+                - link "Newsroom" [ref=e1251] [cursor=pointer]:
+                  - /url: /newsroom/
+              - listitem [ref=e1252]:
+                - link "Apple Leadership" [ref=e1253] [cursor=pointer]:
+                  - /url: /leadership/
+              - listitem [ref=e1254]:
+                - link "Career Opportunities" [ref=e1255] [cursor=pointer]:
+                  - /url: /careers/us/
+              - listitem [ref=e1256]:
+                - link "Investors" [ref=e1257] [cursor=pointer]:
+                  - /url: https://investor.apple.com/
+              - listitem [ref=e1258]:
+                - link "Ethics & Compliance" [ref=e1259] [cursor=pointer]:
+                  - /url: /compliance/
+              - listitem [ref=e1260]:
+                - link "Events" [ref=e1261] [cursor=pointer]:
+                  - /url: /apple-events/
+              - listitem [ref=e1262]:
+                - link "Contact Apple" [ref=e1263] [cursor=pointer]:
+                  - /url: /contact/
+      - generic [ref=e1264]:
+        - generic [ref=e1265]:
+          - text: "More ways to shop:"
+          - link "Find an Apple Store" [ref=e1266] [cursor=pointer]:
+            - /url: /retail/
+          - text: or
+          - link "other retailer" [ref=e1267] [cursor=pointer]:
+            - /url: https://locate.apple.com/
+          - text: near you.
+          - generic [ref=e1268]:
+            - text: Or call
+            - link "1-800-MY-APPLE" [ref=e1269] [cursor=pointer]:
+              - /url: tel:1-800-692-7753
+            - text: (1-800-692-7753).
+        - generic [ref=e1270]:
+          - generic [ref=e1271]:
+            - generic [ref=e1272]: Copyright © 2026 Apple Inc. All rights reserved.
+            - list [ref=e1273]:
+              - listitem [ref=e1274]:
+                - link "Privacy Policy" [ref=e1275] [cursor=pointer]:
+                  - /url: /legal/privacy/
+              - listitem [ref=e1276]:
+                - link "Terms of Use" [ref=e1277] [cursor=pointer]:
+                  - /url: /legal/internet-services/terms/site.html
+              - listitem [ref=e1278]:
+                - link "Sales and Refunds" [ref=e1279] [cursor=pointer]:
+                  - /url: /us/shop/goto/help/sales_refunds
+              - listitem [ref=e1280]:
+                - link "Legal" [ref=e1281] [cursor=pointer]:
+                  - /url: /legal/
+              - listitem [ref=e1282]:
+                - link "Site Map" [ref=e1283] [cursor=pointer]:
+                  - /url: /sitemap/
+          - link "United States. Choose your country or region" [ref=e1285] [cursor=pointer]:
+            - /url: /choose-country-region/
+            - text: United States
