@@ -45,12 +45,12 @@ export function GoalBar(props: GoalBarProps) {
     props.onSet({ text: goal.text, maxRounds: goal.maxRounds, reviewModel: goal.reviewModel, active: !goal.active });
   };
 
-  const input: React.CSSProperties = { fontFamily: MONO, fontSize: 11, color: "#C9C9D6", background: "#101017", border: "2px solid #2A2A38", padding: "6px 8px", outline: "none" };
+  const input: React.CSSProperties = { fontFamily: MONO, fontSize: 11, color: "#C9C9D6", background: "#121219", border: "2px solid #2C2C3E", padding: "6px 8px", outline: "none" };
   const btn = (bg: string, fg: string): React.CSSProperties => ({ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: bg, color: fg, border: 0, padding: "6px 12px", cursor: props.disabled ? "not-allowed" : "pointer", opacity: props.disabled ? 0.5 : 1 });
 
   return (
-    <div style={{ background: "#15151C", border: `2px solid ${locked ? "#22D3EE" : "#2A2A38"}`, display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: "2px solid #2A2A38" }}>
+    <div style={{ background: "#171721", border: `2px solid ${locked ? "#22D3EE" : "#2C2C3E"}`, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderBottom: "2px solid #2C2C3E" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>GOAL</span>
         {goal ? (
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -78,11 +78,11 @@ export function GoalBar(props: GoalBarProps) {
           <input type="number" min={1} max={20} value={rounds} disabled={props.disabled} onChange={(e) => setRounds(e.target.value)} style={{ ...input, width: 52 }} />
           <input type="text" value={reviewModel} disabled={props.disabled} onChange={(e) => setReviewModel(e.target.value)} placeholder="review model (optional)" style={{ ...input, flex: "1 1 140px", minWidth: 100 }} />
           <button type="button" disabled={props.disabled} onClick={() => set()} style={btn("#22D3EE", "#0D0D12")}>{goal ? "UPDATE" : "SET"}</button>
-          {goal && <button type="button" disabled={props.disabled} onClick={toggleLock} style={btn("#101017", "#C9C9D6")}>{active ? "PAUSE" : "RESUME"}</button>}
-          {goal && <button type="button" disabled={props.disabled} onClick={props.onClear} style={btn("#101017", "#F87171")}>CLEAR</button>}
+          {goal && <button type="button" disabled={props.disabled} onClick={toggleLock} style={btn("#121219", "#C9C9D6")}>{active ? "PAUSE" : "RESUME"}</button>}
+          {goal && <button type="button" disabled={props.disabled} onClick={props.onClear} style={btn("#121219", "#F87171")}>CLEAR</button>}
         </div>
         {review && verdict !== "pass" && (
-          <div style={{ fontSize: 10, lineHeight: 1.5, color: "#C9C9D6", background: "#101017", border: `2px solid ${badgeColor}`, padding: "6px 8px", whiteSpace: "pre-wrap", maxHeight: 96, overflowY: "auto" }}>
+          <div style={{ fontSize: 10, lineHeight: 1.5, color: "#C9C9D6", background: "#121219", border: `2px solid ${badgeColor}`, padding: "6px 8px", whiteSpace: "pre-wrap", maxHeight: 96, overflowY: "auto" }}>
             {review.text.split("\n").slice(0, 6).join("\n")}
           </div>
         )}

@@ -73,15 +73,15 @@ export function BackgroundPanel(props: { jobEpoch: number; send: (m: ClientMessa
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} title="show background jobs"
-        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", position: "relative", zIndex: Z.panel, background: "#101017", color: running ? "#4ADE80" : "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
+        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", position: "relative", zIndex: Z.panel, background: "#121219", color: running ? "#4ADE80" : "#6B6B7B", border: "2px solid #2C2C3E", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
         ◂ JOBS{running ? ` ${running}` : ""}
       </button>
     );
   }
 
   return (
-    <div data-testid="right-panel" style={{ flex: "0 0 244px", width: 244, alignSelf: "stretch", position: "relative", zIndex: Z.panel, minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+    <div data-testid="right-panel" style={{ flex: "0 0 244px", width: 244, alignSelf: "stretch", position: "relative", zIndex: Z.panel, minHeight: 0, background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>JOBS{running ? ` · ${running} RUNNING` : ""}</span>
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={refresh} title="refresh" style={{ fontFamily: MONO, fontSize: 11, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>↻</button>
@@ -104,7 +104,7 @@ function JobRow(props: { job: JobInfo; now: number; onView: () => void; onKill: 
   const { job } = props;
   const live = job.status === "running";
   return (
-    <div style={{ border: "1px solid #2A2A38", background: "#101017", padding: "7px 8px", marginBottom: 6 }}>
+    <div style={{ border: "1px solid #2C2C3E", background: "#121219", padding: "7px 8px", marginBottom: 6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ width: 7, height: 7, borderRadius: 4, background: STATUS_COLOR[job.status], flex: "0 0 auto", animation: live ? "domTab 1.4s ease-in-out infinite" : undefined }} />
         <span style={{ fontSize: 10, color: "#C9C9D6" }}>job {job.id}</span>
@@ -118,7 +118,7 @@ function JobRow(props: { job: JobInfo; now: number; onView: () => void; onKill: 
         {job.exitCode != null && !live && <span>exit {job.exitCode}</span>}
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <button type="button" onClick={props.onView} style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, background: "transparent", color: "#8A8A9B", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>OUTPUT</button>
+        <button type="button" onClick={props.onView} style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, background: "transparent", color: "#8A8A9B", border: "1px solid #2C2C3E", padding: "3px 8px", cursor: "pointer" }}>OUTPUT</button>
         {live && <button type="button" onClick={props.onKill} style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, background: "transparent", color: "#F87171", border: "1px solid #402028", padding: "3px 8px", cursor: "pointer" }}>KILL</button>}
       </div>
     </div>
@@ -128,8 +128,8 @@ function JobRow(props: { job: JobInfo; now: number; onView: () => void; onKill: 
 function OutputModal(props: { id: string; output: string; loading: boolean; onClose: () => void }) {
   return (
     <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#101017", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
           <span style={{ fontSize: 11, letterSpacing: 1, color: "#4ADE80" }}>job {props.id} · output</span>
           <button type="button" onClick={props.onClose} style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
         </div>

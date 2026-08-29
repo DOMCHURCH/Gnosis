@@ -101,12 +101,12 @@ export function TerminalDock(props: { tabId: number | null; open: boolean; onClo
   if (!open) return null;
 
   return (
-    <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height, zIndex: Z.dock, background: "#0B0B10", borderTop: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-      <div onMouseDown={(e) => { dragRef.current = { y: e.clientY, h: height }; }} style={{ height: 6, cursor: "ns-resize", background: "#15151C", borderBottom: "1px solid #2A2A38" }} />
-      <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderBottom: "2px solid #2A2A38" }}>
+    <div data-testid="terminal-dock" style={{ position: "fixed", left: 0, right: 0, bottom: 0, height, zIndex: Z.dock, background: "#0B0B10", borderTop: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+      <div data-testid="dock-handle" onMouseDown={(e) => { dragRef.current = { y: e.clientY, h: height }; }} style={{ height: 6, cursor: "ns-resize", background: "#171721", borderBottom: "1px solid #2C2C3E" }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderBottom: "2px solid #2C2C3E" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B", marginRight: 6 }}>TERMINAL</span>
         {tabs.map((id, i) => (
-          <div key={id} style={{ display: "flex", alignItems: "center", background: id === activeTab ? "#1D1D27" : "transparent", border: `1px solid ${id === activeTab ? "#22D3EE" : "#2A2A38"}` }}>
+          <div key={id} style={{ display: "flex", alignItems: "center", background: id === activeTab ? "#23232F" : "transparent", border: `1px solid ${id === activeTab ? "#22D3EE" : "#2C2C3E"}` }}>
             <button type="button" onClick={() => setActiveTab(id)} style={{ fontFamily: MONO, fontSize: 10, background: "transparent", color: id === activeTab ? "#C9C9D6" : "#6B6B7B", border: 0, padding: "3px 8px", cursor: "pointer" }}>sh {i + 1}</button>
             {tabs.length > 1 && <button type="button" onClick={() => closeTab(id)} title="close" style={{ fontFamily: MONO, fontSize: 10, background: "transparent", color: "#6B6B7B", border: 0, padding: "0 6px 0 0", cursor: "pointer" }}>✕</button>}
           </div>

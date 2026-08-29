@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Gnosis</title>
+    <style>
+      :root { --bg: #0d0d12; --cyan: #22d3ee; --magenta: #e879f9; --dim: #6b7280; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background:
+          radial-gradient(700px 420px at 30% 20%, rgba(34, 211, 238, 0.08), transparent 70%),
+          radial-gradient(620px 400px at 72% 80%, rgba(232, 121, 249, 0.07), transparent 72%),
+          var(--bg);
+        color: var(--dim);
+        font: 10px/1.6 ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, Consolas, monospace;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        /* The window is frameless, so the loading screen has to be draggable too
+         * or the app cannot be moved while it starts. */
+        -webkit-app-region: drag;
+      }
+      img {
+        width: 76px;
+        height: 76px;
+        border-radius: 18px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 40px -10px rgba(34, 211, 238, 0.35);
+        animation: breathe 2.4s ease-in-out infinite;
+      }
+      @keyframes breathe {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        img { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <img src="icon.png" alt="" />
+    <div>Starting Gnosis…</div>
+  </body>
+</html>

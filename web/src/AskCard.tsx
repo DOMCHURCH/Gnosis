@@ -8,7 +8,7 @@ import { useState } from "react";
 export function AskCard(props: { options: string[]; onAnswer: (text: string) => void }) {
   const [draft, setDraft] = useState("");
   const btn = {
-    fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017",
+    fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#121219",
     color: "#C9C9D6", border: "2px solid #E879F9", padding: "6px 12px", cursor: "pointer",
   } as const;
   return (
@@ -28,9 +28,9 @@ export function AskCard(props: { options: string[]; onAnswer: (text: string) => 
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="type your own answer…"
-          style={{ flex: 1, fontFamily: "inherit", fontSize: 11, background: "#0D0D12", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "6px 8px" }}
+          style={{ flex: 1, fontFamily: "inherit", fontSize: 11, background: "#0D0D12", color: "#C9C9D6", border: "2px solid #2C2C3E", padding: "6px 8px" }}
         />
-        <button type="submit" style={{ ...btn, borderColor: "#2A2A38" }}>SEND</button>
+        <button type="submit" style={{ ...btn, borderColor: "#2C2C3E" }}>SEND</button>
       </form>
     </div>
   );

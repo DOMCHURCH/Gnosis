@@ -27,12 +27,12 @@ function bytes(n: number): string {
 
 const card = {
   display: "flex", alignItems: "center", gap: 10, background: "#0B0B10",
-  border: "1px solid #2A2A38", padding: "8px 10px", cursor: "pointer",
+  border: "1px solid #2C2C3E", padding: "8px 10px", cursor: "pointer",
 } as const;
 
 const btn = {
   fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent",
-  color: "#818CF8", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer",
+  color: "#818CF8", border: "1px solid #2C2C3E", padding: "3px 8px", cursor: "pointer",
 } as const;
 
 /**
@@ -111,7 +111,7 @@ export function FileOutputView(props: {
           src={src}
           alt={out.name}
           onClick={() => setLightbox(true)}
-          style={{ maxWidth: 300, maxHeight: 300, border: "1px solid #2A2A38", cursor: "zoom-in", display: "block" }}
+          style={{ maxWidth: 300, maxHeight: 300, border: "1px solid #2C2C3E", cursor: "zoom-in", display: "block" }}
         />
         {props.onSaveVault && (
           <div style={{ display: "flex" }}>
@@ -125,7 +125,7 @@ export function FileOutputView(props: {
             onClick={() => setLightbox(false)}
             style={{ position: "fixed", inset: 0, background: "#0D0D12EE", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay, cursor: "zoom-out" }}
           >
-            <img src={src} alt={out.name} style={{ maxWidth: "92vw", maxHeight: "92vh", border: "1px solid #2A2A38" }} />
+            <img src={src} alt={out.name} style={{ maxWidth: "92vw", maxHeight: "92vh", border: "1px solid #2C2C3E" }} />
           </div>
         )}
       </div>
@@ -159,12 +159,12 @@ export function FileOutputView(props: {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {header}
-        <div style={{ overflowX: "auto", border: "1px solid #2A2A38" }}>
+        <div style={{ overflowX: "auto", border: "1px solid #2C2C3E" }}>
           <table style={{ borderCollapse: "collapse", fontFamily: MONO, fontSize: 10, minWidth: "100%" }}>
             <thead>
               <tr>
                 {head.map((c, i) => (
-                  <th key={i} style={{ textAlign: "left", padding: "5px 8px", background: "#15151C", color: "#818CF8", borderBottom: "1px solid #2A2A38", whiteSpace: "nowrap" }}>{c}</th>
+                  <th key={i} style={{ textAlign: "left", padding: "5px 8px", background: "#171721", color: "#818CF8", borderBottom: "1px solid #2C2C3E", whiteSpace: "nowrap" }}>{c}</th>
                 ))}
               </tr>
             </thead>
@@ -208,7 +208,7 @@ export function FileOutputView(props: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       {header}
-      <div style={{ background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: "3px solid #818CF8", padding: "6px 8px", overflowX: "auto" }}>
+      <div style={{ background: "#0B0B10", border: "1px solid #2C2C3E", borderLeft: "3px solid #818CF8", padding: "6px 8px", overflowX: "auto" }}>
         <pre style={{ margin: 0, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre" }}>
           <code dangerouslySetInnerHTML={{ __html: hl(shown, out.lang) }} />
         </pre>

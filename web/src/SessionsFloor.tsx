@@ -137,7 +137,7 @@ function messageToText(m: ChatMsg): string {
     .join("\n\n")
     .trim();
 }
-const ZBTN = { fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 10px", cursor: "pointer", minWidth: 30 } as const;
+const ZBTN = { fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#121219", color: "#C9C9D6", border: "2px solid #2C2C3E", padding: "5px 10px", cursor: "pointer", minWidth: 30 } as const;
 
 // Live viewport width so we can branch layout (inline styles → no CSS media query).
 // Returns 0 until mounted so SSR/first paint doesn't guess wrong.
@@ -247,7 +247,7 @@ export function SessionsFloor(props: SessionsProps) {
               <button
                 type="button"
                 onClick={() => setNewTaskOpen(true)}
-                style={{ minHeight: 52, margin: "10px 10px 0", background: "#15151C", border: "2px solid #22D3EE", color: "#22D3EE", fontFamily: MONO, fontSize: 12, letterSpacing: 2, cursor: "pointer" }}
+                style={{ minHeight: 52, margin: "10px 10px 0", background: "#171721", border: "2px solid #22D3EE", color: "#22D3EE", fontFamily: MONO, fontSize: 12, letterSpacing: 2, cursor: "pointer" }}
               >
                 + NEW TASK
               </button>
@@ -256,14 +256,14 @@ export function SessionsFloor(props: SessionsProps) {
           )}
           {mobileTab === "floor" && (
             <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ background: "#171721", border: "2px solid #2C2C3E", borderLeft: `6px solid ${model.sessionAccent}`, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTitle}</span>
                 <span style={{ marginLeft: "auto", fontSize: 9, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
               </div>
-              <div style={{ position: "relative", background: "#15151C", border: "2px solid #2A2A38", padding: 8 }}>
+              <div style={{ position: "relative", background: "#171721", border: "2px solid #2C2C3E", padding: 8 }}>
                 {/* Context-usage bar across the very top of the floor container. */}
                 {model.tokenBar.known && (
-                  <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, background: "#101017" }}>
+                  <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, background: "#121219" }}>
                     <div style={{ width: `${model.tokenBar.pct}%`, height: "100%", background: model.tokenBar.color }} />
                   </div>
                 )}
@@ -279,7 +279,7 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         {/* bottom navigation */}
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: Z.dock, display: "flex", background: "#15151C", borderTop: "2px solid #2A2A38" }}>
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: Z.dock, display: "flex", background: "#171721", borderTop: "2px solid #2C2C3E" }}>
           {nav.map(([id, icon, label]) => {
             const active = mobileTab === id;
             return (
@@ -302,8 +302,8 @@ export function SessionsFloor(props: SessionsProps) {
         {/* agent detail bottom sheet (tap an agent on the FLOOR tab) */}
         {sel && (
           <div onClick={props.onClose} style={{ position: "fixed", inset: 0, zIndex: Z.overlay, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "flex-end" }}>
-            <div className="dom-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "72vh", overflow: "auto", background: "#0D0D12", borderTop: "2px solid #2A2A38", display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}><div style={{ width: 40, height: 4, background: "#2A2A38" }} /></div>
+            <div className="dom-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "72vh", overflow: "auto", background: "#0D0D12", borderTop: "2px solid #2C2C3E", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", justifyContent: "center", padding: "6px 0" }}><div style={{ width: 40, height: 4, background: "#2C2C3E" }} /></div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 14px 10px" }}>
                 <span style={{ width: 9, height: 9, background: sel.stateColor }} />
                 <span style={{ fontSize: 14, letterSpacing: 1, color: sel.color }}>{sel.name}</span>
@@ -312,9 +312,9 @@ export function SessionsFloor(props: SessionsProps) {
               </div>
               <div style={{ padding: "0 14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>CURRENT TASK</div>
-                <div style={{ fontSize: 12, lineHeight: 1.6, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 10 }}>{sel.action}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.6, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 10 }}>{sel.action}</div>
                 <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>RECENT OUTPUT</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, background: "#0B0B10", border: "2px solid #2A2A38", padding: 10 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, background: "#0B0B10", border: "2px solid #2C2C3E", padding: 10 }}>
                   {(sel.output.length ? sel.output : ["no output yet"]).map((o, i) => (<div key={i} style={{ fontSize: 11, lineHeight: 1.5, color: "#6B6B7B", whiteSpace: "pre-wrap" }}>{o}</div>))}
                 </div>
               </div>
@@ -327,12 +327,12 @@ export function SessionsFloor(props: SessionsProps) {
           <div style={{ position: "fixed", inset: 0, zIndex: Z.permission, background: "rgba(5,5,8,0.7)", display: "flex", alignItems: "flex-end" }}>
             <div className="dom-sheet" style={{ width: "100%", background: "#0D0D12", borderTop: "2px solid #FBBF24", display: "flex", flexDirection: "column", padding: 14, gap: 12 }}>
               <div style={{ fontSize: 10, letterSpacing: 2, color: "#FBBF24" }}>APPROVAL NEEDED</div>
-              <div style={{ fontSize: 12, lineHeight: 1.5, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 10, maxHeight: "40vh", overflow: "auto", whiteSpace: "pre-wrap" }}>
+              <div style={{ fontSize: 12, lineHeight: 1.5, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 10, maxHeight: "40vh", overflow: "auto", whiteSpace: "pre-wrap" }}>
                 {pendingPerm.segments.map((s) => s.text).join("\n")}
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button type="button" onClick={() => props.onApproveMsg(pendingPerm.permId)} style={{ flex: 1, minHeight: 44, fontFamily: MONO, fontSize: 12, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, cursor: "pointer" }}>APPROVE</button>
-                <button type="button" onClick={() => props.onDenyMsg(pendingPerm.permId)} style={{ flex: 1, minHeight: 44, fontFamily: MONO, fontSize: 12, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", cursor: "pointer" }}>DENY</button>
+                <button type="button" onClick={() => props.onDenyMsg(pendingPerm.permId)} style={{ flex: 1, minHeight: 44, fontFamily: MONO, fontSize: 12, letterSpacing: 1, background: "#171721", color: "#C9C9D6", border: "2px solid #2C2C3E", cursor: "pointer" }}>DENY</button>
               </div>
             </div>
           </div>
@@ -348,7 +348,7 @@ export function SessionsFloor(props: SessionsProps) {
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px calc(${GUTTER.bottom}px + var(--dom-dock-h, 0px))`, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 1560, display: "flex", flexDirection: "column", gap: 16 }}>
         {/* header */}
-        <div data-testid="page-header" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2A2A38", paddingBottom: 12, flexWrap: "wrap" }}>
+        <div data-testid="page-header" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2C2C3E", paddingBottom: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
             <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
             <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2, whiteSpace: "nowrap" }}>TERMINAL SESSIONS · ONE FLOOR EACH</span>
@@ -372,13 +372,13 @@ export function SessionsFloor(props: SessionsProps) {
                   <span style={{ width: 8, height: 8, background: f.dot, ...(f.dotAnim || {}) }} />
                 </button>
               ))}
-              <button type="button" onClick={props.onAddFloor} style={{ fontFamily: "inherit", width: 64, height: 40, background: "#101017", color: "#6B6B7B", border: "2px dashed #2A2A38", cursor: "pointer", fontSize: 15 }}>+</button>
+              <button type="button" onClick={props.onAddFloor} style={{ fontFamily: "inherit", width: 64, height: 40, background: "#121219", color: "#6B6B7B", border: "2px dashed #2C2C3E", cursor: "pointer", fontSize: 15 }}>+</button>
               <div style={{ fontSize: 8, letterSpacing: 1, color: "#4A4A58", textAlign: "center", lineHeight: 1.5, paddingTop: 4 }}>CLI<br />WINDOWS</div>
             </div>
 
             {/* center column */}
             <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-              <div data-testid="session-title" style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div data-testid="session-title" style={{ background: "#171721", border: "2px solid #2C2C3E", borderLeft: `6px solid ${model.sessionAccent}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {model.sessionNum && <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "#4A4A58", whiteSpace: "nowrap" }}>{model.sessionNum}</span>}
                 <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "60%" }}>{model.sessionTitle}</span>
                 <span style={{ fontSize: 13, color: "#6B6B7B", letterSpacing: 1, flex: "1 1 200px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTask}</span>
@@ -388,7 +388,7 @@ export function SessionsFloor(props: SessionsProps) {
               {narrow && !floorOpen && (
                 <ZoneStrip zones={L.zoneLabels} onExpand={() => setFloorOpen(true)} />
               )}
-              <div data-testid="floor-container" style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 14, position: "relative", zIndex: Z.floor, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
+              <div data-testid="floor-container" style={{ background: "#171721", border: "2px solid #2C2C3E", padding: 14, position: "relative", zIndex: Z.floor, display: narrow && !floorOpen ? "none" : "flex", flexDirection: "column", gap: 12 }}>
                 <div data-testid="floor-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, letterSpacing: 2, color: "#6B6B7B" }}>
                     {/* Live system state at a glance: green = idle, cyan = working,
@@ -404,7 +404,7 @@ export function SessionsFloor(props: SessionsProps) {
                   </span>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button type="button" onClick={() => { setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2))); }} style={ZBTN}>−</button>
-                    <button type="button" onClick={() => { setZoom(1); }} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2A2A38" }}>FIT</button>
+                    <button type="button" onClick={() => { setZoom(1); }} style={{ ...ZBTN, color: zoom === 1 ? "#22D3EE" : "#C9C9D6", borderColor: zoom === 1 ? "#22D3EE" : "#2C2C3E" }}>FIT</button>
                     <button type="button" onClick={() => { setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2))); }} style={ZBTN}>+</button>
                   </div>
                 </div>
@@ -413,7 +413,7 @@ export function SessionsFloor(props: SessionsProps) {
                   {/* A 2px context meter across the very top of the floor: cumulative
                       session tokens against the model's context limit. */}
                   {model.tokenBar.known && (
-                    <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, zIndex: Z.floorMeter, background: "#101017" }}>
+                    <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, zIndex: Z.floorMeter, background: "#121219" }}>
                       <div style={{ width: `${model.tokenBar.pct}%`, height: "100%", background: model.tokenBar.color }} />
                     </div>
                   )}
@@ -445,8 +445,8 @@ export function SessionsFloor(props: SessionsProps) {
               the office floor expands to fill the freed width. */}
           {!floating && (
           <div style={{ flex: "1 1 320px", minWidth: "min(100%, 300px)", display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", maxHeight: 320 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+            <div style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", maxHeight: 320 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
                 <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>WHO IS WORKING</span>
                 <span style={{ fontSize: 9, letterSpacing: 1, color: model.offFloorColor }}>{model.offFloorLine}</span>
               </div>
@@ -469,8 +469,8 @@ export function SessionsFloor(props: SessionsProps) {
 
             {props.streamPanel}
 
-            <div ref={dockRef} style={{ background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
-              {!narrow && <div onMouseDown={startResize} title="drag to resize the chat" style={{ height: 8, flex: "0 0 auto", cursor: "ns-resize", background: "#101017", borderBottom: "1px solid #2A2A38" }} />}
+            <div ref={dockRef} style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", position: "relative", ...(narrow ? { flex: "1 1 auto", minHeight: 340 } : { height: chatHeight ?? defaultChatH(), minHeight: CHAT_MIN_H, flex: "0 0 auto" }) }}>
+              {!narrow && <div onMouseDown={startResize} title="drag to resize the chat" style={{ height: 8, flex: "0 0 auto", cursor: "ns-resize", background: "#121219", borderBottom: "1px solid #2C2C3E" }} />}
               <ChatPanel {...props} detached={false} canDetach={!narrow} onToggleDetach={detach} />
             </div>
           </div>
@@ -479,7 +479,7 @@ export function SessionsFloor(props: SessionsProps) {
           {!narrow && props.rightPanel}
         </div>
 
-        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2A2A38", paddingTop: 10 }}>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", fontSize: 9, letterSpacing: 1, color: "#4A4A58", borderTop: "2px solid #2C2C3E", paddingTop: 10 }}>
           <span>window.gnosisOffice · place · fill · clearFloor · add · update · think · remove · list · say · setFloor · addFloor</span>
           <span>capacity 1 · 2 · 8 · 2 · 6 — extras stay in WHO IS WORKING as OFF-FLOOR</span>
         </div>
@@ -488,7 +488,7 @@ export function SessionsFloor(props: SessionsProps) {
 
         {/* Detached chat: a floating, draggable, resizable panel. Snap back with ⊟. */}
         {floating && (
-          <div style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: Z.float, background: "#15151C", border: "2px solid #2A2A38", boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
+          <div style={{ position: "fixed", left: floatRect.x, top: floatRect.y, width: floatRect.w, height: floatRect.h, zIndex: Z.float, background: "#171721", border: "2px solid #2C2C3E", boxShadow: "0 24px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", ...(snapping ? { transition: "transform .2s ease, opacity .2s ease", transform: "scale(0.92)", opacity: 0, transformOrigin: "top right" } : {}) }}>
             <ChatPanel {...props} detached canDetach onToggleDetach={snapBack} onHeaderMouseDown={startFloatDrag} />
             {EDGES.map((edge) => (
               <div key={edge} onMouseDown={startFloatResize(edge)} style={{ position: "absolute", cursor: RESIZE_CURSOR[edge], zIndex: Z.floorMeter, ...RESIZE_POS[edge] }} />
@@ -499,11 +499,11 @@ export function SessionsFloor(props: SessionsProps) {
 
       {/* Narrow/mobile: a FILES button that opens the file browser as a bottom sheet. */}
       {narrow && props.leftPanel && (
-        <button type="button" onClick={() => setFilesOpen(true)} title="files" style={{ position: "fixed", right: 14, bottom: mobile ? 68 : 14, zIndex: Z.chrome, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#22D3EE", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>≡ FILES</button>
+        <button type="button" onClick={() => setFilesOpen(true)} title="files" style={{ position: "fixed", right: 14, bottom: mobile ? 68 : 14, zIndex: Z.chrome, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#121219", color: "#22D3EE", border: "2px solid #2C2C3E", padding: "8px 12px", cursor: "pointer" }}>≡ FILES</button>
       )}
       {narrow && filesOpen && props.leftPanel && (
         <div onClick={() => setFilesOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: Z.overlay, display: "flex", alignItems: "flex-end" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2A2A38" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2C2C3E" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}>
               <button type="button" onClick={() => setFilesOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
             </div>
@@ -514,11 +514,11 @@ export function SessionsFloor(props: SessionsProps) {
 
       {/* Narrow/mobile: a JOBS button that opens the background panel as a bottom sheet. */}
       {narrow && props.rightPanel && (
-        <button type="button" onClick={() => setJobsOpen(true)} title="background jobs" style={{ position: "fixed", right: 14, bottom: mobile ? 112 : 58, zIndex: Z.chrome, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#101017", color: "#4ADE80", border: "2px solid #2A2A38", padding: "8px 12px", cursor: "pointer" }}>⎈ JOBS</button>
+        <button type="button" onClick={() => setJobsOpen(true)} title="background jobs" style={{ position: "fixed", right: 14, bottom: mobile ? 112 : 58, zIndex: Z.chrome, fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#121219", color: "#4ADE80", border: "2px solid #2C2C3E", padding: "8px 12px", cursor: "pointer" }}>⎈ JOBS</button>
       )}
       {narrow && jobsOpen && props.rightPanel && (
         <div onClick={() => setJobsOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", zIndex: Z.overlay, display: "flex", alignItems: "flex-end" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2A2A38" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxHeight: "70vh", display: "flex", flexDirection: "column", background: "#0D0D12", borderTop: "2px solid #2C2C3E" }}>
             <div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}>
               <button type="button" onClick={() => setJobsOpen(false)} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕ close</button>
             </div>
@@ -529,14 +529,14 @@ export function SessionsFloor(props: SessionsProps) {
 
       {/* Mobile: session selector as a fixed bottom tab bar with per-session activity dots. */}
       {mobile && (
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: Z.sessionSelector, display: "flex", gap: 6, padding: "8px 10px", background: "#0D0D12", borderTop: "2px solid #2A2A38", overflowX: "auto" }}>
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: Z.sessionSelector, display: "flex", gap: 6, padding: "8px 10px", background: "#0D0D12", borderTop: "2px solid #2C2C3E", overflowX: "auto" }}>
           {model.floorTabs.map((f) => (
             <button key={f.key} type="button" onClick={() => props.onSelectFloor(f.id)} title={f.name} style={{ fontFamily: MONO, flex: "0 0 auto", minWidth: 44, maxWidth: 96, height: 40, background: f.bg, color: f.fg, border: `2px solid ${f.border}`, borderBottom: `4px solid ${f.accent}`, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "0 8px" }}>
               <span style={{ fontSize: 10, fontWeight: 700, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label || f.num}</span>
               <span style={{ width: 7, height: 7, background: f.dot, ...(f.dotAnim || {}) }} />
             </button>
           ))}
-          <button type="button" onClick={props.onAddFloor} style={{ fontFamily: MONO, flex: "0 0 auto", width: 40, height: 40, background: "#101017", color: "#6B6B7B", border: "2px dashed #2A2A38", cursor: "pointer", fontSize: 15 }}>+</button>
+          <button type="button" onClick={props.onAddFloor} style={{ fontFamily: MONO, flex: "0 0 auto", width: 40, height: 40, background: "#121219", color: "#6B6B7B", border: "2px dashed #2C2C3E", cursor: "pointer", fontSize: 15 }}>+</button>
         </div>
       )}
     </div>
@@ -549,7 +549,7 @@ export function SessionsFloor(props: SessionsProps) {
 // from the event stream. Keeps the approve/deny/dismiss/steer controls.
 function Stat(props: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, background: "#0B0B10", border: "1px solid #2A2A38", padding: "5px 7px", minWidth: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, background: "#0B0B10", border: "1px solid #2C2C3E", padding: "5px 7px", minWidth: 0 }}>
       <span style={{ fontSize: 8, letterSpacing: 1, color: "#4A4A58" }}>{props.label}</span>
       <span style={{ fontSize: 12, color: props.color ?? "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.value}</span>
     </div>
@@ -573,8 +573,8 @@ function AgentTelemetryPanel(props: {
   const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
   return (
-    <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: Z.floorCard, width: "min(340px, 94%)", maxHeight: "94%", overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: "2px solid #2A2A38" }}>
+    <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: Z.floorCard, width: "min(340px, 94%)", maxHeight: "94%", overflowY: "auto", background: "#121219", border: "2px solid #2C2C3E", boxShadow: "0 14px 34px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: "2px solid #2C2C3E" }}>
         <span style={{ width: 8, height: 8, background: sel.stateColor }} />
         <span style={{ fontSize: 12, letterSpacing: 2, color: sel.color }}>{sel.name}</span>
         <span style={{ fontSize: 9, letterSpacing: 1, color: sel.stateColor }}>{sel.state.toUpperCase()}</span>
@@ -583,7 +583,7 @@ function AgentTelemetryPanel(props: {
       </div>
       <div style={{ padding: 11, display: "flex", flexDirection: "column", gap: 9 }}>
         <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>CURRENT TASK</div>
-        <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: 8, textWrap: "pretty" }}>{sel.action}</div>
+        <div style={{ fontSize: 11, lineHeight: 1.6, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 8, textWrap: "pretty" }}>{sel.action}</div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5 }}>
           <Stat label="ELAPSED" value={elapsed} color={t.turnStart != null ? "#22D3EE" : "#6B6B7B"} />
@@ -595,12 +595,12 @@ function AgentTelemetryPanel(props: {
         </div>
 
         <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>ACTIVITY · TOKENS/TURN</div>
-        <div style={{ fontSize: 15, lineHeight: 1, letterSpacing: 1, color: "#22D3EE", background: "#0B0B10", border: "1px solid #2A2A38", padding: "6px 8px", overflow: "hidden", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 15, lineHeight: 1, letterSpacing: 1, color: "#22D3EE", background: "#0B0B10", border: "1px solid #2C2C3E", padding: "6px 8px", overflow: "hidden", whiteSpace: "nowrap" }}>
           {t.spark || <span style={{ fontSize: 10, color: "#4A4A58" }}>no turns yet</span>}
         </div>
 
         <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>TOOL CALLS</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 3, background: "#0B0B10", border: "2px solid #2A2A38", padding: 8, maxHeight: 120, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, background: "#0B0B10", border: "2px solid #2C2C3E", padding: 8, maxHeight: 120, overflowY: "auto" }}>
           {t.tools.length ? t.tools.map((tc) => (
             <div key={tc.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
               <span style={{ flex: 1, minWidth: 0, color: "#C9C9D6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tc.name}</span>
@@ -611,12 +611,12 @@ function AgentTelemetryPanel(props: {
         </div>
 
         <div style={{ display: "flex", gap: 6 }}>
-          <button type="button" onClick={props.onApprove} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: sel.awaiting ? "#FBBF24" : "#15151C", color: sel.awaiting ? "#0D0D12" : "#6B6B7B", border: 0, padding: "7px 8px", cursor: "pointer", flex: 1 }}>APPROVE</button>
-          <button type="button" onClick={props.onDeny} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DENY</button>
-          <button type="button" onClick={props.onDismiss} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#15151C", color: "#E879F9", border: "2px solid #2A2A38", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DISMISS</button>
+          <button type="button" onClick={props.onApprove} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: sel.awaiting ? "#FBBF24" : "#171721", color: sel.awaiting ? "#0D0D12" : "#6B6B7B", border: 0, padding: "7px 8px", cursor: "pointer", flex: 1 }}>APPROVE</button>
+          <button type="button" onClick={props.onDeny} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#171721", color: "#C9C9D6", border: "2px solid #2C2C3E", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DENY</button>
+          <button type="button" onClick={props.onDismiss} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#171721", color: "#E879F9", border: "2px solid #2C2C3E", padding: "5px 8px", cursor: "pointer", flex: 1 }}>DISMISS</button>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#C9C9D6", background: "#15151C", border: "2px solid #2A2A38", padding: "6px 7px", outline: "none", fontFamily: MONO }} />
+          <input type="text" value={props.steer} onChange={(e) => props.onSteerDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") props.onSteer(); }} placeholder="steer this agent…" style={{ flex: 1, minWidth: 0, fontSize: 10, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: "6px 7px", outline: "none", fontFamily: MONO }} />
           <button type="button" onClick={props.onSteer} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "6px 9px", cursor: "pointer" }}>STEER</button>
         </div>
       </div>
@@ -628,10 +628,10 @@ function AgentTelemetryPanel(props: {
 // agent-count chips. Tapping any chip expands the full floor (one tap in, HIDE out).
 function ZoneStrip(props: { zones: { key: string; name: string; count: string; accent: string; countColor: string }[]; onExpand: () => void }) {
   return (
-    <div style={{ background: "#15151C", border: "2px solid #2A2A38", padding: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+    <div style={{ background: "#171721", border: "2px solid #2C2C3E", padding: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
       <div style={{ flex: "1 1 100%", fontSize: 10, letterSpacing: 2, color: "#6B6B7B", marginBottom: 2 }}>OFFICE FLOOR · TAP A ZONE TO EXPAND</div>
       {props.zones.map((z) => (
-        <button key={z.key} type="button" onClick={props.onExpand} style={{ fontFamily: MONO, textAlign: "left", background: "#101017", border: "2px solid #2A2A38", borderLeft: `4px solid ${z.accent}`, padding: "7px 10px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3, minWidth: 96 }}>
+        <button key={z.key} type="button" onClick={props.onExpand} style={{ fontFamily: MONO, textAlign: "left", background: "#121219", border: "2px solid #2C2C3E", borderLeft: `4px solid ${z.accent}`, padding: "7px 10px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3, minWidth: 96 }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: z.accent }}>{z.name}</span>
           <span style={{ fontSize: 10, color: z.countColor }}>{z.count}</span>
         </button>
@@ -644,7 +644,7 @@ function ZoneStrip(props: { zones: { key: string; name: string; count: string; a
 // (never reflowed as prose). The dim ─── header echoes the TUI's fence rule.
 function CodeBlock(props: { lang?: string; text: string }) {
   return (
-    <div style={{ background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: "3px solid #22D3EE", padding: "6px 8px", overflowX: "auto" }}>
+    <div style={{ background: "#0B0B10", border: "1px solid #2C2C3E", borderLeft: "3px solid #22D3EE", padding: "6px 8px", overflowX: "auto" }}>
       <div style={{ fontSize: 9, letterSpacing: 1, color: "#4A4A58", marginBottom: 4, whiteSpace: "nowrap" }}>─── {props.lang || "code"}</div>
       <pre style={{ margin: 0, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre" }}>{props.text}</pre>
     </div>
@@ -674,7 +674,7 @@ function ToolLine(props: { tool: ToolPayload }) {
       {open && t.detail ? (
         /edit/i.test(t.tool) ? <DiffView detail={t.detail} path={t.primary} />
           : /write/i.test(t.tool) ? <FileView detail={t.detail} path={t.primary} />
-          : <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: `3px solid ${dot}`, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre-wrap", maxHeight: 320, overflowY: "auto" }}>{t.detail}</pre>
+          : <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2C2C3E", borderLeft: `3px solid ${dot}`, fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre-wrap", maxHeight: 320, overflowY: "auto" }}>{t.detail}</pre>
       ) : null}
     </div>
   );
@@ -692,7 +692,7 @@ function AttachBar(props: { attachments: { name: string; mime: string }[]; onRem
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
       {props.attachments.map((a, i) => (
-        <div key={`${a.name}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6, background: "#101017", border: "2px solid #2A2A38", padding: "3px 6px", fontFamily: MONO, fontSize: 10, color: "#C9C9D6", maxWidth: 220 }}>
+        <div key={`${a.name}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6, background: "#121219", border: "2px solid #2C2C3E", padding: "3px 6px", fontFamily: MONO, fontSize: 10, color: "#C9C9D6", maxWidth: 220 }}>
           <span>{icon(a.mime)}</span>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.name}>{a.name}</span>
           <button type="button" title="remove" onClick={() => props.onRemove(i)} style={{ fontFamily: MONO, fontSize: 11, lineHeight: 1, background: "transparent", color: "#F87171", border: 0, cursor: "pointer", padding: 0 }}>✕</button>
@@ -755,9 +755,9 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
   return (
     <div style={{ position: "relative" }}>
       {open && (
-        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, maxHeight: 220, overflowY: "auto", background: "#101017", border: "2px solid #2A2A38", boxShadow: "0 -8px 24px rgba(0,0,0,0.6)", zIndex: Z.inlinePopup }}>
+        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: 0, right: 0, maxHeight: 220, overflowY: "auto", background: "#121219", border: "2px solid #2C2C3E", boxShadow: "0 -8px 24px rgba(0,0,0,0.6)", zIndex: Z.inlinePopup }}>
           {items.map((it, i) => (
-            <div key={it.label} onMouseDown={(e) => { e.preventDefault(); complete(it.label); }} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "6px 9px", cursor: "pointer", background: i === pick ? "#1D1D27" : "transparent" }}>
+            <div key={it.label} onMouseDown={(e) => { e.preventDefault(); complete(it.label); }} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "6px 9px", cursor: "pointer", background: i === pick ? "#23232F" : "transparent" }}>
               <span style={{ fontSize: 11, color: "#22D3EE", whiteSpace: "nowrap" }}>{it.label}</span>
               {it.hint && <span style={{ fontSize: 10, color: "#6B6B7B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.hint}</span>}
             </div>
@@ -768,7 +768,7 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFiles(e.dataTransfer.files); }}
-        style={{ display: "flex", alignItems: "center", gap: 8, background: "#101017", border: `2px solid ${dragOver ? "#22D3EE" : "#2A2A38"}`, padding: props.mobile ? "5px 7px" : "7px 9px", minHeight: props.mobile ? 44 : undefined, boxSizing: "border-box" }}
+        style={{ display: "flex", alignItems: "center", gap: 8, background: "#121219", border: `2px solid ${dragOver ? "#22D3EE" : "#2C2C3E"}`, padding: props.mobile ? "5px 7px" : "7px 9px", minHeight: props.mobile ? 44 : undefined, boxSizing: "border-box" }}
       >
         <input ref={fileRef} type="file" multiple accept={accept} onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
         {/* On mobile: paperclip left, larger input, SEND right (one-handed). */}
@@ -822,7 +822,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
 
   return (
     <>
-      <div onMouseDown={p.onHeaderMouseDown} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2A2A38", flex: "0 0 auto", cursor: p.onHeaderMouseDown ? "move" : "default", userSelect: "none" }}>
+      <div onMouseDown={p.onHeaderMouseDown} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "2px solid #2C2C3E", flex: "0 0 auto", cursor: p.onHeaderMouseDown ? "move" : "default", userSelect: "none" }}>
         <span style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>{model.chatHeader}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {/* Interrupt. Only reachable while a turn is actually running, and it
@@ -891,7 +891,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                   <div className="msg-actions" style={{ display: "flex", justifyContent: "flex-end" }}>
                     <button type="button" title="run this message again as a background agent"
                       onClick={() => p.onRunBackground!(messageToText(m))}
-                      style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#818CF8", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
+                      style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#818CF8", border: "1px solid #2C2C3E", padding: "3px 8px", cursor: "pointer" }}>
                       ⇥ RUN IN BACKGROUND
                     </button>
                   </div>
@@ -912,7 +912,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                 {m.isApproval && (
                   <div style={{ display: "flex", gap: 6 }}>
                     <button type="button" onClick={() => p.onApproveMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#FBBF24", color: "#0D0D12", border: 0, padding: "6px 12px", cursor: "pointer" }}>APPROVE</button>
-                    <button type="button" onClick={() => p.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
+                    <button type="button" onClick={() => p.onDenyMsg(m.permId)} style={{ fontFamily: "inherit", fontSize: 10, letterSpacing: 1, background: "#121219", color: "#C9C9D6", border: "2px solid #2C2C3E", padding: "4px 12px", cursor: "pointer" }}>DENY</button>
                   </div>
                 )}
                 {p.canSaveVault && m.kind === "assistant" && (
@@ -921,7 +921,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
                     : p.onSaveMsg && (
                       <div style={{ display: "flex" }}>
                         <button type="button" title="save this message as an Obsidian note" onClick={() => p.onSaveMsg!(messageToText(m))}
-                          style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#A78BFA", border: "1px solid #2A2A38", padding: "3px 8px", cursor: "pointer" }}>
+                          style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 1, background: "transparent", color: "#A78BFA", border: "1px solid #2C2C3E", padding: "3px 8px", cursor: "pointer" }}>
                           ⬇ SAVE TO VAULT
                         </button>
                       </div>
@@ -938,7 +938,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
           </button>
         )}
       </div>
-      <div style={{ borderTop: "2px solid #2A2A38", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, flex: "0 0 auto" }}>
+      <div style={{ borderTop: "2px solid #2C2C3E", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, flex: "0 0 auto" }}>
         <AttachBar attachments={p.attachments} onRemove={p.onRemoveAttachment} />
         <ChatInput value={p.draft} onChange={p.onDraft} onSubmit={p.onSend} commands={p.commands} requestFiles={p.requestFiles} tabId={p.activeTabId} onAddFiles={p.onAddFiles} canImage={p.canImage} canDoc={p.canDoc} mobile={p.mobile} />
         {/* On mobile SEND lives inside the input row; keep only the context line here. */}

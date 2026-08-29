@@ -21,6 +21,7 @@ import { apiGet } from "./api";
 import type { VaultTree } from "./filetypes";
 import type { ConnectionsData, MemoryData } from "./types";
 import { floorFigures, sessionsModel, planOfficePlacement, STATE_COLOR } from "./sessions.js";
+import { TopBar, shellBridge } from "./TopBar";
 import { toolList, toolStats, sparkline } from "./telemetry.js";
 import { groupChat } from "./chatgroups.js";
 import type { Attachment } from "./types";
@@ -108,6 +109,15 @@ export function App() {
   const [manualEditor, setManualEditor] = useState<{ mode: "add"; zone: ZoneId; slot: number } | { mode: "edit"; agent: ManualAgent } | null>(null);
   useEffect(() => { try { localStorage.removeItem(MANUAL_KEY); } catch { /* private mode */ } }, []);
   useEffect(() => { try { localStorage.setItem(MANUAL_KEY, JSON.stringify(manuals)); } catch { /* quota/private */ } }, [manuals]);
+
+  // Present only inside the Electron shell (electron/shell-preload.cjs). In a
+  // browser this is null and the app keeps the browser's own chrome.
+  const shell = shellBridge();
+  useEffect(() => {
+    if (!shell) return;
+    document.documentElement.classList.add("gnosis-shell");
+    return () => document.documentElement.classList.remove("gnosis-shell");
+  }, [shell]);
 
   const activeId = state.selected != null && state.agents[state.selected] ? state.selected : state.order[0] ?? null;
   const model = sessionsModel(state, activeId, selFig, debugRef.current.byFloor, manuals);
@@ -273,7 +283,7 @@ export function App() {
     .slice(-40)
     .map((g) => {
       const pending = g.isApproval && !!state.permission && state.permission.id === g.permId && !g.resolved;
-      const border = g.resolved ? (g.resolved === "no" ? "#F87171" : "#4ADE80") : g.isApproval ? "#FBBF24" : "#2A2A38";
+      const border = g.resolved ? (g.resolved === "no" ? "#F87171" : "#4ADE80") : g.isApproval ? "#FBBF24" : "#2C2C3E";
       return {
         key: g.key, from: g.from, time: g.time, kind: g.kind, segments: g.segments,
         color: g.from === "YOU" ? "#C9C9D6" : tabColor,
@@ -383,10 +393,10 @@ ${text}` });
     ...(publicTokenUrl ? [{ title: "PUBLIC · tunnel", url: publicTokenUrl, color: "#4ADE80" }] : []),
   ];
   const chip = (label: string, active: boolean, onClick: () => void, leftEdge: boolean) => (
-    <button type="button" data-testid={`chip-${label.replace(/[^A-Za-z]/g, "").toLowerCase()}`} onClick={onClick} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: active ? "#1D1D27" : "#101017", color: active ? "#22D3EE" : "#6B6B7B", border: "2px solid #2A2A38", borderLeft: leftEdge ? "2px solid #2A2A38" : 0 }}>{label}</button>
+    <button type="button" data-testid={`chip-${label.replace(/[^A-Za-z]/g, "").toLowerCase()}`} onClick={onClick} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, padding: "5px 10px", cursor: "pointer", background: active ? "#23232F" : "#121219", color: active ? "#22D3EE" : "#6B6B7B", border: "2px solid #2C2C3E", borderLeft: leftEdge ? "2px solid #2C2C3E" : 0 }}>{label}</button>
   );
   const qrItem = (label: string, color: string, codes: QrCode[], title: string, last: boolean) => (
-    <button type="button" onClick={() => { setQr({ title, codes }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color, border: 0, borderBottom: last ? 0 : "1px solid #2A2A38" }}>{label}</button>
+    <button type="button" onClick={() => { setQr({ title, codes }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color, border: 0, borderBottom: last ? 0 : "1px solid #2C2C3E" }}>{label}</button>
   );
 
   const viewToggle = (
@@ -398,18 +408,29 @@ ${text}` });
         {view === "floor" && !isMobile && chip("▸_ TERMINAL", terminalOpen, () => setTerminalOpen((o) => !o), false)}
       </div>
       {serveMenu && (
-        <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", minWidth: 132 }}>
+        <div style={{ marginTop: 2, background: "#0D0D12", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", minWidth: 132 }}>
           {qrItem("ALL · QR", "#C9C9D6", allCodes, "SERVE URLS", false)}
           {allCodes.map((c, i) => qrItem(`${c.title.split(" · ")[0]} · QR`, c.color, [c], c.title.toUpperCase(), i === allCodes.length - 1))}
         </div>
       )}
     </div>
   );
+  const topBar = shell ? (
+    <TopBar
+      shell={shell}
+      modelId={activeId != null ? state.agents[activeId]?.model ?? null : null}
+      costLine={model.costLine}
+      awaitingLine={model.awaitingLine}
+      globalLine={model.globalLine}
+      awaiting={!model.awaitingLine.startsWith("0 ")}
+    />
+  ) : null;
   const qrPopover = qr ? <QrPopover title={qr.title} codes={qr.codes} onClose={() => setQr(null)} /> : null;
 
   if (view === "kanban") {
     return (
       <>
+        {topBar}
         {viewToggle}
         {qrPopover}
         <KanbanBoard state={state} overrides={kanbanOverrides} onMove={moveKanban} onOpen={openFromKanban} />
@@ -422,6 +443,7 @@ ${text}` });
 
   return (
     <>
+      {topBar}
       {viewToggle}
       {qrPopover}
       <SessionsFloor

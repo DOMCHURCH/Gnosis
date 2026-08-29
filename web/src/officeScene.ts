@@ -19,11 +19,14 @@ const U = 60;
 // Deliberately low: at the specced 2.6 the front row's back wall completely hides
 // the back row's floor from any camera inside the allowed polar range.
 const WALL_H = 1.75;
+// Pastel accents: the same five hues, lifted toward white so the rooms read as
+// soft clay under a bright ambient rather than as neon in a dark box. The
+// saturated originals fought the raised ambient light and turned muddy.
 const ACCENT: Record<string, number> = {
-  coordinator: 0xe879f9, planning: 0x818cf8, application: 0x4ade80, coding: 0x22d3ee, subagents: 0xc084fc,
+  coordinator: 0xf0a6f5, planning: 0xa5b4fc, application: 0x86efac, coding: 0x7dd3fc, subagents: 0xd8b4fe,
 };
 /** Round-robin body colours, assigned by index within a zone. */
-const VARIANTS = [0x22d3ee, 0xc084fc, 0x4ade80, 0xe879f9];
+const VARIANTS = [0x67e8f9, 0xd8b4fe, 0x86efac, 0xf0a6f5];
 const SCREEN: Record<AgentState, { color: number; intensity: number }> = {
   idle: { color: 0x1a2a1a, intensity: 0.15 },
   thinking: { color: 0x22d3ee, intensity: 0.8 },
@@ -88,22 +91,55 @@ function pixelate(t: THREE.Texture): THREE.Texture {
  *  per zone is never reached: coding, the largest zone, has exactly 8 slots.
  *  Sharing achieves the same draw-call saving without the per-instance bookkeeping
  *  that would fight the per-desk emissive screen colours.) */
+/** A BoxGeometry with its edges eased outward toward a sphere.
+ *
+ * Three has no rounded box, and an extruded one would be far more geometry than
+ * a figure at this scale needs. Instead each vertex is pushed a fraction of the
+ * way to the circumscribed sphere ("spherified cube"): faces stay recognisably
+ * flat, edges and corners swell, and smooth vertex normals give Lambert a soft
+ * falloff across them. That gradient is the whole trick — it is what reads as
+ * puffy clay rather than as a bevelled block. `amount` 0 is a plain box, 1 is a
+ * ball; the figures use a little over a tenth. */
+function puffyBox(w: number, h: number, d: number, amount = 0.14, seg = 4): THREE.BoxGeometry {
+  const g = new THREE.BoxGeometry(w, h, d, seg, seg, seg);
+  const pos = g.attributes.position;
+  const half = [w / 2, h / 2, d / 2];
+  for (let i = 0; i < pos.count; i++) {
+    const n = [pos.getX(i) / half[0], pos.getY(i) / half[1], pos.getZ(i) / half[2]];
+    const [x, y, z] = n;
+    // Spherified-cube mapping: exact for a unit cube, cheap, no trig.
+    const sx = x * Math.sqrt(1 - (y * y + z * z) / 2 + (y * y * z * z) / 3);
+    const sy = y * Math.sqrt(1 - (z * z + x * x) / 2 + (z * z * x * x) / 3);
+    const sz = z * Math.sqrt(1 - (x * x + y * y) / 2 + (x * x * y * y) / 3);
+    pos.setXYZ(
+      i,
+      (x + (sx - x) * amount) * half[0],
+      (y + (sy - y) * amount) * half[1],
+      (z + (sz - z) * amount) * half[2],
+    );
+  }
+  pos.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
+
 type Shared = ReturnType<typeof makeShared>;
 function makeShared() {
   return {
     geo: {
-      top: new THREE.BoxGeometry(1.2, 0.08, 0.7),
+      top: puffyBox(1.2, 0.08, 0.7, 0.5),
       leg: new THREE.BoxGeometry(0.08, 0.6, 0.08),
       monBase: new THREE.BoxGeometry(0.1, 0.3, 0.1),
       monScreen: new THREE.BoxGeometry(0.62, 0.38, 0.04),
       keyboard: new THREE.BoxGeometry(0.6, 0.02, 0.25),
-      body: new THREE.BoxGeometry(0.5, 0.7, 0.3),
-      head: new THREE.BoxGeometry(0.4, 0.4, 0.4),
-      arm: new THREE.BoxGeometry(0.15, 0.6, 0.15),
-      leg2: new THREE.BoxGeometry(0.18, 0.42, 0.18),
-      foot: new THREE.BoxGeometry(0.2, 0.1, 0.26),
+      // The figures are the clay: softened edges, smooth normals.
+      body: puffyBox(0.5, 0.7, 0.3),
+      head: puffyBox(0.4, 0.4, 0.4),
+      arm: puffyBox(0.15, 0.6, 0.15, 0.2),
+      leg2: puffyBox(0.18, 0.42, 0.18, 0.2),
+      foot: puffyBox(0.2, 0.1, 0.26, 0.2),
       eye: new THREE.BoxGeometry(0.07, 0.07, 0.02),
-      badge: new THREE.BoxGeometry(0.18, 0.18, 0.18),
+      badge: puffyBox(0.18, 0.18, 0.18, 0.3),
     },
     mat: {
       // MeshLambert throughout the solid props: no specular term, so every face
@@ -144,8 +180,10 @@ type Entry = {
 export function createOfficeScene(container: HTMLElement) {
   const scene = new THREE.Scene();
   const S = makeShared();
-  const floorTexSrc = tileTexture("#0d0d14", "#1a1a28");
-  const wallTexSrc = tileTexture("#141420", "#1e1e2e");
+  // Matter tiles: the grout is a hair lighter than the tile instead of a dark
+  // cut, so the grid reads as a soft seam under the brighter ambient.
+  const floorTexSrc = tileTexture("#16161f", "#1d1d2b");
+  const wallTexSrc = tileTexture("#1b1b27", "#232332");
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   // Deliberately 1, not devicePixelRatio: supersampling averages the tile
@@ -183,12 +221,16 @@ export function createOfficeScene(container: HTMLElement) {
   // near-black under three's physical light units). Applying the same ratios to
   // the values actually in use — 2.67x ambient, 2x key, 2.5x the zone lights —
   // which is what "increase" means here.
-  scene.add(new THREE.AmbientLight(0x3a3a4e, 2.2));
-  scene.add(new THREE.HemisphereLight(0x5a5a7a, 0x14141c, 1.0));
-  const sun = new THREE.DirectionalLight(0xdfe6ff, 3.0);
+  // Claymorphism wants a bright, airy room: more fill, and a softer key so the
+  // shadows under the figures are diffuse instead of hard-edged.
+  scene.add(new THREE.AmbientLight(0x555570, 3.1));
+  scene.add(new THREE.HemisphereLight(0x8a8ab0, 0x1a1a24, 1.6));
+  const sun = new THREE.DirectionalLight(0xeef2ff, 2.3);
   sun.position.set(-10, 20, 10);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
+  // A little penumbra — clay does not cast razor edges.
+  sun.shadow.radius = 3;
   sun.shadow.camera.left = -18; sun.shadow.camera.right = 18;
   sun.shadow.camera.top = 14; sun.shadow.camera.bottom = -14;
   scene.add(sun);
@@ -233,7 +275,9 @@ export function createOfficeScene(container: HTMLElement) {
 
     // Ceiling strip light — pure emissive, throws no shadow.
     const stripGeo = new THREE.BoxGeometry(r.w * 0.92, 0.06, 0.3);
-    const stripMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 2 });
+    // 0.7, not the old 2: a pastel accent driven hard just clips to white and the
+    // room loses the hue that identifies it.
+    const stripMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.7 });
     const strip = new THREE.Mesh(stripGeo, stripMat);
     // Against the back wall, NOT the room centre: at this camera angle a
     // centred ceiling strip occludes the desks and agents underneath it.
@@ -241,10 +285,15 @@ export function createOfficeScene(container: HTMLElement) {
     scene.add(strip);
     roomDisposables.push(stripGeo, stripMat);
 
-    // Neon floor border. LineSegments can't do linewidth > 1 on most drivers, so
-    // each edge is a thin emissive plane laid flat just clear of the floor.
-    const NEON = 0.05;
-    const neonMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 1 });
+    // Zone border. LineSegments can't do linewidth > 1 on most drivers, so each
+    // edge is a thin emissive plane laid flat just clear of the floor. Wider and
+    // dimmer than the old neon line, and translucent, so it reads as a soft glow
+    // bleeding onto the floor rather than a hard rule drawn on it.
+    const NEON = 0.11;
+    const neonMat = new THREE.MeshStandardMaterial({
+      color: accent, emissive: accent, emissiveIntensity: 0.5,
+      transparent: true, opacity: 0.5, depthWrite: false,
+    });
     roomDisposables.push(neonMat);
     for (const [ex, ez, ew, ed] of [
       [r.cx, r.z0, r.w, NEON], [r.cx, r.z0 + r.d, r.w, NEON],

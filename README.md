@@ -19,6 +19,31 @@ watch your agents work as blocky figures moving around a 3D office floor.
 
 </div>
 
+## Desktop App (recommended)
+
+Download the installer for a native desktop experience — no terminal setup
+required:
+
+**[Download the latest Windows installer](https://github.com/DOMCHURCH/Gnosis/releases)**
+— `Gnosis-Setup-1.1.0.exe`
+
+The desktop app includes everything:
+
+- The full browser UI with the Three.js office floor
+- Integrated terminal panel
+- Settings panel for API keys and config
+- System tray with agent status indicator
+
+It runs the same engine and the same web UI as `gnosis serve` — the window is
+pointed at a local, token-gated server the app starts for itself, so nothing is
+exposed that the CLI would not expose. Sessions open in `~/Gnosis`.
+
+For CLI use, the npm package still works:
+
+```sh
+npm install -g @dominquechurch/gnosis
+```
+
 ## See it
 
 <div align="center">
@@ -51,6 +76,7 @@ what the agent was doing instead of scrolling a wall of text and hoping.
 | Run any model you want | ✓ | ✗ | ✓ | ✓ |
 | Swap models mid-session, keep history | ✓ | ✗ | ✗ | ✓ |
 | Watch your agents work (browser UI) | ✓ | ✗ | ✗ | ✓ |
+| Desktop app | ✓ | ✗ | ✗ | ✗ |
 | A 3D office floor, because why not | ✓ | ✗ | ✗ | ✗ |
 | Scan a QR code, drive it from your phone | ✓ | ✗ | ✗ | ✗ |
 | Remembers things in your Obsidian vault | ✓ | ✗ | ✗ | ✗ |
@@ -59,6 +85,12 @@ what the agent was doing instead of scrolling a wall of text and hoping.
 
 ## What it does
 
+- **Native desktop app** — a Windows `.exe` installer that bundles the whole
+  thing; no Node, no terminal, no setup beyond pasting a key
+- **Built-in settings panel** — API keys and configuration from a window,
+  written to `~/.dom/.env` without disturbing anything else already in it
+- **System tray with agent status** — the icon reports idle or working at a
+  glance, and closing the window leaves the agent running behind it
 - **Any model via OpenRouter, switched at runtime** — `/model` mid-session, no
   restart, conversation history carries over intact
 - **A 3D office floor** — a Three.js scene of five lit rooms you can orbit,
@@ -127,7 +159,7 @@ in Ottawa. I wanted Claude Code without the vendor lock-in, and a
 browser UI I could actually watch while agents worked. The office floor started
 as a joke and turned into the thing everybody notices first.
 
-## Install
+## CLI / Advanced
 
 Try it, no install needed:
 

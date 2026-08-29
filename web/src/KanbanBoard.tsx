@@ -40,7 +40,7 @@ export function KanbanBoard(props: {
     // Same top gutter as the floor view: the fixed view/serve toggle gets its own
     // band instead of landing on the board's header.
     <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px 24px`, boxSizing: "border-box" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 14, borderBottom: "2px solid #2A2A38", paddingBottom: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14, borderBottom: "2px solid #2C2C3E", paddingBottom: 12, marginBottom: 16 }}>
         <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
         <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2 }}>KANBAN · {state.order.length} SESSIONS</span>
       </div>
@@ -51,9 +51,9 @@ export function KanbanBoard(props: {
             onDragOver={(e) => { e.preventDefault(); setOver(col); }}
             onDragLeave={() => setOver((o) => (o === col ? null : o))}
             onDrop={() => drop(col)}
-            style={{ background: over === col ? "#15151C" : "#101017", border: `2px solid ${over === col ? COLUMN_COLOR[col] : "#2A2A38"}`, minHeight: 220, display: "flex", flexDirection: "column" }}
+            style={{ background: over === col ? "#171721" : "#121219", border: `2px solid ${over === col ? COLUMN_COLOR[col] : "#2C2C3E"}`, minHeight: 220, display: "flex", flexDirection: "column" }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `2px solid #2A2A38`, borderTop: `3px solid ${COLUMN_COLOR[col]}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `2px solid #2C2C3E`, borderTop: `3px solid ${COLUMN_COLOR[col]}` }}>
               <span style={{ fontSize: 11, letterSpacing: 2, color: COLUMN_COLOR[col] }}>{COLUMN_LABEL[col]}</span>
               <span style={{ marginLeft: "auto", fontSize: 10, color: "#6B6B7B" }}>{cols[col].length}</span>
             </div>
@@ -74,7 +74,7 @@ export function KanbanBoard(props: {
                     onDragEnd={() => { setDragId(null); setOver(null); }}
                     onClick={() => props.onOpen(id)}
                     title="drag to move · click to open"
-                    style={{ background: "#15151C", border: "2px solid #2A2A38", borderLeft: `4px solid ${COLUMN_COLOR[col]}`, padding: 9, cursor: "grab", display: "flex", flexDirection: "column", gap: 5, opacity: dragId === id ? 0.5 : 1 }}
+                    style={{ background: "#171721", border: "2px solid #2C2C3E", borderLeft: `4px solid ${COLUMN_COLOR[col]}`, padding: 9, cursor: "grab", display: "flex", flexDirection: "column", gap: 5, opacity: dragId === id ? 0.5 : 1 }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 7, height: 7, background: ts != null ? "#22D3EE" : "#6B6B7B", ...(ts != null ? { animation: "domTab 1.4s ease-in-out infinite" } : {}) }} />

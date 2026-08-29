@@ -1,0 +1,257 @@
+/* Claymorphism pass.
+ *
+ * The UI is built from inline styles — 200+ style objects across the components,
+ * mostly text spans. Restyling every one of them would be a rewrite, so this
+ * sheet does the opposite: it takes the surfaces that actually carry the look
+ * (panels, headers, cards, the dock, chips, inputs) and gives them soft edges,
+ * depth and a tint. The inline styles keep owning layout and colour; this owns
+ * shape and elevation.
+ *
+ * !important is load-bearing here, not laziness: an inline `border` beats any
+ * selector, so overriding one from a stylesheet is the only way to do this
+ * without touching every call site.
+ *
+ * PERFORMANCE: shadows and blur are deliberately rationed. Only surfaces that
+ * read as "floating" get a shadow, transitions name the properties they animate
+ * instead of `all`, and backdrop-filter appears exactly once (the top bar).
+ * Stacking soft effects on every element is what makes this style feel sluggish.
+ */
+
+:root {
+  /* Surfaces, lifted slightly and cooled from the old flat #15151C. */
+  --clay-surface: #17172180;
+  --clay-surface-solid: #171721;
+  --clay-raised: #1c1c28;
+  --clay-inset: #101017;
+  --clay-line: rgba(255, 255, 255, 0.07);
+  --clay-line-strong: rgba(255, 255, 255, 0.12);
+
+  /* Accent tints — pastel washes, not fills. */
+  --clay-cyan-wash: rgba(34, 211, 238, 0.07);
+  --clay-magenta-wash: rgba(232, 121, 249, 0.07);
+  --clay-cyan-glow: rgba(34, 211, 238, 0.28);
+  --clay-magenta-glow: rgba(232, 121, 249, 0.26);
+
+  /* Depth. The top highlight is what makes a surface read as puffy rather than
+   * merely shadowed — clay catches light on its upper edge. */
+  --clay-lift: 0 10px 26px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --clay-lift-sm: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --clay-press: inset 0 2px 6px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+
+  --clay-r: 16px;
+  --clay-r-sm: 12px;
+  --clay-r-xs: 9px;
+  --clay-ease: 200ms ease-out;
+}
+
+/* A hair more ambient light in the page itself, so floating surfaces have
+ * something to float above. */
+body {
+  background:
+    radial-gradient(1200px 700px at 18% -10%, rgba(34, 211, 238, 0.055), transparent 70%),
+    radial-gradient(1000px 620px at 88% 8%, rgba(232, 121, 249, 0.05), transparent 72%),
+    #0d0d12;
+}
+
+/* ------------------------------------------------------------------ surfaces */
+
+[data-testid="session-title"],
+[data-testid="floor-container"],
+[data-testid="left-panel"],
+[data-testid="right-panel"] {
+  border-radius: var(--clay-r) !important;
+  border: 1px solid var(--clay-line) !important;
+  box-shadow: var(--clay-lift);
+  background-color: var(--clay-surface-solid) !important;
+  transition: box-shadow var(--clay-ease), border-color var(--clay-ease);
+}
+
+/* The two side panels each carry their own accent: cyan on the left, magenta on
+ * the right, as a soft edge glow rather than a hard rule. */
+[data-testid="left-panel"] {
+  background-image: linear-gradient(100deg, var(--clay-cyan-wash), transparent 42%) !important;
+  box-shadow: var(--clay-lift), -1px 0 0 var(--clay-cyan-glow), -10px 0 24px -14px var(--clay-cyan-glow);
+}
+[data-testid="right-panel"] {
+  background-image: linear-gradient(260deg, var(--clay-magenta-wash), transparent 42%) !important;
+  box-shadow: var(--clay-lift), 1px 0 0 var(--clay-magenta-glow), 10px 0 24px -14px var(--clay-magenta-glow);
+}
+
+/* The session card keeps its accent stripe, softened into the rounded edge. */
+[data-testid="session-title"] {
+  background-image: linear-gradient(90deg, var(--clay-cyan-wash), transparent 38%) !important;
+  border-left-width: 1px !important;
+}
+
+/* Panel headers: a gradient from the accent to nothing, under the title. */
+[data-testid="floor-header"],
+[data-testid="page-header"] {
+  position: relative;
+}
+[data-testid="floor-header"]::after,
+[data-testid="page-header"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--clay-cyan-glow), rgba(232, 121, 249, 0.16) 45%, transparent 85%);
+  pointer-events: none;
+}
+[data-testid="page-header"] {
+  border-bottom: 0 !important;
+}
+
+/* The 3D floor sits in a softly inset well, so the scene reads as recessed into
+ * the clay rather than pasted on top of it. */
+[data-testid="three-floor"] {
+  border-radius: var(--clay-r-sm);
+  overflow: hidden;
+  box-shadow: var(--clay-press);
+}
+
+/* --------------------------------------------------------------- the top bar */
+
+/* Only inside the Electron shell: the window is frameless there, so this bar is
+ * the title bar. `.gnosis-shell` is put on <html> by app.tsx when the preload
+ * bridge is present, which is also what keeps every rule here out of a browser
+ * tab and off a phone. */
+
+/* The one frosted surface in the app — a single backdrop-filter, not one per
+ * panel, because each is a separate compositing layer. */
+.gnosis-shell [data-testid="top-bar"] {
+  background: linear-gradient(180deg, rgba(23, 23, 33, 0.82), rgba(13, 13, 18, 0.62));
+  backdrop-filter: blur(14px) saturate(1.2);
+  border-bottom: 1px solid var(--clay-line);
+  box-shadow: 0 6px 20px -12px rgba(0, 0, 0, 0.9);
+}
+
+/* Make room for the bar AND for the floating view chips that sit under it. The
+ * page root sets its padding inline, so this has to win. 96px = the 44px bar,
+ * the ~32px chip row below it, and air between the two — without it the chips
+ * land on top of the right-hand panel. */
+.gnosis-shell #root > div:not([data-testid="top-bar"]):not([data-testid="view-toggle"]) {
+  padding-top: 96px !important;
+}
+.gnosis-shell [data-testid="view-toggle"] {
+  top: 52px !important;
+}
+/* The in-page title block is what the top bar replaces; two "Gnosis" headings
+ * stacked on top of each other is worse than either alone. */
+.gnosis-shell [data-testid="page-header"] {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------- chips */
+
+[data-testid="view-toggle"] > div:first-child {
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: var(--clay-lift-sm);
+}
+[data-testid^="chip-"] {
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 7px 13px !important;
+  transition: background-color var(--clay-ease), color var(--clay-ease);
+}
+[data-testid^="chip-"]:hover {
+  background: #23232f !important;
+  color: #e6f9ff !important;
+}
+
+/* --------------------------------------------- session selector (left rail) */
+
+[data-testid="session-selector"] > button {
+  border-radius: var(--clay-r-sm) !important;
+  border: 1px solid var(--clay-line) !important;
+  box-shadow: var(--clay-lift-sm);
+  transition: transform var(--clay-ease), box-shadow var(--clay-ease), border-color var(--clay-ease);
+}
+[data-testid="session-selector"] > button:hover {
+  transform: translateY(-1px);
+  border-color: var(--clay-line-strong) !important;
+}
+
+/* ------------------------------------------------------------ the dock/terminal */
+
+[data-testid="terminal-dock"] {
+  border-top: 0 !important;
+  border-radius: var(--clay-r) var(--clay-r) 0 0 !important;
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+/* Soft inner shadow around the terminal surface itself, so the text well reads
+ * as pressed into the dock rather than laid on it. The shadow goes on a
+ * pointer-transparent overlay: putting it on .xterm directly would sit under
+ * xterm's own absolutely-positioned render layers and never be seen. */
+[data-testid="terminal-dock"] .xterm {
+  border-radius: var(--clay-r-sm);
+}
+[data-testid="terminal-dock"] > div:last-child {
+  position: relative;
+}
+[data-testid="terminal-dock"] > div:last-child::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--clay-r-sm);
+  box-shadow: inset 0 10px 22px -12px rgba(0, 0, 0, 0.95), inset 0 -6px 18px -14px rgba(0, 0, 0, 0.8);
+}
+[data-testid="dock-handle"] {
+  background: transparent !important;
+  border-bottom: 0 !important;
+  height: 14px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The pill you actually grab. */
+[data-testid="dock-handle"]::after {
+  content: "";
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background-color var(--clay-ease), width var(--clay-ease);
+}
+[data-testid="dock-handle"]:hover::after {
+  background: var(--clay-cyan-glow);
+  width: 62px;
+}
+
+/* ------------------------------------------------------- controls, generally */
+
+button {
+  border-radius: var(--clay-r-xs);
+  transition: background-color var(--clay-ease), border-color var(--clay-ease), color var(--clay-ease),
+    box-shadow var(--clay-ease), transform var(--clay-ease);
+}
+button:active {
+  transform: translateY(1px);
+}
+
+input,
+textarea {
+  border-radius: var(--clay-r-xs) !important;
+  border: 1px solid var(--clay-line) !important;
+  box-shadow: var(--clay-press);
+  transition: border-color var(--clay-ease), box-shadow var(--clay-ease);
+}
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--clay-cyan-glow) !important;
+  box-shadow: var(--clay-press), 0 0 0 3px rgba(34, 211, 238, 0.1);
+}
+
+/* Someone who has asked the OS to stop animating gets no transitions from a
+ * style pass either. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

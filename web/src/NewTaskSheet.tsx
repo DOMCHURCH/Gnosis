@@ -45,7 +45,7 @@ export function NewTaskSheet(props: {
     // Above the app's view switcher (z 70): a full-screen sheet that something
     // else draws on top of is not full-screen.
     <div style={{ position: "fixed", inset: 0, zIndex: Z.overlay, background: "#0D0D12", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 14px 10px", borderBottom: "2px solid #2A2A38" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 14px 10px", borderBottom: "2px solid #2C2C3E" }}>
         <span style={{ fontSize: 12, letterSpacing: 2, color: "#C9C9D6" }}>NEW TASK</span>
         <button
           type="button"
@@ -64,7 +64,7 @@ export function NewTaskSheet(props: {
         placeholder="what should Gnosis work on?"
         style={{
           flex: 1, minHeight: 0, margin: 14, padding: 12, resize: "none",
-          background: "#101017", color: "#C9C9D6", border: "2px solid #2A2A38",
+          background: "#121219", color: "#C9C9D6", border: "2px solid #2C2C3E",
           fontFamily: MONO, fontSize: 16, lineHeight: 1.5, outline: "none",
         }}
       />
@@ -80,7 +80,7 @@ export function NewTaskSheet(props: {
               display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
               // 56px: a comfortable thumb target, matching the bottom nav's height.
               minHeight: 56, padding: "10px 14px", cursor: "pointer",
-              background: "#15151C", border: `2px solid ${text.trim() ? a.color : "#2A2A38"}`,
+              background: "#171721", border: `2px solid ${text.trim() ? a.color : "#2C2C3E"}`,
               color: text.trim() ? a.color : "#4A4A58", fontFamily: MONO, textAlign: "left",
               opacity: text.trim() ? 1 : 0.6,
             }}

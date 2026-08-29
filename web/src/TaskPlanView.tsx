@@ -24,8 +24,8 @@ export function TaskPlanView(props: { plan: TaskPlan; compact?: boolean }) {
 
   const headColor = st.failed > 0 ? "#F87171" : st.complete ? "#4ADE80" : "#22D3EE";
   return (
-    <div style={{ border: "2px solid #2A2A38", background: compact ? "#0D0D12F2" : "#101017", fontFamily: MONO, ...(compact ? { boxShadow: "0 10px 28px rgba(0,0,0,0.6)", width: 236 } : { margin: "0 0 0 0" }) }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: compact ? "5px 8px" : "7px 10px", borderBottom: "1px solid #2A2A38" }}>
+    <div style={{ border: "2px solid #2C2C3E", background: compact ? "#0D0D12F2" : "#121219", fontFamily: MONO, ...(compact ? { boxShadow: "0 10px 28px rgba(0,0,0,0.6)", width: 236 } : { margin: "0 0 0 0" }) }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: compact ? "5px 8px" : "7px 10px", borderBottom: "1px solid #2C2C3E" }}>
         <span style={{ fontSize: compact ? 8 : 9, letterSpacing: 2, color: "#C084FC" }}>COORDINATED TASK</span>
         <span style={{ marginLeft: "auto", fontSize: compact ? 8 : 9, letterSpacing: 1, color: headColor }}>
           {st.done + st.failed}/{st.total} {st.complete ? "done" : "running"}

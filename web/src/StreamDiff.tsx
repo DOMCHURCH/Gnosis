@@ -53,10 +53,10 @@ export function StreamDiff(props: { edit: StreamEdit; onUndo: () => void }) {
   }
 
   return (
-    <div style={{ margin: "6px 12px", border: "1px solid #2A2A38", background: "#0B0B10", fontFamily: MONO }}>
+    <div style={{ margin: "6px 12px", border: "1px solid #2C2C3E", background: "#0B0B10", fontFamily: MONO }}>
       <style>{"@keyframes domblink{0%,49%{opacity:1}50%,100%{opacity:0}} .dom-editcursor{animation:domblink .9s step-end infinite}"}</style>
       {/* header: path, live status, progress bar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderBottom: "1px solid #2A2A38", fontSize: 11, color: "#C9C9D6" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderBottom: "1px solid #2C2C3E", fontSize: 11, color: "#C9C9D6" }}>
         <span style={{ color: e.done ? (e.ok ? "#4ADE80" : "#F87171") : "#22D3EE" }}>●</span>
         <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {e.done ? (e.ok ? "edited " : "aborted ") : "writing "}{e.path}
@@ -75,7 +75,7 @@ export function StreamDiff(props: { edit: StreamEdit; onUndo: () => void }) {
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", fontSize: 11, lineHeight: 1.55, maxHeight: 360, overflow: "auto" }}>
-        <div style={{ borderRight: "1px solid #2A2A38" }}>{left}</div>
+        <div style={{ borderRight: "1px solid #2C2C3E" }}>{left}</div>
         <div>{right}</div>
       </div>
     </div>

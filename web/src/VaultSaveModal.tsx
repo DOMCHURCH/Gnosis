@@ -29,12 +29,12 @@ export function VaultSaveModal(props: {
     else setError(r.error ?? "save failed");
   };
 
-  const input = { fontFamily: MONO, fontSize: 12, background: "#0D0D12", color: "#C9C9D6", border: "1px solid #2A2A38", padding: "7px 9px", width: "100%", boxSizing: "border-box" as const };
+  const input = { fontFamily: MONO, fontSize: 12, background: "#0D0D12", color: "#C9C9D6", border: "1px solid #2C2C3E", padding: "7px 9px", width: "100%", boxSizing: "border-box" as const };
 
   return (
     <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 92vw)", background: "#101017", border: "2px solid #2A2A38", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(460px, 92vw)", background: "#121219", border: "2px solid #2C2C3E", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
           <span style={{ fontSize: 11, letterSpacing: 2, color: "#A78BFA" }}>SAVE TO VAULT</span>
           <button type="button" onClick={props.onClose} style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
         </div>
@@ -58,7 +58,7 @@ export function VaultSaveModal(props: {
               <div style={{ fontSize: 9, color: "#4A4A58" }}>{props.content.length} chars · .md added automatically</div>
               {error && <div style={{ fontSize: 11, color: "#F87171" }}>{error}</div>}
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button type="button" onClick={props.onClose} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "transparent", color: "#6B6B7B", border: "1px solid #2A2A38", padding: "6px 12px", cursor: "pointer" }}>CANCEL</button>
+                <button type="button" onClick={props.onClose} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "transparent", color: "#6B6B7B", border: "1px solid #2C2C3E", padding: "6px 12px", cursor: "pointer" }}>CANCEL</button>
                 <button type="button" onClick={() => void submit()} disabled={saving} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#A78BFA", color: "#0D0D12", border: 0, padding: "6px 14px", cursor: saving ? "default" : "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "SAVING…" : "SAVE"}</button>
               </div>
             </>

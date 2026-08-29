@@ -95,8 +95,8 @@ function NoteModal(props: { note: OpenNote; canBack: boolean; onBack: () => void
   const title = note.path.slice(note.path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
   return (
     <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(820px, 92vw)", maxHeight: "86vh", background: "#101017", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(820px, 92vw)", maxHeight: "86vh", background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
           {props.canBack && (
             <button type="button" onClick={props.onBack} title="back" style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#A78BFA", border: 0, cursor: "pointer" }}>←</button>
           )}
@@ -112,7 +112,7 @@ function NoteModal(props: { note: OpenNote; canBack: boolean; onBack: () => void
             <Markdown text={note.content} onWikilink={props.onWikilink} />
           )}
         </div>
-        {note.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "6px 12px", borderTop: "2px solid #2A2A38" }}>note truncated at 256 KB</div>}
+        {note.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "6px 12px", borderTop: "2px solid #2C2C3E" }}>note truncated at 256 KB</div>}
       </div>
     </div>
   );

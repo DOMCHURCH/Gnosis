@@ -35,9 +35,9 @@ export function DiffView(props: { detail: string; path: string }) {
   const lang = langFromPath(props.path);
   const rows = parseUnifiedDiff(props.detail);
   return (
-    <div style={{ marginLeft: 12, border: "1px solid #2A2A38", background: "#0B0B10", maxHeight: 360, overflow: "auto", fontFamily: MONO, fontSize: 11, lineHeight: 1.55 }}>
+    <div style={{ marginLeft: 12, border: "1px solid #2C2C3E", background: "#0B0B10", maxHeight: 360, overflow: "auto", fontFamily: MONO, fontSize: 11, lineHeight: 1.55 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-        <div style={{ borderRight: "1px solid #2A2A38" }}>
+        <div style={{ borderRight: "1px solid #2C2C3E" }}>
           {rows.map((r, i) => <Cell key={i} cell={r.left} lang={lang} sign={r.type === "context" ? " " : "-"} bg={r.type === "context" ? "transparent" : "rgba(248,113,113,0.14)"} />)}
         </div>
         <div>
@@ -52,7 +52,7 @@ export function DiffView(props: { detail: string; path: string }) {
 export function FileView(props: { detail: string; path: string }) {
   const lang = langFromPath(props.path);
   return (
-    <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2A2A38", borderLeft: "3px solid #22D3EE", fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre", maxHeight: 360, overflow: "auto" }}
+    <pre style={{ margin: 0, marginLeft: 12, padding: "6px 8px", background: "#0B0B10", border: "1px solid #2C2C3E", borderLeft: "3px solid #22D3EE", fontFamily: MONO, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre", maxHeight: 360, overflow: "auto" }}
       dangerouslySetInnerHTML={{ __html: hl(props.detail, lang) }} />
   );
 }

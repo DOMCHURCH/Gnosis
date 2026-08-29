@@ -21,7 +21,7 @@ function Section(props: { title: string; children: React.ReactNode }) {
 // A small terminal-style chip (replaces the shadcn Badge).
 function Chip(props: { color: string; children: React.ReactNode }) {
   return (
-    <span style={{ fontSize: 8, letterSpacing: 1, color: props.color, background: "#15151C", border: "1px solid #2A2A38", padding: "1px 5px", whiteSpace: "nowrap" }}>{props.children}</span>
+    <span style={{ fontSize: 8, letterSpacing: 1, color: props.color, background: "#171721", border: "1px solid #2C2C3E", padding: "1px 5px", whiteSpace: "nowrap" }}>{props.children}</span>
   );
 }
 
@@ -30,7 +30,7 @@ function Chip(props: { color: string; children: React.ReactNode }) {
 function Toggle(props: { on: boolean; onChange: (v: boolean) => void; title?: string }) {
   return (
     <button type="button" title={props.title} onClick={() => props.onChange(!props.on)}
-      style={{ flex: "0 0 auto", width: 26, height: 14, padding: 0, position: "relative", cursor: "pointer", background: props.on ? "#22D3EE" : "#101017", border: `1px solid ${props.on ? "#22D3EE" : "#2A2A38"}` }}>
+      style={{ flex: "0 0 auto", width: 26, height: 14, padding: 0, position: "relative", cursor: "pointer", background: props.on ? "#22D3EE" : "#121219", border: `1px solid ${props.on ? "#22D3EE" : "#2C2C3E"}` }}>
       <span style={{ position: "absolute", top: 1, left: props.on ? 13 : 1, width: 10, height: 10, background: props.on ? "#0D0D12" : "#6B6B7B", transition: "left 0.12s ease" }} />
     </button>
   );
@@ -48,7 +48,7 @@ export function ConnectionsBody(props: { data: ConnectionsData | null; memory?: 
       <Section title="MCP SERVERS">
         {d.mcp.length === 0 && <div style={{ fontSize: 10, color: "#6B6B7B", padding: "2px 4px" }}>none configured (~/.dom/mcp.json)</div>}
         {d.mcp.map((s) => (
-          <div key={s.name} style={{ background: "#101017", border: "2px solid #2A2A38", padding: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+          <div key={s.name} style={{ background: "#121219", border: "2px solid #2C2C3E", padding: 8, display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 7, height: 7, background: STATUS_COLOR[s.status] }} />
               <span style={{ fontSize: 11, letterSpacing: 1, color: "#C9C9D6", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
@@ -65,7 +65,7 @@ export function ConnectionsBody(props: { data: ConnectionsData | null; memory?: 
             {s.tools.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 2 }}>
                 {s.tools.map((t) => (
-                  <span key={t.name} title={t.description} style={{ fontSize: 8, color: "#8A8A9B", background: "#15151C", border: "1px solid #2A2A38", padding: "1px 4px", whiteSpace: "nowrap" }}>{t.name}</span>
+                  <span key={t.name} title={t.description} style={{ fontSize: 8, color: "#8A8A9B", background: "#171721", border: "1px solid #2C2C3E", padding: "1px 4px", whiteSpace: "nowrap" }}>{t.name}</span>
                 ))}
               </div>
             )}
@@ -122,7 +122,7 @@ export function ConnectionsBody(props: { data: ConnectionsData | null; memory?: 
                 <Chip color="#818CF8">{m.sessions} session{m.sessions === 1 ? "" : "s"}</Chip>
                 <span style={{ flex: 1 }} />
                 <button type="button" onClick={props.onClearMemory} title="wipe automatic learned context"
-                  style={{ fontSize: 8, letterSpacing: 1, color: "#F0A0A0", background: "#15151C", border: "1px solid #3A2A2A", padding: "2px 6px", cursor: "pointer" }}>
+                  style={{ fontSize: 8, letterSpacing: 1, color: "#F0A0A0", background: "#171721", border: "1px solid #3A2A2A", padding: "2px 6px", cursor: "pointer" }}>
                   clear memory
                 </button>
               </div>

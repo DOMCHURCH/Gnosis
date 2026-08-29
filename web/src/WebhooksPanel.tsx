@@ -30,7 +30,7 @@ function WebhookRow(props: { w: WebhookEntry; target: string }) {
     setReplayMsg(r?.ok ? `→ ${r.status}` : `✗ ${r?.error ?? "failed"}`);
   };
   return (
-    <div style={{ background: "#101017", border: "2px solid #2A2A38", display: "flex", flexDirection: "column" }}>
+    <div style={{ background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column" }}>
       <div onClick={() => setOpen((o) => !o)} title="click to expand" style={{ cursor: "pointer", padding: 8, display: "flex", flexDirection: "column", gap: 3 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 8, letterSpacing: 1, color: "#22D3EE", whiteSpace: "nowrap" }}>{w.method}</span>
@@ -44,10 +44,10 @@ function WebhookRow(props: { w: WebhookEntry; target: string }) {
         </div>
       </div>
       {open && (
-        <div style={{ borderTop: "1px solid #2A2A38", display: "flex", flexDirection: "column" }}>
+        <div style={{ borderTop: "1px solid #2C2C3E", display: "flex", flexDirection: "column" }}>
           <pre style={{ margin: 0, padding: 8, background: "#0B0B10", fontFamily: MONO, fontSize: 10, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 240, overflow: "auto" }}>{pretty(w.body, w.contentType) || "(empty body)"}</pre>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderTop: "1px solid #2A2A38" }}>
-            <button type="button" onClick={replay} style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, background: "#15151C", color: "#22D3EE", border: "2px solid #2A2A38", padding: "4px 9px", cursor: "pointer" }}>REPLAY</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderTop: "1px solid #2C2C3E" }}>
+            <button type="button" onClick={replay} style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, background: "#171721", color: "#22D3EE", border: "2px solid #2C2C3E", padding: "4px 9px", cursor: "pointer" }}>REPLAY</button>
             {replayMsg && <span style={{ fontSize: 9, color: "#6B6B7B" }}>{replayMsg}</span>}
             <span style={{ marginLeft: "auto", fontSize: 8, color: "#4A4A58" }}>→ {props.target}</span>
           </div>
@@ -85,18 +85,18 @@ export function WebhooksBody(props: { webhookEpoch: number; localOrigin: string 
         <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>WEBHOOK URL{data?.public ? " · PUBLIC" : ""}</div>
         <div style={{ display: "flex", gap: 6 }}>
           <span style={{ fontSize: 10, color: "#6B6B7B", alignSelf: "center" }}>label</span>
-          <input value={label} onChange={(e) => setLabel(e.target.value.replace(/\s+/g, "-"))} style={{ flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 10, color: "#C9C9D6", background: "#101017", border: "2px solid #2A2A38", padding: "5px 6px", outline: "none" }} />
+          <input value={label} onChange={(e) => setLabel(e.target.value.replace(/\s+/g, "-"))} style={{ flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 10, color: "#C9C9D6", background: "#121219", border: "2px solid #2C2C3E", padding: "5px 6px", outline: "none" }} />
         </div>
-        <div onClick={copy} title="click to copy" style={{ cursor: "pointer", fontSize: 9, color: "#22D3EE", background: "#0B0B10", border: "2px solid #2A2A38", padding: "6px 7px", wordBreak: "break-all", lineHeight: 1.4 }}>{hookUrl}</div>
+        <div onClick={copy} title="click to copy" style={{ cursor: "pointer", fontSize: 9, color: "#22D3EE", background: "#0B0B10", border: "2px solid #2C2C3E", padding: "6px 7px", wordBreak: "break-all", lineHeight: 1.4 }}>{hookUrl}</div>
         <div style={{ fontSize: 8, color: copied ? "#4ADE80" : "#4A4A58", letterSpacing: 1 }}>{copied ? "COPIED — paste into Stripe / GitHub / …" : "click the URL to copy"}</div>
       </div>
 
       {/* filter + replay target */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="filter by label or payload…" style={{ fontFamily: MONO, fontSize: 10, color: "#C9C9D6", background: "#101017", border: "2px solid #2A2A38", padding: "5px 6px", outline: "none" }} />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="filter by label or payload…" style={{ fontFamily: MONO, fontSize: 10, color: "#C9C9D6", background: "#121219", border: "2px solid #2C2C3E", padding: "5px 6px", outline: "none" }} />
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <span style={{ fontSize: 9, color: "#6B6B7B" }}>replay →</span>
-          <input value={target} onChange={(e) => setTarget(e.target.value)} style={{ flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 9, color: "#C9C9D6", background: "#101017", border: "2px solid #2A2A38", padding: "5px 6px", outline: "none" }} />
+          <input value={target} onChange={(e) => setTarget(e.target.value)} style={{ flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 9, color: "#C9C9D6", background: "#121219", border: "2px solid #2C2C3E", padding: "5px 6px", outline: "none" }} />
         </div>
       </div>
 

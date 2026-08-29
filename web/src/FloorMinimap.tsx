@@ -50,13 +50,13 @@ export function FloorMinimap(props: {
   if (!isOpen) {
     return (
       <button type="button" title="show the floor minimap" onClick={() => setOpen(true)}
-        style={{ position: "absolute", left: 8, bottom: 14, zIndex: Z.floorMinimap, fontFamily: MONO, fontSize: 12, lineHeight: 1, width: 26, height: 26, background: "#15151C", color: "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer" }}>◫</button>
+        style={{ position: "absolute", left: 8, bottom: 14, zIndex: Z.floorMinimap, fontFamily: MONO, fontSize: 12, lineHeight: 1, width: 26, height: 26, background: "#171721", color: "#6B6B7B", border: "2px solid #2C2C3E", cursor: "pointer" }}>◫</button>
     );
   }
 
   return (
-    <div style={{ position: "absolute", left: 8, bottom: 14, zIndex: Z.floorMinimap, background: "#15151C", border: "2px solid #2A2A38", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px", borderBottom: "2px solid #2A2A38" }}>
+    <div style={{ position: "absolute", left: 8, bottom: 14, zIndex: Z.floorMinimap, background: "#171721", border: "2px solid #2C2C3E", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px", borderBottom: "2px solid #2C2C3E" }}>
         <span style={{ fontSize: 8, letterSpacing: 1, color: "#6B6B7B" }}>MAP</span>
         {/* Dismissible everywhere: the panel sits over the bottom-left desks, so the
             user always has a way to get them back. */}
@@ -64,7 +64,7 @@ export function FloorMinimap(props: {
           style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: 0 }}>✕</button>
       </div>
       <svg width={MINIMAP_W} height={MINIMAP_H} viewBox={`0 0 ${MINIMAP_W} ${MINIMAP_H}`} shapeRendering="crispEdges" style={{ display: "block" }}>
-        <rect x="0" y="0" width={MINIMAP_W} height={MINIMAP_H} fill="#15151C" />
+        <rect x="0" y="0" width={MINIMAP_W} height={MINIMAP_H} fill="#171721" />
         {cells.map((c) => (
           <g key={c.key} onClick={() => goto(c.cx)} style={{ cursor: "pointer" }}>
             <title>{`${c.zone} — click to centre`}</title>

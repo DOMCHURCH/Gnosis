@@ -9,3 +9,7 @@ dist*/
 # never leave the machine. Ignored here too in case dom runs with a nested .dom dir.
 .dom/
 
+
+# Electron build output
+/release/
+/build/

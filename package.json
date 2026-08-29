@@ -44,7 +44,10 @@
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "verify": "node verify/run-all.mjs",
-    "eval": "node eval/run-eval.mjs"
+    "eval": "node eval/run-eval.mjs",
+    "app": "electron electron/main.js",
+    "dist": "npm run build && npm run gen:icon && electron-builder --win",
+    "gen:icon": "node scripts/gen-icon.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -79,8 +82,12 @@
     "@vitejs/plugin-react": "^6.1.0",
     "chrome-devtools-mcp": "^1.7.0",
     "cloudflared": "^0.7.3",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.6.3",
     "vite": "^8.2.2",
     "vite-plugin-singlefile": "^2.3.3"
-  }
+  },
+  "main": "electron/main.js",
+  "author": "Dominique Church"
 }

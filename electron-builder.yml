@@ -1,0 +1,54 @@
+# Windows installer for the desktop shell.
+#
+# Only the built output ships: dist/ (compiled server + the single-file web
+# bundle) and electron/ (the shell). src/ is deliberately absent — nothing at
+# runtime reads it, and leaving it out keeps the installer honest about what it
+# actually runs.
+
+appId: com.dominiquechurch.gnosis
+productName: Gnosis
+copyright: © Dominique Church
+
+directories:
+  output: release
+  # NOT "electron": electron-builder EXCLUDES the buildResources directory from
+  # the packaged app, which would drop main.js out of the asar. The icon is
+  # referenced by path below instead.
+  buildResources: build
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+
+# node-pty ships an N-API binary, which is ABI-stable across Node and Electron —
+# it was verified loading unchanged under this Electron (modules ABI 149) against
+# a binary built for Node's 137. So skip the from-source rebuild, which would
+# otherwise demand a Visual Studio toolchain to produce an identical result. The
+# packaged smoke test is what holds this honest: if the assumption ever breaks,
+# the terminal panel in the installed app stops opening.
+npmRebuild: false
+
+# node-pty is a native addon: Windows cannot load a .node from inside an asar, so
+# the terminal panel goes dark unless these are unpacked to app.asar.unpacked.
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+  - "**/*.node"
+
+win:
+  target: nsis
+  icon: electron/icon.ico
+
+nsis:
+  # A real installer, not a one-click drop: people installing a coding agent tend
+  # to want to say where it goes.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Gnosis
+  artifactName: Gnosis-Setup-${version}.exe
+  uninstallDisplayName: Gnosis ${version}

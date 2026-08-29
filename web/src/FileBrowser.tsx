@@ -42,8 +42,8 @@ export function FilesBody(props: { tabId: number | null; fileEpoch: number; onAt
   const rootTab = (id: "session" | "gnosis", label: string, title: string) => (
     <button type="button" title={title} onClick={() => setRoot(id)}
       style={{ fontFamily: MONO, fontSize: 9, letterSpacing: 1, padding: "3px 7px", cursor: "pointer",
-        background: root === id ? "#1D1D27" : "transparent", color: root === id ? "#22D3EE" : "#6B6B7B",
-        border: `1px solid ${root === id ? "#22D3EE" : "#2A2A38"}` }}>{label}</button>
+        background: root === id ? "#23232F" : "transparent", color: root === id ? "#22D3EE" : "#6B6B7B",
+        border: `1px solid ${root === id ? "#22D3EE" : "#2C2C3E"}` }}>{label}</button>
   );
   const switcher = (
     <div style={{ display: "flex", gap: 4, padding: "0 2px 6px" }}>
@@ -112,8 +112,8 @@ function FilePreviewModal(props: { preview: FilePreview; loading: boolean; onClo
   const { preview } = props;
   return (
     <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#101017", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2A2A38" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
           <span style={{ fontSize: 11, letterSpacing: 1, color: "#22D3EE", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview.path}</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button type="button" onClick={props.onAttach} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "5px 10px", cursor: "pointer" }}>+ ATTACH</button>
@@ -123,7 +123,7 @@ function FilePreviewModal(props: { preview: FilePreview; loading: boolean; onClo
         <pre style={{ margin: 0, flex: "1 1 auto", overflow: "auto", padding: 12, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre" }}>
           {props.loading ? "loading…" : preview.content || "(empty file)"}
         </pre>
-        {preview.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "6px 12px", borderTop: "2px solid #2A2A38" }}>preview truncated at 256 KB</div>}
+        {preview.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "6px 12px", borderTop: "2px solid #2C2C3E" }}>preview truncated at 256 KB</div>}
       </div>
     </div>
   );

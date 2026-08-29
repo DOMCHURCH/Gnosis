@@ -59,7 +59,7 @@ export function FloorGraphic(props: {
             <rect x="0" y="22" width="112" height="14" fill="#332C3B" />
             <rect x="112" y="4" width="8" height="32" fill="#292330" />
             <rect x="0" y="36" width="120" height="4" fill="#1A171F" />
-            <rect x="60" y="4" width="40" height="10" fill="#2A2A38" />
+            <rect x="60" y="4" width="40" height="10" fill="#2C2C3E" />
             <rect x="60" y="14" width="40" height="4" fill="#1B1B24" />
           </g>
           <g id="deskEmpty">

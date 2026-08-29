@@ -45,21 +45,21 @@ const STYLE_ID = "dom-md-style";
 const CSS = `
 .md-body { font-family: ${MONO}; font-size: 12px; line-height: 1.65; color: #C9C9D6; word-wrap: break-word; }
 .md-body h1,.md-body h2,.md-body h3,.md-body h4 { color: #E6E6EF; line-height: 1.3; margin: 1.1em 0 0.5em; }
-.md-body h1 { font-size: 18px; border-bottom: 1px solid #2A2A38; padding-bottom: 6px; }
+.md-body h1 { font-size: 18px; border-bottom: 1px solid #2C2C3E; padding-bottom: 6px; }
 .md-body h2 { font-size: 16px; } .md-body h3 { font-size: 14px; } .md-body h4 { font-size: 13px; }
 .md-body p { margin: 0.6em 0; }
 .md-body a { color: #22D3EE; text-decoration: none; } .md-body a:hover { text-decoration: underline; }
 .md-body a.wikilink { color: #A78BFA; background: rgba(167,139,250,0.10); padding: 0 3px; border-radius: 3px; }
 .md-body a.wikilink:hover { background: rgba(167,139,250,0.22); text-decoration: none; }
-.md-body code { font-family: ${MONO}; background: #1B1B24; border: 1px solid #2A2A38; border-radius: 3px; padding: 1px 4px; font-size: 11px; }
-.md-body pre { background: #101017; border: 1px solid #2A2A38; border-radius: 4px; padding: 10px 12px; overflow-x: auto; }
+.md-body code { font-family: ${MONO}; background: #1B1B24; border: 1px solid #2C2C3E; border-radius: 3px; padding: 1px 4px; font-size: 11px; }
+.md-body pre { background: #121219; border: 1px solid #2C2C3E; border-radius: 4px; padding: 10px 12px; overflow-x: auto; }
 .md-body pre code { background: none; border: 0; padding: 0; }
 .md-body ul,.md-body ol { margin: 0.5em 0; padding-left: 1.4em; }
 .md-body li { margin: 0.2em 0; }
-.md-body blockquote { margin: 0.6em 0; padding: 2px 12px; border-left: 3px solid #2A2A38; color: #8A8A9B; }
+.md-body blockquote { margin: 0.6em 0; padding: 2px 12px; border-left: 3px solid #2C2C3E; color: #8A8A9B; }
 .md-body table { border-collapse: collapse; margin: 0.6em 0; }
-.md-body th,.md-body td { border: 1px solid #2A2A38; padding: 4px 8px; }
-.md-body hr { border: 0; border-top: 1px solid #2A2A38; margin: 1em 0; }
+.md-body th,.md-body td { border: 1px solid #2C2C3E; padding: 4px 8px; }
+.md-body hr { border: 0; border-top: 1px solid #2C2C3E; margin: 1em 0; }
 .md-body img { max-width: 100%; }
 `;
 

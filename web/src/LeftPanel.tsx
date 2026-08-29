@@ -40,7 +40,7 @@ export function LeftPanel(props: {
   if (!open) {
     return (
       <button type="button" data-testid="left-panel" onClick={() => setOpen(true)} title="show panel"
-        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", position: "relative", zIndex: Z.panel, background: "#101017", color: "#6B6B7B", border: "2px solid #2A2A38", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
+        style={{ flex: "0 0 26px", width: 26, alignSelf: "stretch", position: "relative", zIndex: Z.panel, background: "#121219", color: "#6B6B7B", border: "2px solid #2C2C3E", cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: 1, writingMode: "vertical-rl" as const }}>
         {active.toUpperCase()} ▸
       </button>
     );
@@ -57,10 +57,10 @@ export function LeftPanel(props: {
   const [webhookBump, setWebhookBump] = useState(0);
 
   return (
-    <div data-testid="left-panel" style={{ flex: "0 0 232px", width: 232, alignSelf: "stretch", position: "relative", zIndex: Z.panel, minHeight: 0, background: "#15151C", border: "2px solid #2A2A38", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div data-testid="left-panel" style={{ flex: "0 0 232px", width: 232, alignSelf: "stretch", position: "relative", zIndex: Z.panel, minHeight: 0, background: "#171721", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Four tab labels are wider than 232px, so the row WRAPS. Without this the
           buttons overflow the panel and are drawn across the session selector. */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, padding: "8px 12px", borderBottom: "2px solid #2A2A38" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6, padding: "8px 12px", borderBottom: "2px solid #2C2C3E" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, minWidth: 0, flex: "1 1 auto" }}>
           {tabBtn("files", "FILES", "#22D3EE")}
           {hasVault && tabBtn("obsidian", "OBSIDIAN", "#A78BFA")}
