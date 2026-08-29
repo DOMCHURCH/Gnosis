@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld("voice", {
   utterance: (wavBase64) => ipcRenderer.send("voice:utterance", wavBase64),
   /** Continuous 16 kHz mono PCM for the wake-word detector. */
   audio: (pcmBuffer) => ipcRenderer.send("voice:audio", pcmBuffer),
+  /** Live input level, for the settings meter. */
+  level: (v) => ipcRenderer.send("voice:level", v),
+  /** Whether the microphone actually opened, and why not when it did not. */
+  mic: (s) => ipcRenderer.send("voice:mic", s),
+  onPlay: (cb) => ipcRenderer.on("voice:play", (_e, file) => cb(file)),
   cancel: () => ipcRenderer.send("voice:cancel"),
   engineStatus: (s) => ipcRenderer.send("voice:engine-status", s),
   // main -> engine

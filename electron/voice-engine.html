@@ -124,6 +124,17 @@
         window.voice.utterance(toWav(flat, ctx.sampleRate));
       }
 
+      // Playing back synthesised speech: the main process has no audio output,
+      // so it hands this renderer a file path.
+      window.voice.onPlay((file) => {
+        try {
+          const a = new Audio("file:///" + String(file).replace(/\/g, "/"));
+          a.play().catch((e) => window.voice.engineStatus({ reason: "playback failed: " + e.message }));
+        } catch (e) {
+          window.voice.engineStatus({ reason: "playback failed: " + String(e?.message ?? e) });
+        }
+      });
+
       window.voice.onRecord(() => { record().catch((e) => window.voice.engineStatus({ reason: String(e.message) })); });
 
       window.voice.onConfigure(async (cfg) => {
@@ -158,12 +169,17 @@
             window.voice.audio(pcm.buffer);
           };
           streamNode = { tap, src, mute };
+          window.voice.mic({ ok: true, reason: "microphone open, streaming to the detector" });
           window.voice.engineStatus({ wakeWord: true, reason: "microphone open, streaming to the detector" });
+          // A level every ~200ms: enough for a meter, far less chatty than a
+          // message per audio frame.
+          setInterval(() => window.voice.level(rms()), 200);
         } catch (e) {
-          window.voice.engineStatus({
-            wakeWord: false,
-            reason: "microphone unavailable: " + String(e?.message ?? e),
-          });
+          const why = String(e?.name === "NotAllowedError"
+            ? "permission denied — Windows microphone privacy settings, or the app was not granted media access"
+            : (e?.message ?? e));
+          window.voice.mic({ ok: false, reason: why });
+          window.voice.engineStatus({ wakeWord: false, reason: "microphone unavailable: " + why });
         }
       });
     </script>

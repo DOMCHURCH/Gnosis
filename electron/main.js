@@ -203,6 +203,20 @@ if (!app.requestSingleInstanceLock()) {
       bootFailed = true;
     }
 
+    // Electron denies getUserMedia unless something approves it, and the denial
+    // is silent — which is exactly how a wake word "just does nothing". Grant
+    // media only, and only to pages loaded from disk (the voice windows); the
+    // served UI is never on file:// so it can never reach this.
+    const grantMedia = (webContents, permission) => {
+      if (permission !== "media") return false;
+      const url = webContents.getURL();
+      return url.startsWith("file://");
+    };
+    win.webContents.session.setPermissionRequestHandler((wc, permission, callback) => {
+      callback(grantMedia(wc, permission));
+    });
+    win.webContents.session.setPermissionCheckHandler((wc, permission) => (wc ? grantMedia(wc, permission) : false));
+
     registerSettingsIpc({
       getMainWindow: () => win,
       voiceStatus: () => voice?.status() ?? null,

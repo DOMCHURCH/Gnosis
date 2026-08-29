@@ -59,6 +59,40 @@ export async function findPython() {
 }
 
 /**
+ * Ask a Python what it actually has: the library, the model files, and which
+ * wake phrases can be detected. This is what the settings panel reports, so a
+ * broken setup names its own cause instead of just going quiet.
+ */
+export async function probeRuntime() {
+  const py = await findPython();
+  if (!py.ok) return { ok: false, installed: false, reason: py.reason, python: null };
+  return new Promise((resolve) => {
+    execFile(py.exe, [...py.args, BRIDGE, "--probe"], { timeout: 30000, windowsHide: true }, (err, stdout) => {
+      const line = String(stdout ?? "").trim().split(/\r?\n/).filter(Boolean).pop();
+      let info = null;
+      try { info = line ? JSON.parse(line) : null; } catch { /* not JSON */ }
+      if (!info) {
+        resolve({ ok: false, installed: false, python: py.exe, reason: `probe produced no answer${err ? `: ${err.message}` : ""}` });
+        return;
+      }
+      resolve({
+        ok: !!info.installed && !!info.modelsDownloaded,
+        installed: !!info.installed,
+        modelsDownloaded: !!info.modelsDownloaded,
+        models: info.models ?? [],
+        modelDir: info.modelDir ?? null,
+        python: info.python ?? py.exe,
+        reason: !info.installed
+          ? "openWakeWord is not installed. It is free and needs no API key: pip install openwakeword"
+          : !info.modelsDownloaded
+            ? 'Models are not downloaded. Run: python -c "from openwakeword import utils; utils.download_models()"'
+            : "ready",
+      });
+    });
+  });
+}
+
+/**
  * Start the detector.
  *
  * @param onWake    called with { model, score } per detected utterance
@@ -69,7 +103,7 @@ export async function startWakeWord({ onWake, onStatus, models = [], threshold =
   const py = await findPython();
   if (!py.ok) {
     onStatus?.({ ready: false, reason: py.reason });
-    return { write() {}, stop() {}, ok: false, reason: py.reason };
+    return { write() {}, stop() {}, stats: () => ({ frames: 0, bytes: 0, running: false }), ok: false, reason: py.reason };
   }
 
   const child = spawn(py.exe, [...py.args, BRIDGE], {
@@ -87,6 +121,11 @@ export async function startWakeWord({ onWake, onStatus, models = [], threshold =
 
   let stopped = false;
   let carry = "";
+  let frames = 0;
+  let bytes = 0;
+  // Per-frame logging is far too loud for normal use — one line per 80ms — so
+  // it is opt-in with GNOSIS_VOICE_DEBUG=1.
+  const debug = process.env.GNOSIS_VOICE_DEBUG === "1";
 
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk) => {
@@ -111,8 +150,13 @@ export async function startWakeWord({ onWake, onStatus, models = [], threshold =
 
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (d) => {
-    const s = String(d).trim();
-    if (s) console.error("[wakeword]", s.split("\n")[0]);
+    const t = String(d).trim();
+    if (!t) return;
+    const last = t.split("\n").slice(-3).join(" ").slice(0, 300);
+    // Always logged, not only in debug mode: a Python traceback here is the
+    // entire explanation for "the wake word does nothing".
+    console.error("[wakeword]", last);
+    onStatus?.({ ready: false, reason: `detector error: ${last}`, stderr: last });
   });
 
   child.on("exit", (code) => {
@@ -132,9 +176,17 @@ export async function startWakeWord({ onWake, onStatus, models = [], threshold =
       if (stopped || !child.stdin.writable) return;
       // Never let a slow detector build an unbounded backlog of audio: dropping
       // frames costs a missed wake word, buffering them costs the whole app.
-      if (child.stdin.writableLength > 1_000_000) return;
+      if (child.stdin.writableLength > 1_000_000) {
+        if (debug) console.error(`[wakeword] backlog full, dropping ${pcm.length} bytes`);
+        return;
+      }
+      frames++;
+      bytes += pcm.length;
+      if (debug) console.error(`[wakeword] frame ${frames} -> ${pcm.length} bytes (${bytes} total)`);
       child.stdin.write(pcm);
     },
+    /** What has actually reached the pipe — the number the settings panel shows. */
+    stats: () => ({ frames, bytes, running: !stopped && !child.killed }),
     stop() {
       stopped = true;
       try { child.stdin.end(); } catch { /* already gone */ }

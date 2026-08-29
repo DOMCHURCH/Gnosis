@@ -17,12 +17,31 @@ import { BrowserWindow, ipcMain, Notification } from "electron";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { startWakeWord, findPython } from "./wakeword.js";
+import { startWakeWord, findPython, probeRuntime } from "./wakeword.js";
+import { synthesize, probeKokoro } from "./kokoro.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** Words that mean "look at my screen" / "look through the camera". Matched on
  * the transcript so a spoken request can escalate to a vision turn. */
+/**
+ * The phrase the detector actually listens for.
+ *
+ * openWakeWord's pretrained set is alexa / hey_jarvis / hey_mycroft /
+ * hey_rhasspy / timer / weather. There is NO "hey gnosis" model — that phrase
+ * would need a custom model trained against it. Until one exists, the app must
+ * say which words really work rather than telling the user to say two that do
+ * nothing. GNOSIS_WAKE_MODELS overrides the model, and this maps it back to the
+ * English the user has to speak.
+ */
+const PHRASES = {
+  hey_jarvis: "hey jarvis",
+  alexa: "alexa",
+  hey_mycroft: "hey mycroft",
+  hey_rhasspy: "hey rhasspy",
+};
+const DEFAULT_WAKE_MODEL = "hey_jarvis";
+
 const SCREEN_WORDS = /\b(screen|screenshot|display|what am i looking at|explain this|on my monitor)\b/i;
 const CAMERA_WORDS = /\b(camera|webcam|scan|look at me|what do you see)\b/i;
 
@@ -36,12 +55,12 @@ async function readEnv() {
   }
 }
 
-/** Speak text through Windows SAPI.
+/** Speak text through Windows SAPI. The fallback, not the first choice.
  *
  * The text is passed as base64 and decoded inside PowerShell. Interpolating it
  * into the command string would be a command-injection hole the moment a model
  * reply contains a quote — and model replies are exactly what gets spoken. */
-export function speak(text) {
+export function speakSapi(text) {
   return new Promise((resolve) => {
     const t = String(text ?? "").trim();
     if (!t || process.platform !== "win32") return resolve({ ok: false, error: "SAPI is Windows-only." });
@@ -62,6 +81,26 @@ $s.Speak($t)
       (err) => resolve(err ? { ok: false, error: String(err.message).split("\n")[0] } : { ok: true }),
     );
   });
+}
+
+/**
+ * Say something out loud.
+ *
+ * Kokoro when it is installed — local, no key, and far closer to a human voice
+ * than SAPI. SAPI when it is not, because a robotic answer beats a silent one.
+ * Which was used is returned, so the settings panel can say so rather than
+ * leaving the user guessing why it sounds the way it does.
+ */
+export async function speak(text, { voice, play } = {}) {
+  const t = String(text ?? "").trim();
+  if (!t) return { ok: false, error: "nothing to say" };
+  const k = await synthesize(t, { voice });
+  if (k.ok) {
+    play?.(k.path);
+    return { ok: true, engine: "kokoro", voice: k.voice, path: k.path };
+  }
+  const s = await speakSapi(t);
+  return { ...s, engine: s.ok ? "sapi" : "none", fallbackReason: k.reason };
 }
 
 /** Transcribe WAV bytes with Groq Whisper. */
@@ -92,6 +131,72 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   let detector = null; // the openWakeWord child process
   let enabled = false;
   let status = { enabled: false, wakeWord: false, transcription: false, reason: "not started" };
+  // Live diagnostics, surfaced in the settings panel. Every field answers a
+  // question someone debugging "it isn't triggering" would otherwise have to
+  // answer with a shell.
+  let diag = {
+    microphone: "disconnected",
+    micReason: "voice is off",
+    process: "not running",
+    lastLevel: 0,
+    frames: 0,
+    bytes: 0,
+    runtime: null,   // probeRuntime(): installed? models downloaded? which python?
+    tts: null,       // which TTS engine will actually be used
+    lastWake: null,
+    lastError: null,
+  };
+
+  /** The phrase to speak, derived from whichever model is loaded. */
+  function wakePhrase() {
+    const loaded = (status.models ?? [])[0] ?? DEFAULT_WAKE_MODEL;
+    const key = String(loaded).replace(/_v\d.*$/, "");
+    return PHRASES[key] ?? key.replace(/_/g, " ");
+  }
+
+  /**
+   * Decode a WAV to 16 kHz mono 16-bit PCM — what the detector consumes.
+   *
+   * Kokoro writes 24 kHz and SAPI writes whatever it likes, so a resample is
+   * unavoidable. Linear interpolation is enough here: this feeds a wake-word
+   * classifier, not a listener.
+   */
+  async function wavTo16kMono(file) {
+    const { promises: fsp } = await import("node:fs");
+    const buf = await fsp.readFile(file);
+    if (buf.toString("ascii", 0, 4) !== "RIFF") throw new Error("not a WAV file");
+    // Walk the chunk list rather than assuming a 44-byte header: SAPI emits
+    // extra chunks before `data` and a fixed offset reads them as samples.
+    let pos = 12;
+    let fmt = null;
+    let data = null;
+    while (pos + 8 <= buf.length) {
+      const id = buf.toString("ascii", pos, pos + 4);
+      const size = buf.readUInt32LE(pos + 4);
+      const body = buf.subarray(pos + 8, pos + 8 + size);
+      if (id === "fmt ") fmt = { channels: body.readUInt16LE(2), rate: body.readUInt32LE(4), bits: body.readUInt16LE(14) };
+      else if (id === "data") { data = body; break; }
+      pos += 8 + size + (size % 2);
+    }
+    if (!fmt || !data) throw new Error("WAV has no fmt/data chunk");
+    if (fmt.bits !== 16) throw new Error(`expected 16-bit audio, got ${fmt.bits}`);
+
+    const inSamples = data.length / 2 / fmt.channels;
+    const ratio = fmt.rate / 16000;
+    const outSamples = Math.floor(inSamples / ratio);
+    const out = Buffer.alloc(outSamples * 2);
+    for (let i = 0; i < outSamples; i++) {
+      const src = i * ratio;
+      const i0 = Math.floor(src);
+      const frac = src - i0;
+      const at = (n) => {
+        const idx = Math.min(n, inSamples - 1) * fmt.channels * 2;
+        return data.readInt16LE(idx); // channel 0; a mono mixdown is not worth it here
+      };
+      out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(at(i0) * (1 - frac) + at(i0 + 1) * frac))), i * 2);
+    }
+    return out;
+  }
 
   const overlayHtml = path.join(here, "voice-overlay.html");
   const enginePreload = path.join(here, "voice-preload.cjs");
@@ -201,7 +306,18 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   // Raw PCM from the renderer's microphone, forwarded to openWakeWord. Arrives
   // continuously while voice is enabled, so it does nothing but hand bytes on.
   ipcMain.on("voice:audio", (_e, buf) => {
-    if (detector && buf) detector.write(Buffer.from(buf));
+    if (detector && buf) {
+      detector.write(Buffer.from(buf));
+      const st = detector.stats?.();
+      if (st) { diag.frames = st.frames; diag.bytes = st.bytes; diag.process = st.running ? "running" : "not running"; }
+    }
+  });
+  // A cheap level meter so the panel can show that audio is genuinely moving,
+  // not merely that a process exists.
+  ipcMain.on("voice:level", (_e, level) => { diag.lastLevel = Number(level) || 0; });
+  ipcMain.on("voice:mic", (_e, s) => {
+    diag.microphone = s?.ok ? "connected" : "disconnected";
+    diag.micReason = s?.reason ?? "";
   });
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
   ipcMain.on("voice:cancel", () => sleep());
@@ -209,12 +325,73 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     status = { ...status, ...s };
   });
   ipcMain.handle("voice:status", () => status);
-  ipcMain.handle("voice:speak", (_e, text) => speak(text));
+  ipcMain.handle("voice:diagnostics", () => ({ ...diag, wakePhrase: wakePhrase() }));
+  // The full probe is slow (it starts Python), so it is explicit rather than
+  // part of every status read.
+  ipcMain.handle("voice:probe-runtime", async () => {
+    diag.runtime = await probeRuntime();
+    const k = await probeKokoro();
+    diag.tts = k.ok
+      ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python }
+      : { engine: "sapi", voices: [], reason: k.reason };
+    return diag;
+  });
+  ipcMain.handle("voice:test", async () => testWakeWord());
+  ipcMain.handle("voice:speak", async (_e, text) => {
+    const { config } = await readEnv();
+    return speak(text, { voice: config.kokoroVoice, play });
+  });
   ipcMain.handle("voice:set-enabled", async (_e, on) => {
     if (on) await start();
     else stop();
     return status;
   });
+
+  /** Play a WAV through the hidden engine renderer — main has no audio out. */
+  function play(file) {
+    const e = makeEngine();
+    e.webContents.send("voice:play", file);
+  }
+
+  /**
+   * Feed a synthesised wake phrase straight into the detector.
+   *
+   * Proves the Python side end to end without anyone having to speak, and
+   * without the microphone — which is the point: it separates "the detector is
+   * broken" from "the microphone is not reaching it".
+   */
+  async function testWakeWord() {
+    if (!detector?.ok) {
+      const runtime = await probeRuntime();
+      return { ok: false, stage: "detector", reason: runtime.reason ?? "the detector is not running" };
+    }
+    // Say whichever phrase the loaded model actually listens for. openWakeWord's
+    // pretrained set does NOT include "hey gnosis" — see WAKE_PHRASE below.
+    const phrase = wakePhrase();
+    const { config } = await readEnv();
+    const spoken = await speak(phrase, { voice: config.kokoroVoice });
+    if (!spoken.ok || !spoken.path) {
+      return { ok: false, stage: "tts", reason: spoken.error ?? spoken.fallbackReason ?? "could not synthesise the test phrase" };
+    }
+    let pcm;
+    try {
+      pcm = await wavTo16kMono(spoken.path);
+    } catch (e) {
+      return { ok: false, stage: "decode", reason: String(e?.message ?? e) };
+    }
+    const before = diag.lastWake;
+    // 1280-sample frames, the size the model consumes.
+    for (let off = 0; off + 2560 <= pcm.length; off += 2560) detector.write(pcm.subarray(off, off + 2560));
+    await new Promise((r) => setTimeout(r, 2500));
+    const fired = diag.lastWake && diag.lastWake !== before;
+    return {
+      ok: !!fired,
+      stage: fired ? "done" : "detect",
+      phrase,
+      engine: spoken.engine,
+      reason: fired ? `detected "${phrase}"` : `synthesised "${phrase}" and fed ${Math.round(pcm.length / 2560)} frames, but the detector did not fire`,
+    };
+  }
 
   async function start() {
     const { env } = await readEnv();
@@ -224,9 +401,15 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // is missing rather than a bare "unavailable".
     detector?.stop();
     detector = await startWakeWord({
-      onWake: () => wake(),
+      onWake: (w) => {
+        diag.lastWake = `${w?.model ?? "?"} @ ${new Date().toISOString()}`;
+        wake();
+      },
       onStatus: (s) => {
+        diag.process = s.ready ? "running" : "not running";
+        if (s.stderr) diag.lastError = s.stderr;
         status = {
+          models: s.models ?? status.models,
           ...status,
           enabled: true,
           wakeWord: !!s.ready,
@@ -238,6 +421,12 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
             : s.reason,
         };
       },
+    });
+
+    void probeKokoro().then((k) => {
+      diag.tts = k.ok
+        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python }
+        : { engine: "sapi", voices: [], reason: k.reason };
     });
 
     status = {

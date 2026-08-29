@@ -135,6 +135,16 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
     }
   });
 
+  ipcMain.handle("settings:set-voice-name", async (_e, name) => {
+    try {
+      const { saveConfig } = await import("../dist/config.js");
+      await saveConfig({ kokoroVoice: String(name ?? "") });
+      return { ok: true, voice: name };
+    } catch (e) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  });
+
   ipcMain.on("settings:open", () => openSettings(getMainWindow()));
   ipcMain.on("settings:close", () => { if (win && !win.isDestroyed()) win.close(); });
   ipcMain.on("app:relaunch", () => {

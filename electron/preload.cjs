@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld("gnosis", {
   relaunch: () => ipcRenderer.send("app:relaunch"),
   closeSettings: () => ipcRenderer.send("settings:close"),
   setVoiceEnabled: (on) => ipcRenderer.invoke("settings:set-voice", on),
+  voiceDiagnostics: () => ipcRenderer.invoke("voice:diagnostics"),
+  voiceProbe: () => ipcRenderer.invoke("voice:probe-runtime"),
+  voiceTest: () => ipcRenderer.invoke("voice:test"),
+  setVoiceName: (v) => ipcRenderer.invoke("settings:set-voice-name", v),
 });

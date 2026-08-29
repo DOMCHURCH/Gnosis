@@ -37,6 +37,39 @@ def emit(obj):
     sys.stdout.flush()
 
 
+def probe() -> int:
+    """Report what is installed, without touching audio.
+
+    Answers the three questions the settings panel asks: is the library
+    importable, are the model files on disk, and which wake phrases can
+    actually be detected. Called with --probe.
+    """
+    info = {"type": "probe", "python": sys.executable, "installed": False, "models": [], "modelDir": None, "modelsDownloaded": False}
+    try:
+        import openwakeword
+        from openwakeword import utils  # noqa: F401
+    except Exception as e:
+        info["error"] = f"openwakeword is not importable: {e}"
+        emit(info)
+        return 2
+    info["installed"] = True
+    try:
+        import os.path as _p
+
+        d = _p.join(_p.dirname(openwakeword.__file__), "resources", "models")
+        info["modelDir"] = d
+        files = sorted(f for f in os.listdir(d)) if os.path.isdir(d) else []
+        # The feature extractors ship with the wheel; the wake-word models are
+        # downloaded separately, so their absence is the "not downloaded" case.
+        wake = [f for f in files if f.endswith((".onnx", ".tflite")) and "melspectrogram" not in f and "embedding" not in f]
+        info["models"] = wake
+        info["modelsDownloaded"] = len(wake) > 0
+    except Exception as e:  # noqa: BLE001
+        info["error"] = f"could not inspect the model directory: {e}"
+    emit(info)
+    return 0
+
+
 def main() -> int:
     try:
         import numpy as np
@@ -117,7 +150,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(probe() if "--probe" in sys.argv else main())
     except KeyboardInterrupt:
         sys.exit(0)
     except BrokenPipeError:

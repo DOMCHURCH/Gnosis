@@ -127,6 +127,15 @@
       button:hover { border-color: rgba(34, 211, 238, 0.4); color: var(--cyan); }
       button:active { transform: translateY(1px); box-shadow: var(--press); }
       button.primary { border-color: rgba(34, 211, 238, 0.45); color: var(--cyan); }
+      select {
+        background: var(--inset); color: var(--text); border: 1px solid var(--line);
+        border-radius: 10px; padding: 8px 10px; font: 11px var(--mono); box-shadow: var(--press);
+      }
+      .meter { flex: 1; height: 6px; border-radius: 999px; background: var(--inset); box-shadow: var(--press); overflow: hidden; }
+      .meter > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--magenta)); transition: width 120ms linear; }
+      td.v { color: var(--text); }
+      td.bad { color: var(--red); }
+      td.good { color: var(--green); }
 
       /* Pill toggle. The bounce is on the knob only — one transform on one small
        * element, not an animation of the whole control. */
@@ -222,6 +231,24 @@
         <div class="row">
           <button class="toggle" id="voice-toggle" type="button" aria-pressed="false" title="Enable voice" aria-label="Enable voice"><span class="knob"></span></button>
           <span class="state" id="voice-state" style="margin: 0"></span>
+        </div>
+
+        <p class="note" id="wake-phrase"></p>
+
+        <div class="row" style="margin-top: 12px">
+          <span class="note" style="margin: 0; flex: 0 0 78px">Voice</span>
+          <select id="tts-voice"><option>default</option></select>
+          <span class="note" id="tts-engine" style="margin: 0"></span>
+        </div>
+
+        <!-- Live pipeline state. Every row answers a question you would
+             otherwise have to answer with a shell. -->
+        <table id="voice-diag" style="margin-top: 14px"></table>
+
+        <div class="row" style="margin-top: 12px">
+          <button id="voice-refresh" type="button">Re-check</button>
+          <button id="voice-test" type="button" class="primary">Test wake word</button>
+          <span class="state" id="voice-test-result" style="margin: 0"></span>
         </div>
       </section>
 
@@ -358,6 +385,104 @@
         $("voice-toggle").setAttribute("aria-pressed", String(on));
         paintVoice(await window.gnosis.setVoiceEnabled(on));
       });
+
+      // ---- voice diagnostics -------------------------------------------------
+      function row(label, value, cls) {
+        const tr = document.createElement("tr");
+        const k = document.createElement("td");
+        k.className = "k";
+        const kb = document.createElement("span");
+        kb.textContent = label;
+        k.appendChild(kb);
+        const v = document.createElement("td");
+        v.className = "v " + (cls || "");
+        if (value instanceof Node) v.appendChild(value); else v.textContent = String(value);
+        tr.append(k, v);
+        return tr;
+      }
+
+      let meterBar = null;
+      function paintDiag(d) {
+        const t = $("voice-diag");
+        t.innerHTML = "";
+        if (!d) return;
+        const micOk = d.microphone === "connected";
+        t.appendChild(row("microphone", `${d.microphone}${d.micReason ? " — " + d.micReason : ""}`, micOk ? "good" : "bad"));
+        t.appendChild(row("openwakeword", d.process, d.process === "running" ? "good" : "bad"));
+
+        const meter = document.createElement("span");
+        meter.style.display = "flex";
+        meter.style.alignItems = "center";
+        meter.style.gap = "8px";
+        const bar = document.createElement("span");
+        bar.className = "meter";
+        meterBar = document.createElement("i");
+        bar.appendChild(meterBar);
+        const num = document.createElement("span");
+        num.id = "level-num";
+        num.textContent = (d.lastLevel ?? 0).toFixed(3);
+        meter.append(bar, num);
+        t.appendChild(row("last audio level", meter));
+
+        t.appendChild(row("frames sent", `${d.frames ?? 0} (${Math.round((d.bytes ?? 0) / 1024)} KB)`));
+        if (d.runtime) {
+          t.appendChild(row("python", d.runtime.python ?? "not found", d.runtime.python ? "" : "bad"));
+          t.appendChild(row("models", d.runtime.modelsDownloaded ? `downloaded (${(d.runtime.models || []).length})` : "NOT downloaded",
+            d.runtime.modelsDownloaded ? "good" : "bad"));
+          if (!d.runtime.ok) t.appendChild(row("fix", d.runtime.reason, "bad"));
+        }
+        if (d.tts) t.appendChild(row("tts engine", d.tts.engine + (d.tts.reason ? " — " + d.tts.reason : ""), d.tts.engine === "kokoro" ? "good" : ""));
+        if (d.lastWake) t.appendChild(row("last wake", d.lastWake, "good"));
+        if (d.lastError) t.appendChild(row("last error", d.lastError, "bad"));
+
+        // Voice picker, populated from whatever Kokoro reports.
+        const sel = $("tts-voice");
+        const voices = (d.tts && d.tts.voices) || [];
+        if (voices.length && sel.options.length !== voices.length) {
+          sel.innerHTML = "";
+          for (const v of voices) {
+            const o = document.createElement("option");
+            o.value = v; o.textContent = v;
+            sel.appendChild(o);
+          }
+          if (d.tts.default) sel.value = d.tts.default;
+        }
+        $("tts-engine").textContent = voices.length ? "" : "Kokoro not installed — using SAPI";
+        $("wake-phrase").textContent = d.wakePhrase
+          ? `Say “${d.wakePhrase}”. openWakeWord ships no “hey gnosis” model, so that is the phrase this build actually listens for.`
+          : "";
+      }
+
+      // The level is live; poll only that, not the whole panel.
+      setInterval(async () => {
+        try {
+          const d = await window.gnosis.voiceDiagnostics();
+          if (meterBar) {
+            meterBar.style.width = Math.min(100, (d.lastLevel ?? 0) * 800) + "%";
+            const n = document.getElementById("level-num");
+            if (n) n.textContent = (d.lastLevel ?? 0).toFixed(3);
+          }
+        } catch { /* window closing */ }
+      }, 400);
+
+      $("voice-refresh").addEventListener("click", async () => {
+        $("voice-refresh").textContent = "Checking…";
+        try { paintDiag(await window.gnosis.voiceProbe()); } finally { $("voice-refresh").textContent = "Re-check"; }
+      });
+
+      $("voice-test").addEventListener("click", async () => {
+        const out = $("voice-test-result");
+        out.className = "state";
+        out.textContent = "testing…";
+        const r = await window.gnosis.voiceTest();
+        out.className = "state" + (r.ok ? " set" : "");
+        out.textContent = (r.ok ? "PASS · " : `FAIL (${r.stage}) · `) + (r.reason ?? "");
+        paintDiag(await window.gnosis.voiceDiagnostics());
+      });
+
+      $("tts-voice").addEventListener("change", (e) => void window.gnosis.setVoiceName(e.target.value));
+
+      void window.gnosis.voiceDiagnostics().then(paintDiag);
 
       $("cancel").addEventListener("click", () => window.gnosis.closeSettings());
       load();
