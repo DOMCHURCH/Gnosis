@@ -38,7 +38,14 @@ export interface AgentSnapshot {
   cost: number;
 }
 
-/** Every event the bus can carry. `unknown` payloads (preview/item/args) are
+/** `line.partial` is the line still being WRITTEN, emitted a few times a second
+ * with the whole partial each time (no reassembly needed downstream). It exists
+ * for voice: a spoken reply starts at the first finished SENTENCE, and `line`
+ * only fires at a NEWLINE — which a one-paragraph answer never reaches until it
+ * is completely written. The browser ignores it; the transcript still comes from
+ * `line`.
+ *
+ * Every event the bus can carry. `unknown` payloads (preview/item/args) are
  * passed straight through and JSON-serialized by the server — the bus does not
  * couple to their concrete shapes. */
 export type DomEvent =
@@ -57,6 +64,7 @@ export type DomEvent =
   // one-liner already shown in the rail; the rest lets a client offer "fix it".
   | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }
   | { type: "line"; tabId: number; item: unknown }
+  | { type: "line.partial"; tabId: number; text: string }
   | { type: "tool.start"; tabId: number; tool: string; args: unknown }
   | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }
   // Streaming file edits: a large edit (after approval) writes progressively. The

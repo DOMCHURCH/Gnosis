@@ -148,8 +148,83 @@ export async function focusWindow(arg: { pid?: number; app?: string }): Promise<
   }
 }
 
+/**
+ * Start an application, and hand it arguments.
+ *
+ * This exists because focus_window could only raise a window that was ALREADY
+ * open, so "open Chrome and go to google.com" had no hands-free path at all: the
+ * agent fell back to alt-tabbing and typing into the address bar, which lands in
+ * whatever Windows has in front and needs a human to rescue it. Launching with
+ * the URL as an argument is one call, needs no focus and no synthetic keystrokes,
+ * and is the reliable way to do the thing that was being attempted.
+ *
+ * Start-Process on an app that is already running starts a SECOND copy (the
+ * system prompt warns about exactly this), so an already-open app is focused
+ * instead — except when arguments are given, where a URL handed to a running
+ * browser opens a tab in it rather than a second browser.
+ */
+export async function launchApp(app: string, argstr?: string): Promise<{
+  ok: boolean; launched?: boolean; focused?: boolean; pid?: number; title?: string; error?: string;
+}> {
+  if (process.platform !== "win32") return { ok: false, error: "Windows only." };
+  const name = String(app ?? "").trim();
+  if (!name) return { ok: false, error: "Give an app to launch." };
+  const extra = String(argstr ?? "").trim();
+
+  // Already open and nothing to pass: raise it rather than starting a second one.
+  if (!extra) {
+    const list = await listWindows();
+    const needle = name.toLowerCase().replace(/\.exe$/, "");
+    const open = (list.windows ?? []).find((w) => w.name.toLowerCase() === needle || w.name.toLowerCase().includes(needle));
+    if (open) {
+      const f = await focusWindow({ pid: open.pid });
+      return { ok: f.ok, launched: false, focused: f.ok, pid: f.pid, title: f.title, error: f.ok ? undefined : f.error };
+    }
+  }
+
+  const script = extra
+    ? `Start-Process -FilePath ${psQuote(name)} -ArgumentList ${psQuote(extra)}\nConvertTo-Json -Compress @{ ok = $true }`
+    : `Start-Process -FilePath ${psQuote(name)}\nConvertTo-Json -Compress @{ ok = $true }`;
+  const r = await run(script);
+  if (!r.ok) return { ok: false, error: r.error };
+
+  // Give the window time to exist before claiming anything about it. A launch
+  // that reports success before the app has drawn is the kind of "worked" that
+  // leaves the next tool call typing into the wrong place.
+  for (let i = 0; i < 12; i++) {
+    await new Promise((res) => setTimeout(res, 400));
+    const list = await listWindows();
+    const needle = name.toLowerCase().replace(/\.exe$/, "");
+    const w = (list.windows ?? []).find((x) => x.name.toLowerCase() === needle || x.name.toLowerCase().includes(needle));
+    if (w) {
+      const f = await focusWindow({ pid: w.pid });
+      return { ok: true, launched: true, focused: f.ok, pid: w.pid, title: w.title };
+    }
+  }
+  // It started but never showed a window. Say so rather than implying it is ready.
+  return { ok: true, launched: true, focused: false, error: `${name} started but no window appeared within 5s.` };
+}
+
+/** Single-quote a string for PowerShell (doubling any embedded quote). */
+function psQuote(s: string): string {
+  return `'${String(s).replace(/'/g, "''")}'`;
+}
+
 /** The agent-facing tool. */
 export async function runFocusWindow(args: FocusWindowArgs, _signal?: AbortSignal, _ctx?: ToolContext): Promise<ToolResult> {
+  if (args.action === "launch") {
+    const r = await launchApp(args.app ?? "", args.args);
+    if (!r.ok) return { output: `focus_window: ${r.error}`, isError: true };
+    // Report focus honestly: "started" and "in front and ready for input" are
+    // different claims, and conflating them is what made a silent failure look
+    // like a success.
+    const what = r.launched ? "Launched" : "Already running — focused";
+    const ready = r.focused
+      ? "It is in the foreground now."
+      : `WARNING: it is NOT in the foreground${r.error ? ` (${r.error})` : ""} — do not send keystrokes expecting them to land there.`;
+    return { output: `${what} ${args.app}${args.args ? ` with ${args.args}` : ""}. ${ready}`, isError: false };
+  }
+
   if (args.action === "list") {
     const r = await listWindows();
     if (!r.ok) return { output: `focus_window: ${r.error}`, isError: true };
@@ -162,5 +237,9 @@ export async function runFocusWindow(args: FocusWindowArgs, _signal?: AbortSigna
     const hint = r.open?.length ? `\nOpen now: ${[...new Set(r.open)].join(", ")}` : "";
     return { output: `focus_window: ${r.error}${hint}`, isError: true };
   }
-  return { output: `Focused ${r.matched ?? r.pid} — "${r.title}". It is now the foreground window.`, isError: false };
+  // Windows takes a moment to actually move the foreground after AppActivate
+  // returns. Sending keystrokes on the next line lands them in whatever was in
+  // front before — which is the "focus worked but typing went elsewhere" report.
+  await new Promise((res) => setTimeout(res, 350));
+  return { output: `Focused ${r.matched ?? r.pid} — "${r.title}". It is in the foreground and settled; keystrokes will land there.`, isError: false };
 }

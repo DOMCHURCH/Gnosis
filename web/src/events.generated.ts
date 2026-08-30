@@ -21,6 +21,7 @@ export type DomEvent =
   // one-liner already shown in the rail; the rest lets a client offer "fix it".
   | { type: "turn.outcome"; tabId: number; verdict: "pass" | "fail" | "unknown"; confidence: number | null; summary: string; line: string }
   | { type: "line"; tabId: number; item: TranscriptItem }
+  | { type: "line.partial"; tabId: number; text: string }
   | { type: "tool.start"; tabId: number; tool: string; args: unknown }
   | { type: "tool.end"; tabId: number; tool: string; primary: string; secondary: string; ok: boolean; summary: string; detail: string }
   // Streaming file edits: a large edit (after approval) writes progressively. The

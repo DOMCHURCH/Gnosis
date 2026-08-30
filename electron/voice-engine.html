@@ -29,6 +29,7 @@
       let streamNode = null;   // continuous tap feeding the wake-word detector
       let recording = false;   // suspends the tap while an utterance is captured
       let muted = false;       // true while our own TTS is playing (echo suppression)
+      let recordAbort = false; // set when a mute arrives mid-recording: drop the capture
 
       async function mic() {
         if (stream) return stream;
@@ -84,7 +85,10 @@
 
       async function record() {
         await mic();
+        // Muted between the request and here (mic() awaits): do not start.
+        if (muted) return;
         recording = true;
+        recordAbort = false;
         const chunks = [];
         const proc = ctx.createScriptProcessor(4096, 1, 1);
         const src = ctx.createMediaStreamSource(stream);
@@ -107,7 +111,12 @@
             const level = rms();
             if (level > SILENCE_RMS) { lastVoice = Date.now(); heardAnything = true; }
             const quietFor = Date.now() - lastVoice;
-            if ((heardAnything && quietFor > SILENCE_MS) || Date.now() - started > MAX_UTTERANCE_MS) {
+            // recordAbort is the other half of the echo fix. Muting the TAP stops
+            // the wake-word detector hearing our own speech, but a recording that
+            // was ALREADY RUNNING has its own node on the same stream and kept
+            // capturing — so the reply went straight into the next transcription.
+            // Gating the start was not enough; this stops one in flight.
+            if (recordAbort || (heardAnything && quietFor > SILENCE_MS) || Date.now() - started > MAX_UTTERANCE_MS) {
               proc.onaudioprocess = null;
               done();
             }
@@ -117,6 +126,7 @@
         try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch {}
 
         recording = false;
+        if (recordAbort) { recordAbort = false; return; } // discarded: we were talking
         if (!heardAnything) { window.voice.cancel(); return; }
         const total = chunks.reduce((n, c) => n + c.length, 0);
         const flat = new Float32Array(total);
@@ -135,25 +145,29 @@
       // waiting needs to hear about the END, and about failures too, or a clip
       // that never plays leaves the session waiting forever.
       let playing = null;
-      window.voice.onPlay((file) => {
+      window.voice.onPlay(({ file, id }) => {
         try {
           stopAudio();
           const a = new Audio("file:///" + String(file).replace(/\\/g, "/"));
           playing = a;
-          const done = () => {
+          // The id travels with the clip so the main process can match the report
+          // to the exact clip it is waiting on. A single shared callback let a
+          // stale `ended` resolve the CURRENT wait — the session stopped waiting
+          // while audio was still playing, and the queue behind it stalled.
+          const done = (why) => {
             if (playing !== a) return; // superseded by a newer clip
             playing = null;
-            window.voice.playDone();
+            window.voice.playDone(id, why);
           };
-          a.addEventListener("ended", done);
-          a.addEventListener("error", done);
+          a.addEventListener("ended", () => done("ended"));
+          a.addEventListener("error", () => done("error"));
           a.play().catch((e) => {
             window.voice.engineStatus({ reason: "playback failed: " + e.message });
-            done();
+            done("play-rejected");
           });
         } catch (e) {
           window.voice.engineStatus({ reason: "playback failed: " + String(e?.message ?? e) });
-          window.voice.playDone();
+          window.voice.playDone(id, "threw");
         }
       });
 
@@ -174,7 +188,15 @@
       // re-trigger on it), and the recorder captures it as if it were the user.
       window.voice.onMute((on) => {
         muted = on;
-        if (on) window.voice.level(0); // park the meter rather than freezing it
+        let abortedRecording = false;
+        if (on) {
+          window.voice.level(0); // park the meter rather than freezing it
+          if (recording) { recordAbort = true; abortedRecording = true; }
+        }
+        // Confirm it back. The main process previously only knew it had SENT a
+        // mute, which is not the same as the microphone being deaf — and the gap
+        // between those two claims is where the echo lived.
+        window.voice.muteAck({ on, abortedRecording });
       });
 
       window.voice.onRecord(() => {

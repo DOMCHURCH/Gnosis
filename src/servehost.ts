@@ -55,10 +55,19 @@ import { recentTurns, applyRewind, applySummary, splitForSummary, summaryPrompt 
 function mirrorCallbacks(tab: Tab, bridge: AppBridge): Callbacks {
   const bus = bridge.bus;
   const id = tab.id;
+  let lastPartial = 0;
   return {
     onLine: (l) =>
       bus.emit({ type: "line", tabId: id, item: l.kind === "rule" ? { kind: "rule", lang: l.lang } : { kind: "line", text: l.text } }),
-    onPending: () => {},
+    // The in-flight line, throttled. Voice speaks at sentence boundaries and
+    // `line` only fires on a newline, so without this the first spoken word waits
+    // for the whole paragraph. Whole-value each time: no reassembly downstream.
+    onPending: (text) => {
+      const now = Date.now();
+      if (text && now - lastPartial < 120) return;
+      lastPartial = now;
+      bus.emit({ type: "line.partial", tabId: id, text });
+    },
     onAssistant: () => {},
     onToolStart: () => {}, // engine emits tool.start
     onToolResult: (call, result) => {

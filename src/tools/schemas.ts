@@ -337,8 +337,14 @@ export function toJsonSchema(schema: z.ZodTypeAny): ToolJsonSchema {
 
 /** focus_window: bring another application to the foreground, or list what is open. */
 export const focusWindowSchema = z.object({
-  action: z.enum(["focus", "list"]).describe("focus a window, or list the open ones"),
+  action: z
+    .enum(["focus", "list", "launch"])
+    .describe("focus an open window, list the open ones, or launch an app (focusing it if already running)"),
   app: z.string().optional().describe("process name or window-title substring, e.g. \"chrome\", \"code\""),
   pid: z.number().optional().describe("exact process id, when you already have one from action=list"),
+  args: z
+    .string()
+    .optional()
+    .describe("launch only: arguments for the app — most usefully a URL, e.g. app=\"chrome\" args=\"https://google.com\""),
 });
 export type FocusWindowArgs = z.infer<typeof focusWindowSchema>;

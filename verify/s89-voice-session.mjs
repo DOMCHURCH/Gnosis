@@ -70,22 +70,53 @@ ok("a silent turn keeps the session open", /session \? listenAgain\(\) : sleep\(
 ok("an unheard utterance keeps the session open", /if \(session\) setTimeout\(\(\) => listenAgain\(\), \d+\);/.test(voice));
 ok("the idle timeout is 60s", /const IDLE_MS = 60000;/.test(voice));
 ok("the idle timer ends the session", /endSession\("60s of silence"\)/.test(voice));
-ok("the overlay's X ends the session", /ipcMain\.on\("voice:end-session", \(\) => endSession/.test(voice));
+ok("the overlay's X ends the session", /ipcMain\.on\("voice:end-session"/.test(voice));
 ok("a second wake word does not restart an open session", /if \(session\) return;/.test(voice));
 ok("switching voice off ends the session", /endSession\("voice switched off"\)/.test(voice));
 
 // --- the overlay -----------------------------------------------------------
 const overlay = readFileSync(path.join(root, "electron", "voice-overlay.html"), "utf8");
-ok("the overlay is 500x200", /const W = 500;[\s\S]{0,40}const H = 200;/.test(voice));
+ok("there are two states, collapsed and expanded", /id="collapsed"/.test(overlay) && /id="expanded"/.test(overlay));
+ok("the collapsed pill is ~440x92", /collapsed: \{ w: 440, h: 92 \}/.test(voice));
+ok("the expanded panel is ~720x320", /expanded: \{ w: 720, h: 320 \}/.test(voice));
+ok("the page drives the window size", /ipcMain\.on\("voice:resize"/.test(voice));
 ok("...frameless and always on top", /frame: false,[\s\S]*alwaysOnTop: true,/.test(voice));
 ok("...with no parent window, so the main window stays usable", !/parent: .*overlay/i.test(voice));
 ok("...glassmorphic", /backdrop-filter: blur/.test(overlay));
-ok("...with a gradient border", /background: linear-gradient\(135deg, var\(--cyan\)/.test(overlay));
-ok("...a close button", /id="close"/.test(overlay));
-ok("...a transcript line", /id="transcript"/.test(overlay));
-ok("...a response line", /id="response"/.test(overlay));
+ok("...with a gradient rim", /background: linear-gradient\(120deg, rgba\(34, 211, 238/.test(overlay));
+ok("the pill has a pulsing listening dot", /@keyframes pulse/.test(overlay));
+ok("...a live waveform strip", /id="pillWave"/.test(overlay));
+ok("...and a shield that badges a count", /id="shieldBtn"/.test(overlay) && /id="badge"/.test(overlay));
+ok("the expanded panel has the four tabs",
+  ["permissions", "memory", "tools", "settings"].every((t) => overlay.includes(`data-tab="${t}"`)));
+ok("...state labels", /LISTENING/.test(overlay) && /PROCESSING/.test(overlay) && /READY/.test(overlay));
+ok("...an ESC TO END hint", /ESC TO END/.test(overlay));
+ok("...a Clear all link", /id="clearAll"/.test(overlay));
+ok("...and the footer promise", /always ask before taking actions/.test(overlay));
+ok("Esc ends the session", /e\.key === "Escape"/.test(overlay));
 ok("the waveform is driven by real audio, not a synthesised wave", /window\.voice\.onLevel/.test(overlay));
 ok("...and the main process forwards the level to it", /voice:level-out/.test(voice));
+// Nothing may be focusable by default: an always-on-top panel that holds focus
+// steals keystrokes meant for the app underneath, and a focused close button can
+// be activated by a stray Enter — which is exactly what happened.
+ok("no control is in the tab order", !/<button(?![^>]*tabindex="-1")/.test(overlay.replace(/<button[^>]*id="close"[^>]*>/g, "")));
+
+// --- permissions route into the panel ---------------------------------------
+ok("permission requests are captured during a voice session", /e\.type === "permission\.request"/.test(voice));
+ok("...only during one", /if \(!session\) return; \/\/ typed sessions/.test(voice));
+ok("...and are answered back through the bridge", /bridge\?\.answerPermission\?\.\(id, answer\)/.test(voice));
+ok("multiple requests stack", /pendingPerms\.push/.test(voice));
+ok("spoken allow/deny answers the top request", /ALLOW_RE\.test\(t\.text\)/.test(voice));
+ok("ending the session denies anything still waiting", /for \(const p of \[\.\.\.pendingPerms\]\) answerPerm\(p\.id, "no"\)/.test(voice));
+
+// --- echo suppression --------------------------------------------------------
+const engineHtml = readFileSync(path.join(root, "electron", "voice-engine.html"), "utf8");
+ok("a mute aborts a recording that is already running", /recordAbort = true/.test(engineHtml));
+ok("...and the renderer confirms the mute back", /muteAck\(/.test(engineHtml));
+ok("playback reports which clip ended", /playDone\(id, why\)/.test(engineHtml));
+ok("the reopen timer is cancelled when more speech is queued", /cancelReopen\("more speech queued"\)/.test(voice));
+ok("...and re-checks before reopening", /why: "still speaking"/.test(voice));
+ok("listenAgain refuses while speech is in flight", /vlog\("record\.refused"/.test(voice));
 
 console.log(fails ? `\n${fails} FAILED` : "\nall voice-session checks passed");
 process.exit(fails ? 1 : 0);

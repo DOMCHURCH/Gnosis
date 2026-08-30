@@ -193,6 +193,22 @@ export async function synthesize(text, { voice, speed } = {}) {
   return result;
 }
 
+/**
+ * Start the synthesiser without saying anything.
+ *
+ * Loading the model costs ~2.5s and the user was paying it inside their first
+ * spoken answer. Called when a voice session opens, it overlaps with the person
+ * still talking and the question being transcribed, so the first reply pays only
+ * the ~550ms synthesis actually takes.
+ *
+ * NOT synthesize(" "): that returns early on empty text and never reaches the
+ * daemon, which is exactly how the first version of this warmed nothing at all.
+ */
+export async function warmKokoro() {
+  const d = await ensureDaemon();
+  return { ok: !d?.error, reason: d?.error };
+}
+
 /** Stop the synthesiser (app quit, or voice switched off). */
 export function shutdownKokoro() {
   stopDaemon();

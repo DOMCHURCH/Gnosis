@@ -400,9 +400,12 @@ export const TOOLS: Record<string, ToolDef> = {
   focus_window: {
     name: "focus_window",
     description:
-      "Windows only. Bring another application's window to the foreground, or list the windows that are open. " +
-      "Windows blocks a background process from stealing focus, so a synthesised click lands on whatever is " +
-      "already in front — NOT on the app you think you are driving. Call action=focus with `app` before the first " +
+      "Windows only. Launch an app, bring a window to the foreground, or list the windows that are open. " +
+      "action=launch is the RELIABLE way to open something: `app` plus `args` starts it (or focuses it if it is " +
+      "already running), and a URL in `args` — app=\"chrome\" args=\"https://google.com\" — opens that page " +
+      "directly. Prefer that over focusing a browser and typing into the address bar: synthesised keystrokes land " +
+      "on whatever Windows has in front, which is why that approach needs rescuing by hand. " +
+      "Windows blocks a background process from stealing focus, so call action=focus with `app` before the first " +
       "click on any application that is not already in the foreground, and again after anything that may have " +
       "changed focus. action=list gives the process names and titles you can match on.",
     schema: focusWindowSchema,

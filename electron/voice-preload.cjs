@@ -13,14 +13,16 @@ contextBridge.exposeInMainWorld("voice", {
   level: (v) => ipcRenderer.send("voice:level", v),
   /** Whether the microphone actually opened, and why not when it did not. */
   mic: (s) => ipcRenderer.send("voice:mic", s),
-  onPlay: (cb) => ipcRenderer.on("voice:play", (_e, file) => cb(file)),
+  onPlay: (cb) => ipcRenderer.on("voice:play", (_e, msg) => cb(msg)),
   /** Playback of one clip finished — the signal the session waits for before
    * reopening the microphone, so it never hears the tail of its own reply. */
-  playDone: () => ipcRenderer.send("voice:play-done"),
+  playDone: (id, why) => ipcRenderer.send("voice:play-done", { id, why }),
   /** Stop the current clip immediately (the overlay was closed). */
   onStopAudio: (cb) => ipcRenderer.on("voice:stop-audio", () => cb()),
   /** Mute the microphone while we are talking, to kill the echo loop. */
   onMute: (cb) => ipcRenderer.on("voice:mute", (_e, m) => cb(!!m?.on)),
+  /** Confirm the mute actually landed on the audio path. */
+  muteAck: (m) => ipcRenderer.send("voice:mute-ack", m),
   cancel: () => ipcRenderer.send("voice:cancel"),
   engineStatus: (s) => ipcRenderer.send("voice:engine-status", s),
   // main -> engine
@@ -33,4 +35,10 @@ contextBridge.exposeInMainWorld("voice", {
   onLevel: (cb) => ipcRenderer.on("voice:level-out", (_e, v) => cb(v)),
   /** The overlay's × — ends the whole session, not just this turn. */
   endSession: () => ipcRenderer.send("voice:end-session"),
+  /** Collapsed pill <-> expanded panel: the page owns the state, the main
+   * process owns the window size. */
+  resize: (state) => ipcRenderer.send("voice:resize", state),
+  /** The pending permission queue, rendered as cards in the Permissions tab. */
+  onPermissions: (cb) => ipcRenderer.on("voice:permissions", (_e, list) => cb(list)),
+  answerPermission: (id, answer) => ipcRenderer.send("voice:permission-answer", { id, answer }),
 });

@@ -23,7 +23,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startWakeWord, findPython, probeRuntime } from "./wakeword.js";
-import { synthesize, probeKokoro, shutdownKokoro } from "./kokoro.js";
+import { synthesize, probeKokoro, shutdownKokoro, warmKokoro } from "./kokoro.js";
 import { createReplyGate } from "./voicegate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -213,6 +213,24 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   const overlayHtml = path.join(here, "voice-overlay.html");
   const enginePreload = path.join(here, "voice-preload.cjs");
 
+  /** The two shapes the panel takes. The page decides which; this owns the size. */
+  const OVERLAY = { collapsed: { w: 440, h: 92 }, expanded: { w: 720, h: 320 } };
+
+  /** Resize in place, keeping it centred horizontally so it grows both ways
+   * rather than lurching off to one side. */
+  function resizeOverlay(state) {
+    if (!overlay || overlay.isDestroyed()) return;
+    const to = OVERLAY[state] ?? OVERLAY.collapsed;
+    const b = overlay.getBounds();
+    const cx = b.x + b.width / 2;
+    overlay.setBounds({
+      x: Math.round(cx - to.w / 2),
+      y: Math.round(b.y + b.height - to.h),
+      width: to.w,
+      height: to.h,
+    }, true);
+  }
+
   function makeOverlay() {
     if (overlay && !overlay.isDestroyed()) return overlay;
     // Centred along the bottom of the display the app is on, not glued to the app
@@ -223,8 +241,8 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     const area = screen.getDisplayNearestPoint(
       win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()).bounds : screen.getPrimaryDisplay().bounds,
     ).workArea;
-    const W = 500;
-    const H = 200;
+    const W = OVERLAY.collapsed.w;
+    const H = OVERLAY.collapsed.h;
     overlay = new BrowserWindow({
       width: W,
       height: H,
@@ -285,6 +303,8 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   /** Phrases that end it. Deliberately narrow: these fire on a transcript, and a
    * loose pattern would hang up mid-sentence on "...and then stop listening for
    * changes". Anchored, and only at the very start or the whole utterance. */
+  /** Spoken answers to a pending permission card. */
+  const ALLOW_RE = /^\s*(allow|approve|yes|go ahead|do it|permit|sure|deny|reject|no|don't|cancel that)\b[.!]?\s*$/i;
   const STOP_RE = /^\s*(stop listening|stop the session|end session|that'?s all|never ?mind|goodbye|nothing else)\b[.!]?\s*$/i;
 
   function armIdle() {
@@ -296,8 +316,15 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   /** Start listening again inside an open session, without a wake word. */
   function listenAgain(hint) {
     if (!session) return;
+    // Refuse to reopen while we are still talking. Belt and braces with the
+    // reopen timer: every caller of this used to be a way back into the echo.
+    if (speech.busy || speech.queue.length || muteWanted) {
+      vlog("record.refused", { busy: speech.busy, queued: speech.queue.length, muted: muteWanted });
+      return;
+    }
     toOverlay("voice:state", { state: "listening", transcript: "", response: "", hint: hint ?? undefined });
     armIdle();
+    vlog("record.start");
     if (engine && !engine.isDestroyed()) engine.webContents.send("voice:record");
   }
 
@@ -320,20 +347,29 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       // terse because the overlay is already on screen saying the same thing.
       new Notification({ title: "Gnosis", body: "Listening…", silent: false }).show();
     }
+    // Warm the synthesiser now, not on the first reply. Loading the model costs
+    // ~2.5s and the user was paying it inside their first answer; started here it
+    // overlaps with them speaking and the question being transcribed.
+    void warmKokoro().then((w) => vlog("tts.warm", w)).catch(() => {});
     armIdle();
+    vlog("record.start", { via: "wake" });
     if (engine && !engine.isDestroyed()) engine.webContents.send("voice:record");
   }
 
   /** End the session for good. Idempotent — the ×, a stop phrase and the idle
    * timer can all arrive at once. */
   function endSession(why) {
+    vlog("session.end", { why, session });
     if (!session && !(overlay && !overlay.isDestroyed())) return;
     session = false;
     clearTimeout(idleTimer);
     // Closing means silence NOW — mid-word if that is where it is. A panel that
     // keeps talking after you close it is the most obviously broken thing a
     // voice feature can do.
-    stopSpeaking();
+    stopSpeaking(`endSession: ${why ?? "?"}`);
+    // Deny anything still waiting rather than leaving the agent blocked forever
+    // on a panel that is no longer on screen.
+    for (const p of [...pendingPerms]) answerPerm(p.id, "no");
     gate.disarm();
     setListening(false);
     if (overlay && !overlay.isDestroyed()) overlay.hide();
@@ -374,39 +410,94 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   //    something must own the queue and the currently-playing clip.
   const MIC_REOPEN_MS = 500;
 
-  const speech = { queue: [], busy: false, epoch: 0, onDrain: null };
+  const speech = { queue: [], busy: false, epoch: 0, clips: new Map(), clipSeq: 0, reopen: null };
 
-  /** Tell the renderer to stop feeding the detector and refuse to record. */
-  function micMuted(on) {
-    if (engine && !engine.isDestroyed()) engine.webContents.send("voice:mute", { on });
+  /**
+   * A timestamped trace of the voice pipeline.
+   *
+   * This exists because "the microphone is muted while TTS plays" was asserted
+   * and believed twice, and was wrong both times — the mute WAS sent, and a
+   * separate timer unmuted again mid-reply. Sending a message is not evidence
+   * that it took effect, so every step now records when it happened and the
+   * renderer confirms the mute back. GNOSIS_VOICE_DEBUG=1 prints it live; the
+   * settings panel and the tests read it through voice:timeline.
+   */
+  const timeline = [];
+  const t0 = Date.now();
+  function vlog(event, detail) {
+    const at = Date.now();
+    const entry = { at, ms: at - t0, event, ...(detail ? { detail } : {}) };
+    timeline.push(entry);
+    if (timeline.length > 400) timeline.shift();
+    if (process.env.GNOSIS_VOICE_DEBUG === "1") {
+      console.log(`[voice +${String(entry.ms).padStart(6)}ms] ${event}${detail ? " " + JSON.stringify(detail) : ""}`);
+    }
   }
 
-  /** Resolves when the renderer says the clip finished (or the wait times out —
-   * a lost `ended` event must not wedge the session forever). */
+  /** Tell the renderer to stop feeding the detector and refuse to record. */
+  /** Mute state as the MAIN process believes it, and as the renderer has
+   * CONFIRMED it. The two are separate on purpose: "I sent a mute" and "the
+   * microphone is actually deaf" are different claims, and the whole echo bug
+   * lived in the gap between them. */
+  let muteWanted = false;
+  let muteApplied = false;
+
+  function micMuted(on) {
+    muteWanted = on;
+    vlog(on ? "mic.mute.send" : "mic.unmute.send");
+    if (engine && !engine.isDestroyed()) engine.webContents.send("voice:mute", { on });
+    else vlog("mic.mute.NO-ENGINE", { on }); // nothing to mute — worth seeing
+  }
+
+  /**
+   * Resolves when the renderer says THIS clip finished.
+   *
+   * Keyed by clip id rather than a single callback slot: a stale `ended` from a
+   * clip that was torn down used to resolve whatever wait was current, so the
+   * session stopped waiting while audio was still playing.
+   */
   function playAndWait(file, epoch) {
+    const id = ++speech.clipSeq;
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { speech.onDrain = null; resolve(); }, 60000);
-      speech.onDrain = () => {
-        if (epoch !== speech.epoch) return; // a stop happened; this clip is stale
+      const finish = (why) => {
+        if (!speech.clips.has(id)) return;
+        speech.clips.delete(id);
         clearTimeout(timer);
-        speech.onDrain = null;
+        vlog("tts.play.end", { id, why });
         resolve();
       };
-      play(file);
+      const timer = setTimeout(() => finish("timeout"), 120000);
+      speech.clips.set(id, finish);
+      if (epoch !== speech.epoch) return finish("stale");
+      vlog("tts.play.start", { id, file: file.split(/[\\/]/).pop() });
+      play(file, id);
     });
   }
 
-  /** Say everything queued, in order, then reopen the microphone. */
+  /**
+   * Say everything queued, in order, then reopen the microphone.
+   *
+   * The reopen is scheduled ONCE, by whichever drain finds the queue empty, and
+   * is cancelled the moment anything else is queued. That cancellation is the
+   * echo fix: a long reply arrives as several sentences with gaps between them,
+   * so the queue empties, the reopen timer starts, the next sentence arrives and
+   * starts speaking again — and the old timer then unmuted the microphone and
+   * started a recording WHILE that sentence was playing. A short reply has one
+   * chunk and no gap, which is exactly why it never showed up in testing.
+   */
   async function drainSpeech() {
     if (speech.busy) return;
     speech.busy = true;
     const epoch = speech.epoch;
+    cancelReopen("speech started");
     micMuted(true);
     try {
       const { config } = await readEnv();
       while (speech.queue.length && epoch === speech.epoch) {
         const text = speech.queue.shift();
+        vlog("tts.synth.start", { chars: text.length });
         const spoken = await speak(text, { voice: config.kokoroVoice });
+        vlog("tts.synth.end", { ok: spoken.ok, engine: spoken.engine });
         if (epoch !== speech.epoch) break; // stopped while synthesising
         diag.lastSpoke = `${spoken.engine ?? "none"} @ ${new Date().toISOString()}`;
         if (!spoken.ok) { diag.lastError = spoken.error ?? spoken.fallbackReason ?? "TTS failed"; continue; }
@@ -414,32 +505,55 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       }
     } finally {
       speech.busy = false;
-      if (epoch === speech.epoch) {
-        // The tail: speakers and room reverb outlive the audio file, and reopening
-        // the microphone on the same millisecond hears the end of our own sentence.
-        setTimeout(() => {
-          if (epoch !== speech.epoch) return;
-          micMuted(false);
-          if (session) { armIdle(); listenAgain(); }
-          else sleep();
-        }, MIC_REOPEN_MS);
-      }
+      if (epoch === speech.epoch) scheduleReopen();
     }
+  }
+
+  /** Reopen the microphone after the tail, unless more speech turns up first. */
+  function scheduleReopen() {
+    cancelReopen("rescheduled");
+    const epoch = speech.epoch;
+    vlog("mic.reopen.scheduled", { inMs: MIC_REOPEN_MS });
+    speech.reopen = setTimeout(() => {
+      speech.reopen = null;
+      // Re-check everything: 500ms is long enough for another sentence to have
+      // started speaking, and reopening then is the bug this whole path exists
+      // to prevent.
+      if (epoch !== speech.epoch) return vlog("mic.reopen.cancelled", { why: "epoch" });
+      if (speech.busy || speech.queue.length) return vlog("mic.reopen.cancelled", { why: "still speaking" });
+      micMuted(false);
+      if (session) { armIdle(); listenAgain(); }
+      else sleep();
+    }, MIC_REOPEN_MS);
+  }
+
+  function cancelReopen(why) {
+    if (!speech.reopen) return;
+    clearTimeout(speech.reopen);
+    speech.reopen = null;
+    vlog("mic.reopen.cancelled", { why });
   }
 
   function enqueueSpeech(text) {
     const t = String(text ?? "").trim();
     if (!t) return;
+    // Before anything else: a queued sentence means we are still talking, so any
+    // pending reopen is wrong and must die now rather than after its timer.
+    cancelReopen("more speech queued");
     speech.queue.push(t);
+    vlog("tts.queued", { chars: t.length, depth: speech.queue.length });
     void drainSpeech();
   }
 
   /** Cut speech off now: drop the queue, stop the clip, unmute. */
-  function stopSpeaking() {
+  function stopSpeaking(why) {
+    vlog("tts.stop", { why });
     speech.epoch++;          // invalidates every in-flight await above
     speech.queue.length = 0;
-    speech.onDrain = null;
+    for (const finish of [...speech.clips.values()]) finish("stopped");
+    speech.clips.clear();
     speech.busy = false;
+    cancelReopen("stopped");
     if (engine && !engine.isDestroyed()) engine.webContents.send("voice:stop-audio");
     micMuted(false);
   }
@@ -465,6 +579,56 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     },
   );
   bridge?.bus?.subscribe((e) => gate.handle(e));
+
+  // --- permissions, routed into the panel ------------------------------------
+  //
+  // During a voice session the approval belongs where the user is looking: the
+  // overlay is on top of whatever they are doing, and the main window may be
+  // behind it or minimised. A request that only appears back there is a session
+  // that silently stops making progress while the agent waits.
+  const pendingPerms = [];
+
+  /** One card's worth of a permission preview. */
+  function permCard(id, preview) {
+    const p = preview ?? {};
+    if (p.kind === "bash") return { id, kind: "bash", name: "Run command", detail: String(p.command ?? "").slice(0, 200) };
+    if (p.kind === "http") return { id, kind: "http", name: "Browse the web", detail: `${p.method ?? "GET"} ${String(p.url ?? "").slice(0, 160)}` };
+    if (p.kind === "diff") return { id, kind: "diff", name: p.tool === "edit" ? "Edit a file" : "Write a file", detail: String(p.path ?? "") };
+    return { id, kind: "diff", name: "Approve action", detail: "" };
+  }
+
+  function pushPerms() {
+    toOverlay("voice:permissions", pendingPerms.slice());
+  }
+
+  function answerPerm(id, answer) {
+    const i = pendingPerms.findIndex((p) => p.id === id);
+    if (i === -1) return false;
+    pendingPerms.splice(i, 1);
+    vlog("permission.answered", { id, answer });
+    try { bridge?.answerPermission?.(id, answer); } catch { /* already resolved */ }
+    pushPerms();
+    return true;
+  }
+
+  bridge?.bus?.subscribe((e) => {
+    if (e.type === "permission.request") {
+      if (!session) return; // typed sessions keep their prompts in the main window
+      pendingPerms.push(permCard(e.id, e.preview));
+      vlog("permission.request", { id: e.id, kind: e.preview?.kind });
+      const o = makeOverlay();
+      if (!o.isVisible()) o.showInactive();
+      pushPerms();
+      return;
+    }
+    if (e.type === "permission.resolved") {
+      const i = pendingPerms.findIndex((p) => p.id === e.id);
+      if (i !== -1) { pendingPerms.splice(i, 1); pushPerms(); }
+    }
+  });
+
+  ipcMain.on("voice:resize", (_e, state) => resizeOverlay(state === "expanded" ? "expanded" : "collapsed"));
+  ipcMain.on("voice:permission-answer", (_e, m) => answerPerm(m?.id, m?.answer === "yes" ? "yes" : "no"));
 
   /**
    * "switch to gemini" — the spoken form of /model.
@@ -513,11 +677,14 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
 
   /** A finished utterance: transcribe, run it, speak the reply. */
   async function handleUtterance(wavBase64) {
+    vlog("utterance.received", { bytes: Math.round((wavBase64?.length ?? 0) * 0.75) });
     const { env } = await readEnv();
     clearTimeout(idleTimer); // the user is talking; the idle clock restarts after
     toOverlay("voice:state", { state: "thinking", transcript: "", response: "" });
 
+    vlog("transcribe.start");
     const t = await transcribe(wavBase64, env.GROQ_API_KEY);
+    vlog("transcribe.end", { ok: t.ok, text: (t.text ?? "").slice(0, 60) });
     if (!t.ok || !t.text) {
       // Not hearing one utterance is not a reason to hang up. Say so and listen
       // again; only the idle timer ends a session that has gone quiet.
@@ -542,6 +709,18 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       return;
     }
 
+    // "allow" / "deny" answers the top pending request. Checked before the agent
+    // sees it, because a one-word answer sent as a prompt is not an approval — it
+    // is a new question for a turn that is already blocked waiting for one.
+    if (pendingPerms.length && ALLOW_RE.test(t.text)) {
+      const yes = /^\s*(allow|approve|yes|go ahead|do it|permit|sure)/i.test(t.text);
+      const top = pendingPerms[0];
+      answerPerm(top.id, yes ? "yes" : "no");
+      toOverlay("voice:state", { state: "listening", transcript: t.text, response: `${yes ? "Allowed" : "Denied"}: ${top.name}` });
+      enqueueSpeech(yes ? "Allowed." : "Denied.");
+      return;
+    }
+
     if (await tryModelSwitch(t.text)) return;
 
     // Vision escalation: a spoken question about the screen or the camera needs
@@ -550,9 +729,9 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     const wantsScreen = SCREEN_WORDS.test(t.text);
     const wantsCamera = CAMERA_WORDS.test(t.text);
     let prefix = "";
-    if (wantsCamera) prefix = "[voice · camera] Call the camera tool, look at the frame, then answer: ";
-    else if (wantsScreen) prefix = "[voice · screen] Call the screen tool, look at the capture, then answer: ";
-    else prefix = "[voice] ";
+    if (wantsCamera) prefix = "[voice · camera] Call the camera tool, look at the frame, then answer in one or two short sentences: ";
+    else if (wantsScreen) prefix = "[voice · screen] Call the screen tool, look at the capture, then answer in one or two short sentences: ";
+    else prefix = "[voice] Answer in one or two short sentences, plainly, with no lists or code. ";
 
     // Route through the same bridge the browser UI uses, so the exchange lands
     // in the chat rail like any other message.
@@ -600,7 +779,18 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   // The renderer reports when a clip actually finished playing. Waiting for THIS
   // rather than for speak() to resolve is what stops the microphone hearing the
   // tail of our own reply and answering it.
-  ipcMain.on("voice:play-done", () => speech.onDrain?.());
+  ipcMain.on("voice:play-done", (_e, msg) => {
+    const id = msg?.id;
+    const finish = speech.clips.get(id);
+    if (finish) finish(msg?.why ?? "ended");
+    else vlog("tts.play.done.stale", { id }); // a clip nobody is waiting on
+  });
+  // The renderer confirms the mute actually landed on the audio path. Without
+  // this the main process only knows it SENT a mute.
+  ipcMain.on("voice:mute-ack", (_e, m) => {
+    muteApplied = !!m?.on;
+    vlog("mic.mute.applied", { on: muteApplied, abortedRecording: !!m?.abortedRecording });
+  });
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
   // The engine renderer heard nothing at all in a recording window. Inside a
   // session that is just a pause, not a hang-up.
@@ -610,12 +800,13 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     sleep();
   });
   // The overlay's × — the one unambiguous "stop".
-  ipcMain.on("voice:end-session", () => endSession("closed from the overlay"));
+  ipcMain.on("voice:end-session", (e) => endSession(`overlay close (from wc ${e?.sender?.id ?? "?"})`));
   ipcMain.on("voice:engine-status", (_e, s) => {
     status = { ...status, ...s };
   });
   ipcMain.handle("voice:status", () => status);
-  ipcMain.handle("voice:diagnostics", () => ({ ...diag, wakePhrase: wakePhrase() }));
+  ipcMain.handle("voice:diagnostics", () => ({ ...diag, wakePhrase: wakePhrase(), muteWanted, muteApplied }));
+  ipcMain.handle("voice:timeline", () => timeline.slice());
   // The full probe is slow (it starts Python), so it is explicit rather than
   // part of every status read.
   ipcMain.handle("voice:probe-runtime", async () => {
@@ -638,9 +829,9 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   });
 
   /** Play a WAV through the hidden engine renderer — main has no audio out. */
-  function play(file) {
+  function play(file, id) {
     const e = makeEngine();
-    e.webContents.send("voice:play", file);
+    e.webContents.send("voice:play", { file, id });
   }
 
   /**
@@ -790,6 +981,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   return {
     start,
     stop,
+    /** Arm the reply gate directly. Test-only: the gate is normally armed by a
+     * real utterance, and the echo test needs to drive a long reply without
+     * standing in front of a microphone for ten seconds. */
+    __armForTest: (tabId) => gate.arm(tabId ?? 0),
+    timeline: () => timeline.slice(),
     /** Manual trigger — the path that works without a Picovoice key. */
     trigger: () => {
       if (!enabled) void start();

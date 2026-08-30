@@ -88,7 +88,7 @@ export function createReplyGate(onReply, onSilent, onChunk) {
      * the engine emits its first lines synchronously, and arming afterwards drops
      * the opening of the answer. */
     arm(tabId) {
-      armed = { tabId, lines: [], buffer: "", spoke: false };
+      armed = { tabId, lines: [], buffer: "", committed: "", spokenChars: 0, spoke: false };
     },
     /** Drop the gate without speaking (cancel, error, voice turned off). */
     disarm() {
@@ -100,6 +100,22 @@ export function createReplyGate(onReply, onSilent, onChunk) {
     /** Feed it every bus event. Returns true when this event was consumed. */
     handle(e) {
       if (!armed || !e || e.tabId !== armed.tabId) return false;
+      // The line still being written. `line` only fires at a NEWLINE, which a
+      // one-paragraph answer does not reach until it is finished — so waiting for
+      // it delayed the first spoken word by the length of the whole reply.
+      if (e.type === "line.partial") {
+        if (!onChunk || typeof e.text !== "string") return true;
+        const whole = `${armed.committed} ${e.text}`.trim();
+        const { chunks, rest } = takeSentences(whole);
+        if (!chunks.length) return true;
+        for (const c of chunks) { armed.spoke = true; onChunk(c); }
+        // Remember how far speech has got, so the committed `line` that arrives
+        // later does not say the same sentences over again.
+        armed.committed = "";
+        armed.buffer = rest;
+        armed.spokenChars += chunks.join(" ").length;
+        return true;
+      }
       if (e.type === "line") {
         // Assistant prose only. `system` is app chrome, `user` is the echo of what
         // was just said, and `rule` is a code-fence marker — none is a reply.
@@ -109,7 +125,15 @@ export function createReplyGate(onReply, onSilent, onChunk) {
           if (onChunk) {
             // Stream: hand over each sentence as soon as it is complete, so the
             // first words are being spoken while the rest is still generating.
-            armed.buffer = `${armed.buffer} ${item.text.trim()}`.trim();
+            // Drop what the partial stream already spoke: the committed line
+            // repeats it verbatim, and speaking it twice is worse than late.
+            let text = item.text.trim();
+            if (armed.spokenChars > 0) {
+              const skip = Math.min(armed.spokenChars, text.length);
+              text = text.slice(skip).trim();
+              armed.spokenChars = Math.max(0, armed.spokenChars - skip);
+            }
+            armed.buffer = `${armed.buffer} ${text}`.trim();
             const { chunks, rest } = takeSentences(armed.buffer);
             armed.buffer = rest;
             for (const c of chunks) { armed.spoke = true; onChunk(c); }
