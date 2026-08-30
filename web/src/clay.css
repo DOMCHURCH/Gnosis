@@ -211,9 +211,11 @@ body {
 .gnosis-shell #root > div:not([data-testid="top-bar"]):not([data-testid="view-toggle"]) {
   padding-top: 96px !important;
 }
-.gnosis-shell [data-testid="view-toggle"] {
-  top: 52px !important;
-}
+/* The view chips are IN FLOW inside the floor column (position: relative), not
+ * fixed to the window. A `top` offset on a relative element moves it visually
+ * without moving anything around it — so this rule, written when the chips were
+ * fixed, was shoving them 52px down on top of the session card. The page's
+ * padding-top already clears the title bar. */
 /* The in-page title block is what the top bar replaces; two "Gnosis" headings
  * stacked on top of each other is worse than either alone. */
 .gnosis-shell [data-testid="page-header"] {
@@ -347,57 +349,75 @@ textarea:focus {
 
 /* ------------------------------------------- the desktop shell's app layout */
 
-/* In the shell the window IS the app: it fills the viewport and the columns
- * scroll inside it, rather than the whole page growing and pushing the chat and
- * the activity strip below the fold. A browser tab keeps the scrolling page —
- * that is the right behaviour on a phone, where the layout is a single column.
+/* The window is NOT a fixed canvas.
  *
- * Everything below is scoped to .gnosis-shell for exactly that reason. */
+ * This used to pin every column to 100vh and hide the overflow, so the sidebar,
+ * the floor and the inspector all competed for one screen's worth of height and
+ * each of them lost: the floor was squashed, the chat was a slot, and nothing
+ * could be given room without taking it from something else.
+ *
+ * Now the page behaves like a page. Content sets a MINIMUM height and grows past
+ * it when it needs to; the window scrolls. Each column still scrolls internally
+ * when it alone is long, but none of them is capped by the viewport any more. */
 .gnosis-shell,
-.gnosis-shell body,
+.gnosis-shell body {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
 .gnosis-shell #root {
-  height: 100%;
-  overflow: hidden;
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
 }
 .gnosis-shell #root > div:not([data-testid="top-bar"]):not([data-testid="view-toggle"]) {
-  height: 100vh;
-  min-height: 0 !important;
-  overflow: hidden;
+  min-height: 100vh;
+  height: auto;
+  overflow: visible;
 }
-/* The max-width wrapper, and the row of columns inside it. */
-.gnosis-shell #root > div > div {
-  min-height: 0;
-}
+/* Columns line up from the top and take the height they need. */
 .gnosis-shell [data-testid="main-row"] {
-  flex: 1 1 auto;
+  align-items: flex-start;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
-/* Each column scrolls on its own so one long file tree cannot push the
- * inspector off the bottom of the window. */
 .gnosis-shell [data-testid="left-panel"],
 .gnosis-shell [data-testid="floor-column"],
 .gnosis-shell [data-testid="agent-inspector"] {
-  min-height: 0;
-  max-height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-/* The inspector is a column whose LAST child is the chat, and the chat is what
- * you type into — so it takes the leftover height and its composer stays put
- * instead of scrolling off the bottom. Everything above it keeps its own size
- * (the roster and the goal panel already cap and scroll themselves). */
-.gnosis-shell [data-testid="agent-inspector"] {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.gnosis-shell [data-testid="agent-inspector"] > * {
-  flex: 0 0 auto;
-}
-.gnosis-shell [data-testid="agent-inspector"] [data-testid="chat-drop"] {
-  flex: 1 1 auto !important;
-  height: auto !important;
-  min-height: 200px !important;
+  max-height: none;
+  overflow: visible;
 }
 
+/* Room to work in. The floor is the thing that suffered most from scale-to-fit;
+ * give it a real minimum rather than whatever was left over. */
+[data-testid="floor-container"] {
+  min-height: 520px;
+}
+[data-testid="three-floor"] {
+  min-height: 440px;
+}
+/* The sidebar and the inspector are read, not glanced at: they get their own
+ * scroll only when they are genuinely long, and a sensible amount of it. */
+.gnosis-shell [data-testid="left-panel"] {
+  min-height: 560px;
+}
+.gnosis-shell [data-testid="agent-inspector"] {
+  min-height: 560px;
+}
+
+/* Breathing room. These were 12-16px gaps and 8-14px paddings everywhere, which
+ * is what made it read as crammed. */
+.gnosis-shell [data-testid="main-row"] { gap: 26px !important; }
+.gnosis-shell [data-testid="floor-column"] { gap: 18px !important; }
+.gnosis-shell [data-testid="agent-inspector"] { gap: 18px !important; }
+.gnosis-shell [data-testid="left-panel"],
+.gnosis-shell [data-testid="floor-container"],
+.gnosis-shell [data-testid="session-title"] { padding: 18px !important; }
+
+/* The chat is the thing most often typed into; it gets a real minimum rather
+ * than the leftovers of a fixed-height column. */
+.gnosis-shell [data-testid="agent-inspector"] [data-testid="chat-drop"] {
+  min-height: 420px !important;
+  height: auto !important;
+}

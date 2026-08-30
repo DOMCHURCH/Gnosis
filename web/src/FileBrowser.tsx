@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { TreeNode, TreeResult, FilePreview } from "./filetypes";
 import { apiGet } from "./api";
 import { Z } from "./layers";
+import { Overlay } from "./Overlay";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -120,20 +121,33 @@ export function TreeList(props: { nodes: TreeNode[]; depth: number; expanded: Re
 function FilePreviewModal(props: { preview: FilePreview; loading: boolean; onClose: () => void; onAttach: () => void }) {
   const { preview } = props;
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
-          <span style={{ fontSize: 11, letterSpacing: 1, color: "#22D3EE", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview.path}</span>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            <button type="button" onClick={props.onAttach} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "5px 10px", cursor: "pointer" }}>+ ATTACH</button>
-            <button type="button" onClick={props.onClose} style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
+    // Portalled: see Overlay.tsx. A `fixed` overlay rendered inside the left
+    // panel is not full-screen, because the panel's hover transform makes it the
+    // containing block.
+    <Overlay onClose={props.onClose} align="stretch">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          // A reading panel, not a squeezed modal: full height, a comfortable
+          // measure, and it scrolls on its own.
+          width: "min(980px, 94vw)", height: "100%", margin: "0 auto",
+          background: "#101017", borderLeft: "1px solid #2C2C3E", borderRight: "1px solid #2C2C3E",
+          display: "flex", flexDirection: "column", fontFamily: MONO,
+          boxShadow: "0 0 80px -20px rgba(0,0,0,0.9)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 22px", borderBottom: "1px solid #2C2C3E", flex: "0 0 auto" }}>
+          <span style={{ fontSize: 12, letterSpacing: 1, color: "#22D3EE", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview.path}</span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+            <button type="button" onClick={props.onAttach} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 13px", cursor: "pointer", borderRadius: 7 }}>+ ATTACH</button>
+            <button type="button" onClick={props.onClose} style={{ fontFamily: MONO, fontSize: 14, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 4px" }}>✕</button>
           </div>
         </div>
-        <pre style={{ margin: 0, flex: "1 1 auto", overflow: "auto", padding: 12, fontSize: 11, lineHeight: 1.5, color: "#C9C9D6", whiteSpace: "pre" }}>
+        <pre style={{ margin: 0, flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "22px 26px", fontSize: 12.5, lineHeight: 1.75, color: "#C9C9D6", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {props.loading ? "loading…" : preview.content || "(empty file)"}
         </pre>
-        {preview.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "6px 12px", borderTop: "2px solid #2C2C3E" }}>preview truncated at 256 KB</div>}
+        {preview.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "10px 22px", borderTop: "1px solid #2C2C3E", flex: "0 0 auto" }}>preview truncated at 256 KB</div>}
       </div>
-    </div>
+    </Overlay>
   );
 }

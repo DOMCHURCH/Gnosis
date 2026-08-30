@@ -4,6 +4,7 @@ import { apiGet } from "./api";
 import { TreeList } from "./FileBrowser";
 import { Markdown } from "./Markdown";
 import { Z } from "./layers";
+import { Overlay } from "./Overlay";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -94,16 +95,18 @@ function NoteModal(props: { note: OpenNote; canBack: boolean; onBack: () => void
   const { note } = props;
   const title = note.path.slice(note.path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(820px, 92vw)", maxHeight: "86vh", background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
+    // Portalled for the same reason as the file preview: an overlay rendered
+    // inside a panel that has a transform is not full-screen. See Overlay.tsx.
+    <Overlay onClose={props.onClose} align="stretch">
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(900px, 94vw)", height: "100%", margin: "0 auto", background: "#101017", borderLeft: "1px solid #2C2C3E", borderRight: "1px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO, boxShadow: "0 0 80px -20px rgba(0,0,0,0.9)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 22px", borderBottom: "1px solid #2C2C3E", flex: "0 0 auto" }}>
           {props.canBack && (
             <button type="button" onClick={props.onBack} title="back" style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#A78BFA", border: 0, cursor: "pointer" }}>←</button>
           )}
           <span style={{ fontSize: 12, letterSpacing: 1, color: "#A78BFA", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
           <button type="button" onClick={props.onClose} style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
         </div>
-        <div style={{ flex: "1 1 auto", overflow: "auto", padding: "8px 16px 16px" }}>
+        <div style={{ flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "22px 26px 32px", lineHeight: 1.75, fontSize: 12.5 }}>
           {note.loading ? (
             <div style={{ fontSize: 11, color: "#4A4A58", padding: 8 }}>loading…</div>
           ) : note.missing ? (
@@ -112,8 +115,8 @@ function NoteModal(props: { note: OpenNote; canBack: boolean; onBack: () => void
             <Markdown text={note.content} onWikilink={props.onWikilink} />
           )}
         </div>
-        {note.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "6px 12px", borderTop: "2px solid #2C2C3E" }}>note truncated at 256 KB</div>}
+        {note.truncated && <div style={{ fontSize: 9, color: "#4A4A58", padding: "10px 22px", borderTop: "1px solid #2C2C3E", flex: "0 0 auto" }}>note truncated at 256 KB</div>}
       </div>
-    </div>
+    </Overlay>
   );
 }

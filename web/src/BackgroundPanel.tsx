@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientMessage, JobInfo } from "./types";
 import { Z } from "./layers";
+import { Overlay } from "./Overlay";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -127,7 +128,9 @@ function JobRow(props: { job: JobInfo; now: number; onView: () => void; onKill: 
 
 function OutputModal(props: { id: string; output: string; loading: boolean; onClose: () => void }) {
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.overlay }}>
+    // Portalled: a fixed overlay rendered inside a transformed ancestor is not
+    // full-screen. See Overlay.tsx.
+    <Overlay onClose={props.onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(860px, 92vw)", maxHeight: "86vh", background: "#121219", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "2px solid #2C2C3E" }}>
           <span style={{ fontSize: 11, letterSpacing: 1, color: "#4ADE80" }}>job {props.id} · output</span>
@@ -137,6 +140,6 @@ function OutputModal(props: { id: string; output: string; loading: boolean; onCl
           {props.loading ? "loading…" : props.output || "(no output yet)"}
         </pre>
       </div>
-    </div>
+    </Overlay>
   );
 }

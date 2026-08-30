@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FigState, ManualAgent, ZoneId } from "./sessions";
 import { Z } from "./layers";
+import { Overlay } from "./Overlay";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const STATES: FigState[] = ["idle", "thinking", "awaiting", "speaking"];
@@ -30,7 +31,9 @@ export function ManualAgentPopover(props: {
   };
 
   return (
-    <div onClick={props.onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.permission }}>
+    // Portalled: a fixed overlay rendered inside a transformed ancestor is not
+    // full-screen. See Overlay.tsx.
+    <Overlay onClose={props.onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "min(300px, 92vw)", background: "#121219", border: "2px solid #2C2C3E", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 11px", borderBottom: "2px solid #2C2C3E" }}>
           <span style={{ fontSize: 11, letterSpacing: 2, color: "#C9C9D6" }}>{props.mode === "add" ? "PLACE AGENT" : "EDIT AGENT"}</span>
@@ -62,6 +65,6 @@ export function ManualAgentPopover(props: {
           </div>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
