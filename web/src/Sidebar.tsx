@@ -41,6 +41,37 @@ function Icon({ name }: { name: string }) {
   }
 }
 
+/** A small count chip on a section header. Reading "3" beside SESSIONS without
+ * opening it is the entire reason the workspace tier exists as its own tier. */
+function Count({ n }: { n: number | null }) {
+  if (n === null) return null;
+  return (
+    <span
+      style={{
+        flex: "0 0 auto", fontSize: 9, lineHeight: 1, letterSpacing: 0.4,
+        color: n ? "#8A8A9B" : "#4A4A58", background: "rgba(255,255,255,0.05)",
+        border: "1px solid rgba(255,255,255,0.06)", borderRadius: 999, padding: "3px 7px",
+      }}
+    >
+      {n}
+    </span>
+  );
+}
+
+/**
+ * A collapsible section, in one of two tiers.
+ *
+ * `nav` is the workspace tier — Sessions, Memory, Connections, Webhooks. These
+ * are destinations: four fixed things you switch between, so they get weight, a
+ * count chip, and a lit left rail when open.
+ *
+ * `tree` is the project tier — the project itself and the file list under it.
+ * These are content, so they stay quiet and let the file rows inside them be the
+ * thing you read.
+ *
+ * Both used to render identically, which is why the panel read as one
+ * undifferentiated column of small uppercase monospace with no way in.
+ */
 function Section(props: {
   icon: string;
   label: string;
@@ -49,32 +80,72 @@ function Section(props: {
   right?: React.ReactNode;
   children?: React.ReactNode;
   indent?: boolean;
+  tier?: "nav" | "tree";
+  count?: number | null;
 }) {
+  const nav = props.tier === "nav";
+  const lit = nav && props.open;
   return (
-    <div style={{ marginBottom: 2 }}>
+    <div style={{ marginBottom: nav ? 3 : 2 }}>
       <div
         style={{
-          display: "flex", alignItems: "center", gap: 9, padding: "9px 10px",
-          paddingLeft: props.indent ? 22 : 10, cursor: "pointer", borderRadius: 10,
-          color: props.open ? "#C9D1D9" : "#8A8A9B",
-          transition: "background-color 200ms ease-out, color 200ms ease-out",
+          display: "flex", alignItems: "center", gap: 9,
+          padding: nav ? "10px 10px" : "8px 10px",
+          paddingLeft: props.indent ? 22 : 10,
+          cursor: "pointer", borderRadius: 10,
+          // The lit rail is what tells you which destination you are in. On the
+          // tree tier there is nothing to be "in", so there is no rail.
+          boxShadow: lit ? "inset 2px 0 0 #22D3EE" : "none",
+          background: lit ? "rgba(34,211,238,0.055)" : "transparent",
+          color: nav ? (props.open ? "#E4E8EE" : "#9A9AAB") : props.open ? "#C9D1D9" : "#8A8A9B",
+          transition: "background-color 200ms ease-out, color 200ms ease-out, box-shadow 200ms ease-out",
         }}
         onClick={props.onToggle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.035)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => { if (!lit) e.currentTarget.style.background = "rgba(255,255,255,0.035)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = lit ? "rgba(34,211,238,0.055)" : "transparent"; }}
       >
-        <span style={{ display: "flex", color: props.open ? "#22D3EE" : "#6B6B7B", flex: "0 0 auto" }}>
+        <span style={{ display: "flex", color: props.open ? "#22D3EE" : nav ? "#7A7A8B" : "#6B6B7B", flex: "0 0 auto" }}>
           <Icon name={props.icon} />
         </span>
-        <span style={{ flex: 1, fontSize: 10, letterSpacing: 1.6, textTransform: "uppercase", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span
+          style={{
+            flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            fontSize: nav ? 10.5 : 10,
+            letterSpacing: nav ? 1.3 : 1.6,
+            fontWeight: nav ? 500 : 400,
+            textTransform: "uppercase",
+          }}
+        >
           {props.label}
         </span>
         {props.right}
+        {nav ? <Count n={props.count ?? null} /> : null}
         <span style={{ fontSize: 10, color: "#4A4A58", flex: "0 0 auto", transition: "transform 200ms ease-out", transform: props.open ? "rotate(90deg)" : "none" }}>›</span>
       </div>
+      {/* No maxHeight and no overflow here. A scroll box inside the panel's own
+       * scroll box is what produced the double scrollbar, and capping every
+       * section at 340px cramped the file tree into a slot while the panel below
+       * it sat empty. Sections size to their content; the panel scrolls once. */}
       {props.open && props.children && (
-        <div style={{ padding: "2px 0 8px", maxHeight: 340, overflowY: "auto", overflowX: "hidden" }}>{props.children}</div>
+        <div style={{ padding: nav ? "3px 0 10px" : "2px 0 8px" }}>{props.children}</div>
       )}
+    </div>
+  );
+}
+
+/** The rule between the project tier and the workspace tier. A labelled break is
+ * cheaper to read than four differently-styled headers with nothing above them. */
+function TierLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        margin: "14px 2px 7px", fontSize: 8.5, letterSpacing: 2.2, color: "#4A4A58",
+        textTransform: "uppercase", whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+      <span style={{ flex: 1, height: 1, background: "linear-gradient(90deg, rgba(255,255,255,0.08), transparent)" }} />
     </div>
   );
 }
@@ -109,14 +180,16 @@ export function Sidebar(props: {
         background: "#171721", border: "2px solid #2C2C3E",
       }}
     >
-      <div style={{ padding: "14px 12px 8px", fontSize: 9, letterSpacing: 2.4, color: "#4A4A58" }}>WORKSPACE</div>
-
-      <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "0 8px" }}>
-        <Section icon="cube" label={props.project} open={!!open.project} onToggle={() => toggle("project")}>
+      {/* The panel's single scroll container. Nothing inside it may scroll on its
+       * own — see the note on Section. */}
+      <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overflowX: "hidden", padding: "10px 8px 0" }}>
+        <TierLabel>Project</TierLabel>
+        <Section icon="cube" tier="tree" label={props.project} open={!!open.project} onToggle={() => toggle("project")}>
           <Section
             icon="folder"
             label="Files"
             indent
+            tier="tree"
             open={!!open.files}
             onToggle={() => toggle("files")}
             right={
@@ -130,11 +203,18 @@ export function Sidebar(props: {
               </button>
             }
           >
-            <FilesBody tabId={props.tabId} fileEpoch={props.fileEpoch} onAttach={props.onAttach} />
+            {/* A hairline guide down the left of the tree. It is the cheapest way
+             * to say "these rows belong to the folder above" without giving the
+             * rows themselves any more weight. */}
+            <div style={{ marginLeft: 27, paddingLeft: 9, borderLeft: "1px solid rgba(255,255,255,0.055)" }}>
+              <FilesBody tabId={props.tabId} fileEpoch={props.fileEpoch} onAttach={props.onAttach} />
+            </div>
           </Section>
         </Section>
 
-        <Section icon="clock" label="Sessions" open={!!open.sessions} onToggle={() => toggle("sessions")}>
+        <TierLabel>Workspace</TierLabel>
+
+        <Section icon="clock" tier="nav" count={props.sessions.length} label="Sessions" open={!!open.sessions} onToggle={() => toggle("sessions")}>
           {props.sessions.length === 0 ? (
             <div style={{ fontSize: 10, color: "#4A4A58", padding: "4px 10px" }}>no sessions</div>
           ) : (
@@ -156,7 +236,14 @@ export function Sidebar(props: {
           )}
         </Section>
 
-        <Section icon="brain" label="Memory" open={!!open.memory} onToggle={() => toggle("memory")}>
+        <Section
+          icon="brain"
+          tier="nav"
+          count={hasVault ? (props.vault?.tree?.length ?? 0) : null}
+          label="Memory"
+          open={!!open.memory}
+          onToggle={() => toggle("memory")}
+        >
           {hasVault ? (
             <ObsidianBody vault={props.vault} />
           ) : (
@@ -166,7 +253,16 @@ export function Sidebar(props: {
           )}
         </Section>
 
-        <Section icon="link" label="Connections" open={!!open.connections} onToggle={() => toggle("connections")}>
+        <Section
+          icon="link"
+          tier="nav"
+          // Connected servers, not configured ones — the number worth glancing at
+          // is how many are actually live.
+          count={props.connections ? props.connections.mcp.filter((m) => m.status === "connected").length : null}
+          label="Connections"
+          open={!!open.connections}
+          onToggle={() => toggle("connections")}
+        >
           <ConnectionsBody
             data={props.connections}
             memory={props.memory}
@@ -175,7 +271,9 @@ export function Sidebar(props: {
           />
         </Section>
 
-        <Section icon="hook" label="Webhooks" open={!!open.webhooks} onToggle={() => toggle("webhooks")}>
+        {/* No count: WebhooksBody fetches its own list, and the sidebar only
+          * holds the epoch that invalidates it. A wrong number is worse than none. */}
+        <Section icon="hook" tier="nav" label="Webhooks" open={!!open.webhooks} onToggle={() => toggle("webhooks")}>
           <WebhooksBody
             webhookEpoch={props.webhookEpoch}
             localOrigin={typeof location !== "undefined" ? location.origin : ""}
@@ -183,7 +281,9 @@ export function Sidebar(props: {
         </Section>
       </div>
 
-      <div style={{ padding: 10, flex: "0 0 auto" }}>
+      {/* Pinned below the scroll area, with a rule, so it stays reachable however
+       * long the tree gets — it is an action on the panel, not an item in it. */}
+      <div style={{ padding: 10, flex: "0 0 auto", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <button
           type="button"
           onClick={props.onNewSession}
