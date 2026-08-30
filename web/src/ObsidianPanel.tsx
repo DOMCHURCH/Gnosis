@@ -97,14 +97,16 @@ function NoteModal(props: { note: OpenNote; canBack: boolean; onBack: () => void
   return (
     // Portalled for the same reason as the file preview: an overlay rendered
     // inside a panel that has a transform is not full-screen. See Overlay.tsx.
-    <Overlay onClose={props.onClose} align="stretch">
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(900px, 94vw)", height: "100%", margin: "0 auto", background: "#101017", borderLeft: "1px solid #2C2C3E", borderRight: "1px solid #2C2C3E", display: "flex", flexDirection: "column", fontFamily: MONO, boxShadow: "0 0 80px -20px rgba(0,0,0,0.9)" }}>
+    <Overlay onClose={props.onClose}>
+      {/* Bounded and centred, for the same reason as the file preview: a
+          full-height panel put its own ✕ underneath the shell's fixed title bar. */}
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "min(900px, 92vw)", height: "min(760px, 86vh)", background: "#101017", border: "1px solid #2C2C3E", borderRadius: 18, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: MONO, boxShadow: "0 30px 80px -20px rgba(0,0,0,0.9)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 22px", borderBottom: "1px solid #2C2C3E", flex: "0 0 auto" }}>
           {props.canBack && (
             <button type="button" onClick={props.onBack} title="back" style={{ fontFamily: MONO, fontSize: 12, background: "transparent", color: "#A78BFA", border: 0, cursor: "pointer" }}>←</button>
           )}
           <span style={{ fontSize: 12, letterSpacing: 1, color: "#A78BFA", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</span>
-          <button type="button" onClick={props.onClose} style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 12, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer" }}>✕</button>
+          <button type="button" onClick={props.onClose} title="close (Esc)" aria-label="Close note" style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", color: "#8A8A9B", border: "1px solid #2C2C3E", borderRadius: 10, cursor: "pointer", width: 34, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
         </div>
         <div style={{ flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "22px 26px 32px", lineHeight: 1.75, fontSize: 12.5 }}>
           {note.loading ? (

@@ -75,7 +75,21 @@ function Logo({ size = 32 }: { size?: number }) {
   );
 }
 
-function ControlButton(props: { label: string; tint: string; onClick: () => void; title: string }) {
+/**
+ * A window control, shaped the way Windows shapes them.
+ *
+ * These used to be three 13px coloured circles — macOS traffic lights — and the
+ * `label` they were passed was never rendered, so what shipped was three dots
+ * that gave no clue which one closed the window. On Windows that is not a style
+ * choice, it is a control nobody can read: the convention here is a row of wide
+ * flat buttons in the top-right corner with an actual glyph in each, and close
+ * turning red.
+ *
+ * Wide and full-height on purpose. A title-bar button is a Fitts's-law target —
+ * you throw the pointer at the corner — and a 13px dot with 9px of padding is
+ * the opposite of that.
+ */
+function ControlButton(props: { label: string; onClick: () => void; title: string; danger?: boolean }) {
   const [hot, setHot] = useState(false);
   return (
     <button
@@ -89,18 +103,28 @@ function ControlButton(props: { label: string; tint: string; onClick: () => void
         // Outside the drag region, or the button would move the window instead
         // of being clickable.
         WebkitAppRegion: "no-drag",
-        width: 13,
-        height: 13,
+        width: 44,
+        height: 32,
         padding: 0,
-        borderRadius: "50%",
+        borderRadius: 0,
         border: 0,
         cursor: "pointer",
-        background: props.tint,
-        boxShadow: hot ? `0 0 0 3px ${props.tint}33, inset 0 1px 0 rgba(255,255,255,0.35)` : "inset 0 1px 0 rgba(255,255,255,0.3)",
-        transition: "box-shadow 200ms ease-out, transform 200ms ease-out",
-        transform: hot ? "scale(1.12)" : "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: MONO,
+        fontSize: 12,
+        lineHeight: 1,
+        // Close goes red like every other Windows app; the other two take the
+        // neutral wash. Colour here means "this is destructive", not "this is
+        // the third one".
+        color: hot ? (props.danger ? "#FFFFFF" : "#E4E8EE") : "#8A8A9B",
+        background: hot ? (props.danger ? "#C42B1C" : "rgba(255,255,255,0.08)") : "transparent",
+        transition: "background-color 150ms ease-out, color 150ms ease-out",
       } as React.CSSProperties}
-    />
+    >
+      {props.label}
+    </button>
   );
 }
 
@@ -202,10 +226,14 @@ export function TopBar(props: { shell: ShellBridge; modelId: string | null; cost
         ⚙
       </button>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginLeft: 4 }}>
-        <ControlButton title="Minimise" label="–" tint="#22D3EE" onClick={() => props.shell.minimize()} />
-        <ControlButton title={maximized ? "Restore" : "Maximise"} label="□" tint="#A78BFA" onClick={() => props.shell.toggleMaximize()} />
-        <ControlButton title="Close to tray" label="✕" tint="#E879F9" onClick={() => props.shell.close()} />
+      {/* Flush to the top-right corner with no gaps: that corner is where every
+          Windows user throws the pointer, and a gap between the buttons puts a
+          dead strip in the middle of the target. The settings gear and the
+          session/cost readouts keep their places to the left of this. */}
+      <div data-testid="window-controls" style={{ display: "flex", alignItems: "stretch", marginLeft: 8, marginRight: -14, alignSelf: "stretch" }}>
+        <ControlButton title="Minimise" label="&#x2500;" onClick={() => props.shell.minimize()} />
+        <ControlButton title={maximized ? "Restore" : "Maximise"} label={maximized ? "❐" : "☐"} onClick={() => props.shell.toggleMaximize()} />
+        <ControlButton title="Close to tray" label="&#x2715;" danger onClick={() => props.shell.close()} />
       </div>
     </div>
   );

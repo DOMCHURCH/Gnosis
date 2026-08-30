@@ -124,23 +124,33 @@ function FilePreviewModal(props: { preview: FilePreview; loading: boolean; onClo
     // Portalled: see Overlay.tsx. A `fixed` overlay rendered inside the left
     // panel is not full-screen, because the panel's hover transform makes it the
     // containing block.
-    <Overlay onClose={props.onClose} align="stretch">
+    <Overlay onClose={props.onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          // A reading panel, not a squeezed modal: full height, a comfortable
-          // measure, and it scrolls on its own.
-          width: "min(980px, 94vw)", height: "100%", margin: "0 auto",
-          background: "#101017", borderLeft: "1px solid #2C2C3E", borderRight: "1px solid #2C2C3E",
-          display: "flex", flexDirection: "column", fontFamily: MONO,
-          boxShadow: "0 0 80px -20px rgba(0,0,0,0.9)",
+          // Bounded, and centred rather than edge to edge.
+          //
+          // This was `align="stretch"` with `height: 100%`, which ran the panel
+          // the full height of the viewport. In the desktop shell the title bar
+          // is a FIXED, frameless strip drawn over the page, so the preview's own
+          // header — the one holding ✕ — slid underneath it and could not be
+          // clicked. There was no way out of a file preview except Escape, which
+          // nothing told you about.
+          //
+          // 86vh leaves the header clear of the title bar at the top and the
+          // dock at the bottom, whatever the window height.
+          width: "min(980px, 92vw)", height: "min(760px, 86vh)",
+          background: "#101017", border: "1px solid #2C2C3E", borderRadius: 18,
+          display: "flex", flexDirection: "column", fontFamily: MONO, overflow: "hidden",
+          boxShadow: "0 30px 80px -20px rgba(0,0,0,0.9)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 22px", borderBottom: "1px solid #2C2C3E", flex: "0 0 auto" }}>
           <span style={{ fontSize: 12, letterSpacing: 1, color: "#22D3EE", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview.path}</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
             <button type="button" onClick={props.onAttach} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, padding: "7px 13px", cursor: "pointer", borderRadius: 7 }}>+ ATTACH</button>
-            <button type="button" onClick={props.onClose} style={{ fontFamily: MONO, fontSize: 14, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 4px" }}>✕</button>
+            {/* A real target, not a 14px glyph with 4px of padding. */}
+            <button type="button" onClick={props.onClose} title="close (Esc)" aria-label="Close preview" style={{ fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", color: "#8A8A9B", border: "1px solid #2C2C3E", borderRadius: 10, cursor: "pointer", width: 34, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
           </div>
         </div>
         <pre style={{ margin: 0, flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "22px 26px", fontSize: 12.5, lineHeight: 1.75, color: "#C9C9D6", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>

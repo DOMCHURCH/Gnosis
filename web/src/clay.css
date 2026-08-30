@@ -528,3 +528,17 @@ textarea:focus {
 [data-testid="overlay-backdrop"] > * {
   border-radius: var(--clay-r-panel);
 }
+
+/* ------------------------------------------------- overlays vs the title bar
+ *
+ * In the shell the top bar is a FIXED, frameless strip painted over the page, so
+ * anything centred in the viewport can slide under it. That is how the file
+ * preview ended up with its own close button unreachable: the panel ran the full
+ * viewport height, and its header — the one holding ✕ — sat behind the title bar.
+ *
+ * The panels are bounded now, but this is the belt to that pair of braces: no
+ * overlay, present or future, may occupy the strip the title bar owns. */
+.gnosis-shell [data-testid="overlay-backdrop"] {
+  padding-top: 72px !important;
+  padding-bottom: 24px !important;
+}

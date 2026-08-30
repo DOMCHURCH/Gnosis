@@ -167,7 +167,12 @@ export function Sidebar(props: {
   sessions: { id: number; name: string; state: string; color: string }[];
   onSelectSession: (id: number) => void;
 }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({ project: true, files: true });
+  // Files starts CLOSED. Sections size to their content now (no 340px cap), so
+  // an open file tree in a real project is hundreds of rows tall and pushes the
+  // whole Workspace tier below the fold — the four destinations become
+  // unreachable without scrolling past every file in the repo. The project is
+  // still expanded, so Files is one click away.
+  const [open, setOpen] = useState<Record<string, boolean>>({ project: true });
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const hasVault = !!props.vault?.configured;
 
