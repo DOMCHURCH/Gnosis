@@ -135,9 +135,36 @@ button:hover { filter: brightness(1.12); }
 /* --- 3D office floor labels (CSS2DRenderer overlay) --- */
 /* --floor-label is set by officeScene.resize() from the floor's on-screen width,
    so labels shrink with the room instead of colliding on a narrow floor. */
-.zone-label { display: flex; flex-direction: column; align-items: center; gap: 1px; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 4px #000, 0 0 8px #000; }
+/* pointer-events is auto so the label can be hovered — it is the only handle on a
+ * zone that is otherwise just painted floor. Kept to the label's own box, which
+ * is a few dozen pixels of text above each room, so it takes almost nothing away
+ * from the canvas underneath. */
+.zone-label { display: flex; flex-direction: column; align-items: center; gap: 1px; white-space: nowrap; pointer-events: auto; cursor: help; position: relative; text-shadow: 0 1px 4px #000, 0 0 8px #000; }
 .zone-label .zl-name { font: 700 calc(10px * var(--floor-label, 1)) ui-monospace, monospace; letter-spacing: calc(1px * var(--floor-label, 1)); }
 .zone-label .zl-count { font: calc(9px * var(--floor-label, 1)) ui-monospace, monospace; letter-spacing: calc(1px * var(--floor-label, 1)); color: #8b8b9b; }
+/* The hover explanation. Absolutely positioned so it cannot change the label's
+ * layout — a tooltip that reflows the thing you are pointing at moves the target
+ * out from under the cursor. 150ms on an expo-ish curve: fast enough to feel
+ * attached to the pointer rather than animated at it. */
+.zone-label .zl-what {
+  position: absolute; top: 100%; left: 50%; margin-top: 7px;
+  transform: translate(-50%, -3px);
+  opacity: 0; pointer-events: none; visibility: hidden;
+  width: max-content; max-width: 216px; white-space: normal;
+  font: 10px/1.55 ui-monospace, monospace; letter-spacing: 0.2px;
+  color: #C9C9D6; text-shadow: none; text-align: center;
+  background: #121219; border: 1px solid #2C2C3E; border-radius: 10px;
+  padding: 7px 10px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6);
+  transition: opacity 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0s linear 150ms;
+}
+.zone-label:hover .zl-what {
+  opacity: 1; visibility: visible; transform: translate(-50%, 0);
+  transition-delay: 0s, 0s, 0s;
+}
+@media (prefers-reduced-motion: reduce) { .zone-label .zl-what { transition: none; } }
 .agent-badge { font: calc(11px * var(--floor-label, 1)) ui-monospace, monospace; color: #c9d1d9; background: #0d0d12e6; border: 1px solid #2a2a38; padding: 1px calc(6px * var(--floor-label, 1)); white-space: nowrap; pointer-events: none; }
 .agent-badge.far { display: none; }
 

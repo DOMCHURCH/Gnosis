@@ -6,12 +6,22 @@
 // and the Node verify run identical code. Geometry constants match the mockup 1:1
 // (1440×900).
 
+// `what` is the plain-English answer to "what is this room". The floor is an
+// isometric office, which tells a newcomer nothing on its own: "02 PLANNING" is
+// a label, not an explanation. These are shown on hover, and are deliberately
+// written for someone who has never seen the app rather than for someone who
+// already knows what a sub-agent is.
 export const ZONES = [
-  { id: "coordinator", name: "01 COORDINATOR", color: "#E879F9", x: 40, y: 96, w: 368, d: 304, label: [56, 116], slots: [[100, 344]] },
-  { id: "planning", name: "02 PLANNING", color: "#818CF8", x: 416, y: 96, w: 352, d: 304, label: [432, 116], slots: [[440, 344], [600, 344]] },
-  { id: "application", name: "04 APPLICATION", color: "#4ADE80", x: 776, y: 96, w: 632, d: 304, label: [792, 116], slots: [[800, 344], [960, 344]] },
-  { id: "coding", name: "03 CODING", color: "#22D3EE", x: 40, y: 408, w: 728, d: 452, label: [56, 428], slots: [[60, 620], [240, 620], [420, 620], [600, 620], [60, 800], [240, 800], [420, 800], [600, 800]] },
-  { id: "subagents", name: "05 SUB-AGENTS", color: "#C084FC", x: 776, y: 408, w: 632, d: 452, label: [792, 428], slots: [[800, 620], [980, 620], [1160, 620], [800, 800], [980, 800], [1160, 800]] },
+  { id: "coordinator", name: "01 COORDINATOR", color: "#E879F9", x: 40, y: 96, w: 368, d: 304, label: [56, 116], slots: [[100, 344]],
+    what: "The agent you are talking to. It reads your messages and decides what to do." },
+  { id: "planning", name: "02 PLANNING", color: "#818CF8", x: 416, y: 96, w: 352, d: 304, label: [432, 116], slots: [[440, 344], [600, 344]],
+    what: "Agents working out an approach before touching any code." },
+  { id: "application", name: "04 APPLICATION", color: "#4ADE80", x: 776, y: 96, w: 632, d: 304, label: [792, 116], slots: [[800, 344], [960, 344]],
+    what: "Long-running background work — builds, servers, test runs." },
+  { id: "coding", name: "03 CODING", color: "#22D3EE", x: 40, y: 408, w: 728, d: 452, label: [56, 428], slots: [[60, 620], [240, 620], [420, 620], [600, 620], [60, 800], [240, 800], [420, 800], [600, 800]],
+    what: "Agents reading and editing files in your project." },
+  { id: "subagents", name: "05 SUB-AGENTS", color: "#C084FC", x: 776, y: 408, w: 632, d: 452, label: [792, 428], slots: [[800, 620], [980, 620], [1160, 620], [800, 800], [980, 800], [1160, 800]],
+    what: "Helpers another agent spawned to work on pieces in parallel." },
 ];
 export const ZONE_BY_ID = {};
 ZONES.forEach((z) => { ZONE_BY_ID[z.id] = z; });
@@ -222,6 +232,10 @@ export function layoutFloor(figures, selectedId, debugFigures, manuals) {
       countColor: total > zone.slots.length ? "#FBBF24" : "#6B6B7B",
       // When empty, one dim line explaining what would put an agent here.
       hint: collapsed ? ZONE_HINT[zone.id] : "",
+      // Always present, shown on hover. `hint` says what would fill the room and
+      // only appears while it is empty; `what` says what the room IS, which is
+      // the thing a newcomer needs and the thing that never stops being true.
+      what: zone.what,
     });
     if (collapsed) return;
     list.forEach((a, i) => {

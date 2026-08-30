@@ -332,7 +332,14 @@ export function createOfficeScene(container: HTMLElement) {
     pl.castShadow = false;
     scene.add(pl);
 
-    const el = labelEl(`<span class="zl-name">${z.name}</span><span class="zl-count">0/${z.slots.length}</span>`, "zone-label");
+    // The third span is the hover explanation. "02 PLANNING" over an isometric
+    // room is a label, not an answer — a newcomer cannot tell what any of these
+    // rooms are for without asking, so hovering one says it in plain English.
+    const el = labelEl(
+      `<span class="zl-name">${z.name}</span><span class="zl-count">0/${z.slots.length}</span>` +
+      `<span class="zl-what">${z.what}</span>`,
+      "zone-label",
+    );
     (el.querySelector(".zl-name") as HTMLElement).style.color = `#${accent.toString(16).padStart(6, "0")}`;
     zoneLabels[z.id] = el;
     const lo = new CSS2DObject(el);

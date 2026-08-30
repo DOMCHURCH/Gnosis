@@ -247,7 +247,12 @@ export function FloorGraphic(props: {
 
       {propsL && <div style={{ position: "absolute", inset: 0, containerType: "size", pointerEvents: "none" }}>
         {L.zoneLabels.map((z) => (
-          <div key={z.key} onClick={() => props.onDeskClick(z.zone, 0)} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap", pointerEvents: "auto", cursor: "pointer" }}>
+          // `title` carries the plain-English "what is this room" on the 2D floor.
+          // The 3D floor gets a styled tooltip instead (see .zl-what in
+          // styles.css); here the native one is the right trade, because these
+          // labels are sized in container units and a positioned tooltip would
+          // have to be re-solved at every floor width.
+          <div key={z.key} title={z.what} onClick={() => props.onDeskClick(z.zone, 0)} style={{ position: "absolute", left: z.left, top: z.top, display: "flex", flexDirection: "column", gap: "0.3cqw", whiteSpace: "nowrap", pointerEvents: "auto", cursor: "pointer" }}>
             {/* Active zones render their name at full #C9C9D6; idle ones drop to the
                 dim grey (the model decides — see layoutFloor). */}
             <span style={{ fontSize: "1.45cqw", fontWeight: 700, letterSpacing: "0.22cqw", color: z.accent }}>{z.name}</span>

@@ -466,6 +466,16 @@ export function SessionsFloor(props: SessionsProps) {
                     />
                   )}
                 </div>
+
+                {/* Say what the room is, in a sentence, in words that assume
+                    nothing. An isometric office full of desks does not tell a
+                    newcomer that the desks are agents — the header above says
+                    "OFFICE FLOOR · CLICK AN AGENT", which is jargon answering a
+                    question they have not been given enough to ask. */}
+                <p data-testid="floor-subtitle" style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: "#7A7A8B", letterSpacing: 0.2 }}>
+                  Each desk is an agent. Click one to see what it&rsquo;s doing.
+                  <span style={{ color: "#4A4A58" }}> Hover a room name to learn what that room is for.</span>
+                </p>
               </div>
             </div>
           </div>
@@ -683,14 +693,20 @@ function AgentTelemetryPanel(props: {
 
 // Narrow-screen replacement for the office floor: a compact strip of zone name +
 // agent-count chips. Tapping any chip expands the full floor (one tap in, HIDE out).
-function ZoneStrip(props: { zones: { key: string; name: string; count: string; accent: string; countColor: string }[]; onExpand: () => void }) {
+function ZoneStrip(props: { zones: { key: string; name: string; count: string; accent: string; countColor: string; what: string }[]; onExpand: () => void }) {
   return (
     <div style={{ background: "#171721", border: "2px solid #2C2C3E", padding: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
       <div style={{ flex: "1 1 100%", fontSize: 10, letterSpacing: 2, color: "#6B6B7B", marginBottom: 2 }}>OFFICE FLOOR · TAP A ZONE TO EXPAND</div>
+      <div style={{ flex: "1 1 100%", fontSize: 11, lineHeight: 1.6, color: "#7A7A8B", marginBottom: 4 }}>
+        Each desk is an agent. Tap a room to see what&rsquo;s running in it.
+      </div>
       {props.zones.map((z) => (
-        <button key={z.key} type="button" onClick={props.onExpand} style={{ fontFamily: MONO, textAlign: "left", background: "#121219", border: "2px solid #2C2C3E", borderLeft: `4px solid ${z.accent}`, padding: "7px 10px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3, minWidth: 96 }}>
+        // There is no hover on a touch screen, so the explanation goes in the
+        // card rather than behind a pointer that will never arrive.
+        <button key={z.key} type="button" title={z.what} onClick={props.onExpand} style={{ fontFamily: MONO, textAlign: "left", background: "#121219", border: "2px solid #2C2C3E", borderLeft: `4px solid ${z.accent}`, padding: "7px 10px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3, minWidth: 96, maxWidth: 210 }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: z.accent }}>{z.name}</span>
           <span style={{ fontSize: 10, color: z.countColor }}>{z.count}</span>
+          <span style={{ fontSize: 9.5, lineHeight: 1.5, color: "#5A5A6B", whiteSpace: "normal" }}>{z.what}</span>
         </button>
       ))}
     </div>
@@ -849,6 +865,66 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
 // a fixed height from its flex parent and scrolls internally, so a long task never
 // grows the panel; auto-scroll follows new messages while the user is at the bottom,
 // and a "↓ new message" pill appears when they've scrolled up to read history.
+/** Openers offered to someone who has just arrived. Deliberately about THIS
+ * project rather than about the app: the fastest way to understand what Gnosis
+ * is, is to watch it answer something about the code already in front of you. */
+const STARTERS = [
+  "What does this project do?",
+  "Where should I start reading the code?",
+  "Find anything that looks broken.",
+];
+
+/**
+ * What the chat shows before anyone has said anything.
+ *
+ * It used to show nothing — an empty box beside an isometric office, which is
+ * the single worst moment for a newcomer: the app is at its most alien and gives
+ * the least away. This is the orientation, and it is written for someone who has
+ * not been told what any of this is.
+ *
+ * Clicking a starter fills the input rather than sending it, so the first thing
+ * that happens is not an agent running off on its own — you can read the prompt,
+ * change it, and press Send.
+ */
+function ChatEmptyState({ onPick }: { onPick: (v: string) => void }) {
+  return (
+    <div data-testid="chat-empty" style={{ display: "flex", flexDirection: "column", gap: 14, padding: "18px 6px 6px" }}>
+      <div>
+        <div style={{ fontSize: 12, color: "#C9D1D9", letterSpacing: 0.2, marginBottom: 7 }}>
+          Ask for something and an agent gets to work.
+        </div>
+        <div style={{ fontSize: 11, lineHeight: 1.7, color: "#7A7A8B" }}>
+          It reads and edits files in your project, runs commands, and asks before
+          anything it can&rsquo;t undo. Whatever it does shows up on the floor to the
+          left, one desk per agent.
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ fontSize: 9, letterSpacing: 2, color: "#4A4A58" }}>TRY</div>
+        {STARTERS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            title="put this in the message box"
+            onClick={() => onPick(s)}
+            style={{
+              fontFamily: MONO, fontSize: 11, textAlign: "left", lineHeight: 1.5,
+              background: "#121219", color: "#9A9AAB", border: "1px solid #2C2C3E",
+              borderRadius: 10, padding: "9px 11px", cursor: "pointer",
+              transition: "border-color 180ms ease-out, color 180ms ease-out, transform 180ms cubic-bezier(0.16,1,0.3,1)",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#22D3EE"; e.currentTarget.style.color = "#C9D1D9"; e.currentTarget.style.transform = "translateX(2px)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2C2C3E"; e.currentTarget.style.color = "#9A9AAB"; e.currentTarget.style.transform = "none"; }}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; onToggleDetach: () => void; onHeaderMouseDown?: (e: React.MouseEvent) => void; mobile?: boolean }) {
   const { model } = p;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -905,6 +981,7 @@ function ChatPanel(p: SessionsProps & { detached: boolean; canDetach: boolean; o
       </div>
       <div style={{ position: "relative", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" }}>
         <div ref={scrollRef} onScroll={onScroll} style={{ flex: "1 1 auto", overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+          {p.chat.length === 0 && <ChatEmptyState onPick={p.onDraft} />}
           {p.chat.map((m) => {
             if (m.kind === "tool" && m.tool) {
               return (
