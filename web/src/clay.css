@@ -13,7 +13,8 @@
  *
  * PERFORMANCE: shadows and blur are deliberately rationed. Only surfaces that
  * read as "floating" get a shadow, transitions name the properties they animate
- * instead of `all`, and backdrop-filter appears exactly once (the top bar).
+ * instead of `all`, and backdrop-filter is confined to the floating tier (see
+ * the glass rule at the bottom of this file).
  * Stacking soft effects on every element is what makes this style feel sluggish.
  */
 
@@ -22,7 +23,11 @@
   --clay-surface: #17172180;
   --clay-surface-solid: #171721;
   --clay-raised: #1c1c28;
-  --clay-inset: #101017;
+  /* The recessed well colour. Named `--clay-surface-inset` because
+   * `--clay-inset` used to be declared TWICE in this block — once as this colour
+   * and once as a 16px length — and the length, coming second, won. The colour
+   * had been dead ever since. The length is now `--clay-gap`. */
+  --clay-surface-inset: #101017;
   --clay-line: rgba(255, 255, 255, 0.07);
   --clay-line-strong: rgba(255, 255, 255, 0.12);
 
@@ -52,16 +57,55 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.09);
   --clay-press: inset 0 2px 6px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 
-  --clay-r: 18px;
-  --clay-r-sm: 14px;
-  --clay-r-xs: 10px;
+  /* ---------------------------------------------------------- radius scale
+   *
+   * Four steps, and each one owns a job. Before this there were three tokens
+   * plus a scatter of inline values, so a rendered page held five different
+   * radii — 21 bordered surfaces at 0px sitting inside panels at 18px — and the
+   * inconsistency read as sloppiness rather than as any kind of hierarchy.
+   *
+   * The rule is: the bigger the surface, the rounder it is. Radius reads as
+   * softness, and a small element with a large radius reads as a pill, not as a
+   * smaller version of the panel it sits in.
+   *
+   *   panel  18  top-level surfaces — the columns, the dock, modals
+   *   card   14  cards nested inside a panel — inspector sections, code blocks
+   *   ctl    10  things you click or type into — buttons, inputs, chips
+   *   tag     4  inline scraps — badges, name tags, status pills, swatches
+   *
+   * A fully round element (a knob, a dot, a segmented pill's outer edge) uses
+   * 999px and is outside the scale on purpose: it is a circle, not a corner. */
+  --clay-r-panel: 18px;
+  --clay-r-card: 14px;
+  --clay-r-ctl: 10px;
+  --clay-r-tag: 4px;
+
   --clay-ease: 200ms ease-out;
+  /* The skill's curve for anything that should feel thrown rather than played. */
+  --clay-ease-out-expo: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---------------------------------------------------------------- glass
+   *
+   * Glass belongs to the FLOATING tier and nowhere else: the top bar, modal
+   * backdrops and their surfaces, the drag overlay, the voice overlay. Those sit
+   * above other content, so blurring what is behind them is describing a real
+   * relationship.
+   *
+   * Content surfaces — the sidebar, the floor, the inspector, the chat — stay
+   * clay. Glass over the 3D floor in particular is the worst case: the floor is
+   * a live WebGL canvas, so every frame it draws re-triggers the blur behind
+   * anything glassy on top of it, and the scene underneath is exactly the thing
+   * you were trying to read. Every backdrop-filter is also its own compositing
+   * layer, which is why there is a token rather than an invitation. */
+  --clay-glass: blur(14px) saturate(1.2);
+  --clay-glass-thin: blur(3px);
+  --clay-glass-bg: linear-gradient(180deg, rgba(23, 23, 33, 0.82), rgba(13, 13, 18, 0.62));
 
   /* How far fixed chrome stays off the window frame in the desktop shell. The
    * page's own columns already sit in a 24px gutter (SessionsFloor sets it
    * inline) — this is for the pieces that are position:fixed and would otherwise
    * be welded to the frame: the terminal dock and the corner buttons. */
-  --clay-inset: 16px;
+  --clay-gap: 16px;
 }
 
 /* A hair more ambient light in the page itself, so floating surfaces have
@@ -79,7 +123,7 @@ body {
 [data-testid="floor-container"],
 [data-testid="left-panel"],
 [data-testid="right-panel"] {
-  border-radius: var(--clay-r) !important;
+  border-radius: var(--clay-r-panel) !important;
   border: 1px solid var(--clay-line) !important;
   box-shadow: var(--clay-lift);
   background-color: var(--clay-surface-solid) !important;
@@ -155,7 +199,7 @@ body {
  * Same treatment as the panels above it, so the row reads as one more floating
  * card rather than a rule drawn across the bottom. */
 [data-testid="activity-strip"] {
-  border-radius: var(--clay-r) !important;
+  border-radius: var(--clay-r-panel) !important;
   border: 1px solid var(--clay-line) !important;
   background-color: var(--clay-surface-solid) !important;
   box-shadow: var(--clay-lift-sm);
@@ -171,13 +215,13 @@ body {
  * dock uses so the three pieces of floating chrome line up. */
 .gnosis-shell [data-testid="terminal-dock"] ~ button,
 .gnosis-shell #root > button {
-  right: var(--clay-inset) !important;
+  right: var(--clay-gap) !important;
 }
 
 /* The 3D floor sits in a softly inset well, so the scene reads as recessed into
  * the clay rather than pasted on top of it. */
 [data-testid="three-floor"] {
-  border-radius: var(--clay-r-sm);
+  border-radius: var(--clay-r-card);
   overflow: hidden;
   box-shadow: var(--clay-press);
 }
@@ -192,8 +236,8 @@ body {
 /* The one frosted surface in the app — a single backdrop-filter, not one per
  * panel, because each is a separate compositing layer. */
 .gnosis-shell [data-testid="top-bar"] {
-  background: linear-gradient(180deg, rgba(23, 23, 33, 0.82), rgba(13, 13, 18, 0.62));
-  backdrop-filter: blur(14px) saturate(1.2);
+  background: var(--clay-glass-bg);
+  backdrop-filter: var(--clay-glass);
   border-bottom: 1px solid var(--clay-line);
   box-shadow: 0 6px 20px -12px rgba(0, 0, 0, 0.9);
 }
@@ -243,7 +287,7 @@ body {
 /* --------------------------------------------- session selector (left rail) */
 
 [data-testid="session-selector"] > button {
-  border-radius: var(--clay-r-sm) !important;
+  border-radius: var(--clay-r-card) !important;
   border: 1px solid var(--clay-line) !important;
   box-shadow: var(--clay-lift-sm);
   transition: transform var(--clay-ease), box-shadow var(--clay-ease), border-color var(--clay-ease);
@@ -257,7 +301,7 @@ body {
 
 [data-testid="terminal-dock"] {
   border-top: 0 !important;
-  border-radius: var(--clay-r) var(--clay-r) 0 0 !important;
+  border-radius: var(--clay-r-panel) var(--clay-r-panel) 0 0 !important;
   box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
@@ -266,10 +310,10 @@ body {
  * keeps it welded to the viewport bottom — there is no window frame there for it
  * to lift off. */
 .gnosis-shell [data-testid="terminal-dock"] {
-  left: var(--clay-inset) !important;
-  right: var(--clay-inset) !important;
-  bottom: var(--clay-inset) !important;
-  border-radius: var(--clay-r) !important;
+  left: var(--clay-gap) !important;
+  right: var(--clay-gap) !important;
+  bottom: var(--clay-gap) !important;
+  border-radius: var(--clay-r-panel) !important;
   box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.8), 0 -12px 30px -8px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
@@ -278,7 +322,7 @@ body {
  * pointer-transparent overlay: putting it on .xterm directly would sit under
  * xterm's own absolutely-positioned render layers and never be seen. */
 [data-testid="terminal-dock"] .xterm {
-  border-radius: var(--clay-r-sm);
+  border-radius: var(--clay-r-card);
 }
 [data-testid="terminal-dock"] > div:last-child {
   position: relative;
@@ -288,7 +332,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  border-radius: var(--clay-r-sm);
+  border-radius: var(--clay-r-card);
   box-shadow: inset 0 10px 22px -12px rgba(0, 0, 0, 0.95), inset 0 -6px 18px -14px rgba(0, 0, 0, 0.8);
 }
 [data-testid="dock-handle"] {
@@ -316,7 +360,7 @@ body {
 /* ------------------------------------------------------- controls, generally */
 
 button {
-  border-radius: var(--clay-r-xs);
+  border-radius: var(--clay-r-ctl);
   transition: background-color var(--clay-ease), border-color var(--clay-ease), color var(--clay-ease),
     box-shadow var(--clay-ease), transform var(--clay-ease);
 }
@@ -326,7 +370,7 @@ button:active {
 
 input,
 textarea {
-  border-radius: var(--clay-r-xs) !important;
+  border-radius: var(--clay-r-ctl) !important;
   border: 1px solid var(--clay-line) !important;
   box-shadow: var(--clay-press);
   transition: border-color var(--clay-ease), box-shadow var(--clay-ease);
@@ -420,4 +464,67 @@ textarea:focus {
 .gnosis-shell [data-testid="agent-inspector"] [data-testid="chat-drop"] {
   min-height: 420px !important;
   height: auto !important;
+}
+
+/* ============================================================ radius, applied
+ *
+ * A measurement of the running page found 21 bordered surfaces sitting at 0px
+ * inside panels rounded to 18px — the inconsistency the scale above exists to
+ * end. These are the call sites that set a border inline and no radius, so the
+ * sheet supplies one. Grouped by which step of the scale they belong to, so
+ * adding a surface is a question with an answer rather than a guess.
+ *
+ * Not listed, and square on purpose: the segmented chips inside
+ * [data-testid="view-toggle"], which are clipped by their parent's 999px pill.
+ * Rounding a segment inside a rounded, overflow-hidden group puts a notch in the
+ * middle of the group. */
+
+/* card — the inspector's stacked sections, the chat, the code and diff blocks. */
+[data-testid="agent-inspector"] > div,
+[data-testid="chat-drop"],
+[data-testid="activity-strip"] > div,
+[data-testid="three-floor"] ~ div > div {
+  border-radius: var(--clay-r-card) !important;
+}
+
+/* ctl — anything you click or type into that reaches here without a radius. */
+[data-testid="chat-drop"] > div:last-child,
+[data-testid="left-panel"] button {
+  border-radius: var(--clay-r-ctl) !important;
+}
+
+/* tag — inline scraps. Small enough that a card radius would read as a pill. */
+[data-testid="status-badge"],
+.agent-badge {
+  border-radius: var(--clay-r-tag) !important;
+}
+
+/* ============================================================= the glass rule
+ *
+ * Glass is for the floating tier only — see the token block at the top. This is
+ * the enforcement rather than a suggestion: content surfaces get their
+ * backdrop-filter removed even if a call site sets one inline, because the cost
+ * lands on whoever is looking at the floor, not on whoever wrote the style.
+ *
+ * The 3D floor is the case that matters. It is a live WebGL canvas repainting
+ * every frame, so a blurred surface over it re-resolves its backdrop every one
+ * of those frames, and what it blurs is the scene you were trying to read. */
+[data-testid="left-panel"],
+[data-testid="right-panel"],
+[data-testid="floor-container"],
+[data-testid="three-floor"],
+[data-testid="agent-inspector"],
+[data-testid="agent-inspector"] > div,
+[data-testid="chat-drop"],
+[data-testid="session-title"],
+[data-testid="activity-strip"] {
+  backdrop-filter: none !important;
+}
+
+/* The floating tier, stated in one place so "is this allowed to be glass?" has a
+ * list to check against: the top bar (above), modal backdrops and surfaces, the
+ * drag overlay, and the voice overlay (its own window, styled in
+ * electron/voice-overlay.html). */
+[data-testid="overlay-backdrop"] > * {
+  border-radius: var(--clay-r-panel);
 }

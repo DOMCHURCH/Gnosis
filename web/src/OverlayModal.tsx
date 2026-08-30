@@ -84,9 +84,16 @@ export function OverlayModal(props: { overlay: OverlayState; onSelect: (value: s
   return (
     <div
       onMouseDown={(e) => { if (e.target === e.currentTarget) cancel(); }}
-      style={{ position: "fixed", inset: 0, zIndex: Z.overlay, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(6,6,10,0.72)", backdropFilter: "blur(2px)" }}
+      // Same backdrop as <Overlay>: this is the floating tier, so it is glass,
+      // and the two modal implementations must not disagree about how opaque a
+      // dimmed page is. 0.86 rather than 0.72 for the same reason it was raised
+      // there — at 0.72 the text underneath stays legible and the modal reads as
+      // transparent rather than as on top.
+      style={{ position: "fixed", inset: 0, zIndex: Z.overlay, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(6, 6, 10, 0.86)", backdropFilter: "var(--clay-glass-thin, blur(3px))" }}
     >
-      <div onKeyDown={onKeyDown} style={{ width: "min(680px, 92vw)", maxHeight: "72vh", display: "flex", flexDirection: "column", background: "#101018", border: "1px solid #2C2C3E", borderRadius: 10, boxShadow: "0 24px 64px rgba(0,0,0,0.6)", overflow: "hidden", font: "13px ui-monospace, 'SF Mono', Menlo, monospace" }}>
+      {/* Panel step of the radius scale: a modal is a top-level surface, even
+          though it is only 680px wide. */}
+      <div onKeyDown={onKeyDown} style={{ width: "min(680px, 92vw)", maxHeight: "72vh", display: "flex", flexDirection: "column", background: "#101018", border: "1px solid #2C2C3E", borderRadius: 18, boxShadow: "0 24px 64px rgba(0,0,0,0.6)", overflow: "hidden", font: "13px ui-monospace, 'SF Mono', Menlo, monospace" }}>
         <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #1E1E28" }}>
           <div style={{ color: "#E5E5EE", fontSize: 13, letterSpacing: "0.02em" }}>{overlay.title || KIND_HINT[overlay.kind] || overlay.kind}</div>
           {tabbed && (

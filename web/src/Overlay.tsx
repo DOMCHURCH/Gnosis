@@ -55,7 +55,10 @@ export function Overlay(props: {
         // "transparent text bleeding through" precisely because the layer under
         // it was still legible.
         background: "rgba(6, 6, 10, 0.86)",
-        backdropFilter: "blur(3px)",
+        // The floating tier is the one place glass belongs — see the glass rule
+        // in clay.css. The token keeps this modal, OverlayModal and the drag
+        // overlay agreeing on what "a dimmed page" looks like.
+        backdropFilter: "var(--clay-glass-thin, blur(3px))",
         display: "flex",
         alignItems: props.align === "stretch" ? "stretch" : "center",
         justifyContent: "center",

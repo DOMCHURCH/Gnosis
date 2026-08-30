@@ -537,7 +537,8 @@ export function SessionsFloor(props: SessionsProps) {
           {!narrow && props.rightPanel}
         </div>
 
-        <div style={{ background: "#171721", border: "2px solid #2C2C3E", display: "flex" }}>
+        {/* card step — a strip inside the page, not a top-level column. */}
+        <div style={{ background: "#171721", border: "2px solid #2C2C3E", borderRadius: 14, display: "flex", overflow: "hidden" }}>
           <ActivityStrip
             entries={activity.slice(clearedAt)}
             agent={model.sessionTitle}
@@ -841,7 +842,9 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFiles(e.dataTransfer.files); }}
-        style={{ display: "flex", alignItems: "center", gap: 8, background: "#121219", border: `2px solid ${dragOver ? "#22D3EE" : "#2C2C3E"}`, padding: props.mobile ? "5px 7px" : "7px 9px", minHeight: props.mobile ? 44 : undefined, boxSizing: "border-box" }}
+        // ctl step of the radius scale — this is a text field with furniture
+        // around it, so it rounds like an input rather than like a card.
+        style={{ display: "flex", alignItems: "center", gap: 8, background: "#121219", border: `2px solid ${dragOver ? "#22D3EE" : "#2C2C3E"}`, borderRadius: 10, padding: props.mobile ? "5px 7px" : "7px 9px", minHeight: props.mobile ? 44 : undefined, boxSizing: "border-box" }}
       >
         <input ref={fileRef} type="file" multiple accept={accept} onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }} style={{ display: "none" }} />
         {/* On mobile: paperclip left, larger input, SEND right (one-handed). */}

@@ -90,7 +90,7 @@ export const DropZone = forwardRef<HTMLDivElement, {
             pointerEvents: "none",
             borderRadius: 16,
             background: "linear-gradient(160deg, rgba(34,211,238,0.14), rgba(232,121,249,0.10))",
-            backdropFilter: "blur(2px)",
+            backdropFilter: "var(--clay-glass-thin, blur(3px))",
             boxShadow: "inset 0 0 0 2px rgba(34,211,238,0.65), inset 0 0 40px rgba(34,211,238,0.18)",
           }}
         >
