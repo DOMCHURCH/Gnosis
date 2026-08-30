@@ -40,28 +40,77 @@
       button, .card, .tab, #transcript, #response, a { -webkit-app-region: no-drag; }
       button { font: inherit; color: inherit; cursor: pointer; }
 
-      /* The rim: a gradient border, which CSS cannot draw directly — the outer
-       * element carries the gradient and 1px of padding, the inner covers all but
-       * that rim. */
+      /*
+       * LIQUID GLASS, not a colored blur.
+       *
+       * The previous version was a dark, near-opaque tint (rgba(12,13,20,0.72))
+       * wrapped in a cyan/violet/magenta gradient border. That reads as "a panel
+       * with a glow", because a strong colour and a strong tint both fight the
+       * thing that makes glass read as glass: you should see THROUGH it, not AT
+       * it. Real glass is defined by what it does to the light passing through —
+       * refraction, saturation, a rim catching one light source — not by being
+       * painted a colour.
+       *
+       * Three layers now, each doing one job:
+       *   .frame  — the rim. A bright highlight along the TOP edge only, fading
+       *             to almost nothing by the bottom — light from above catching
+       *             a curved edge, not a gradient wrapping the whole shape.
+       *   .glass  — the body. A near-transparent white wash (6%, not a colour)
+       *             over a heavy blur+saturate, so whatever is behind reads as
+       *             vivid-through-frost rather than washed to grey.
+       *   .liquid — the refraction. An SVG feTurbulence + feDisplacementMap
+       *             chained onto the SAME backdrop-filter (Chromium accepts an
+       *             SVG filter reference inside backdrop-filter), so what shows
+       *             through the glass visibly warps rather than sitting as a
+       *             static blur. The turbulence's own baseFrequency animates
+       *             slowly, which is what reads as "liquid" instead of "foggy".
+       */
       .frame {
         height: 100%;
         box-sizing: border-box;
         padding: 1px;
         border-radius: 999px;
-        background: linear-gradient(120deg, rgba(34, 211, 238, 0.75), rgba(139, 124, 246, 0.65) 50%, rgba(232, 121, 249, 0.55));
-        box-shadow: 0 20px 50px -14px rgba(0, 0, 0, 0.8), 0 0 40px -18px var(--violet);
+        background: linear-gradient(180deg,
+          rgba(255, 255, 255, 0.75) 0%,
+          rgba(255, 255, 255, 0.22) 14%,
+          rgba(255, 255, 255, 0.05) 32%,
+          rgba(255, 255, 255, 0.02) 55%,
+          rgba(255, 255, 255, 0.14) 100%);
+        box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.85), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
         transition: border-radius var(--ease);
       }
       .glass {
         height: 100%;
         box-sizing: border-box;
         border-radius: 999px;
-        background: rgba(12, 13, 20, 0.72);
-        backdrop-filter: blur(24px) saturate(1.3);
+        /* Clear frosted glass: almost no tint at all. Any more than this and it
+         * stops being "glass with something behind it" and becomes a panel
+         * again. */
+        background: rgba(255, 255, 255, 0.055);
+        backdrop-filter: blur(38px) saturate(1.85) url(#liquidDistort);
+        -webkit-backdrop-filter: blur(38px) saturate(1.85);
         overflow: hidden;
+        position: relative;
         transition: border-radius var(--ease);
       }
+      /* A second, faint highlight sweeping the inside of the curve — the
+       * "wet, reflective" quality asked for. Positioned top-left, since that is
+       * where the rim light already lives; a specular highlight not aligned with
+       * its own rim light reads as two different light sources. Static (not
+       * animated): a highlight that visibly moves on its own, with nothing
+       * moving the glass, reads as a shimmer effect rather than a material. */
+      .glass::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(140px 70px at 18% -20%, rgba(255, 255, 255, 0.35), transparent 70%);
+        mix-blend-mode: screen;
+      }
       body.expanded .frame, body.expanded .glass { border-radius: 22px; }
+      @media (prefers-reduced-motion: reduce) {
+        .glass { backdrop-filter: blur(38px) saturate(1.85); }
+      }
 
       /* ------------------------------------------------------------ collapsed */
       #collapsed { height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; box-sizing: border-box; }
@@ -171,6 +220,28 @@
     </style>
   </head>
   <body>
+    <!--
+      The refraction filter `.glass` applies through backdrop-filter.
+      `width/height: 0` plus `position: absolute` (not display:none) keeps this
+      out of layout and out of sight while leaving its <animate> running — a
+      hidden ancestor with display:none stops SMIL animation in Chromium, which
+      would leave the distortion frozen on its first frame.
+    -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="liquidDistort" x="-25%" y="-25%" width="150%" height="150%">
+        <!-- Low-frequency, low-octave noise: cheap to evaluate every frame, and
+             coarse noise is what reads as a WARP (things bend) rather than a
+             GRAIN (things sparkle) — the latter reads as noise, not liquid. -->
+        <feTurbulence type="fractalNoise" baseFrequency="0.010 0.014" numOctaves="2" seed="7" result="noise">
+          <animate attributeName="baseFrequency" dur="16s" repeatCount="indefinite"
+            values="0.010 0.014; 0.014 0.009; 0.009 0.015; 0.010 0.014" />
+        </feTurbulence>
+        <!-- The displacement itself. `scale` is the max pixel offset — kept
+             small (10) because this floats over real work: the goal is "the
+             glass gently bends what's under it", not a funhouse mirror. -->
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
     <div class="frame">
       <div class="glass">
         <!-- ----------------------------------------------------- collapsed -->
@@ -240,31 +311,87 @@
       // ---------------------------------------------------------- waveform
       // Driven by the REAL microphone level, pushed from the main process (the
       // overlay does not own the microphone). The samples arrive ~5x a second,
-      // far too sparse to draw directly, so each seeds a rolling history the bars
-      // ease toward — that is what makes it read as a waveform rather than a bar
-      // chart stepping five times a second.
+      // far too sparse to draw directly, so each seeds a rolling history the
+      // line eases toward — that is what makes it read as continuous motion
+      // rather than a value stepping five times a second.
+      //
+      // Drawn as a filled liquid body, not discrete bars: a smooth curve through
+      // the history samples (quadratic bezier through midpoints, not straight
+      // segments — straight segments through sparse points still reads as a bar
+      // chart with the corners sanded off) mirrored top and bottom, so speech
+      // reads as the glass swelling rather than a meter ticking.
       const BARS = 56;
       const history = new Array(BARS).fill(0);
       let target = 0;
       let current = 0;
+
+      /** The smooth curve through `pts`, quadratic bezier via each pair's
+       * midpoint. This is what turns N sample points into one continuous line
+       * instead of N-1 straight segments meeting at a visible corner. */
+      function traceSmooth(g, pts) {
+        g.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length - 1; i++) {
+          const mx = (pts[i].x + pts[i + 1].x) / 2;
+          const my = (pts[i].y + pts[i + 1].y) / 2;
+          g.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+        }
+        const last = pts[pts.length - 1];
+        g.quadraticCurveTo(last.x, last.y, last.x, last.y);
+      }
 
       function drawInto(cv) {
         if (!cv || !cv.clientWidth) return;
         const g = cv.getContext("2d");
         const w = cv.width, h = cv.height, mid = h / 2;
         g.clearRect(0, 0, w, h);
-        const grad = g.createLinearGradient(0, 0, w, 0);
-        grad.addColorStop(0, "#22d3ee");
-        grad.addColorStop(0.5, "#8b7cf6");
-        grad.addColorStop(1, "#e879f9");
-        g.fillStyle = grad;
-        const step = w / BARS;
-        const bw = Math.max(1.5, step * 0.5);
+
+        const step = w / (BARS - 1);
+        const top = [], bottom = [];
+        let peakX = 0, peakY = mid, peakV = -1;
         for (let i = 0; i < BARS; i++) {
           const v = Math.min(1, history[i] * 7); // speech RMS sits well under 0.2
-          const barH = Math.max(2, v * (h - 4));  // a floor, so idle still lives
+          const amp = Math.max(1.5, v * (h / 2 - 2)); // a floor, so idle still lives
+          const x = i * step;
+          top.push({ x, y: mid - amp });
+          bottom.push({ x, y: mid + amp });
+          if (v > peakV) { peakV = v; peakX = x; peakY = mid - amp; }
+        }
+        bottom.reverse();
+
+        // The liquid body: top curve across, bottom curve back, one fill.
+        g.beginPath();
+        traceSmooth(g, top);
+        traceSmooth(g, bottom);
+        g.closePath();
+        const body = g.createLinearGradient(0, 0, 0, h);
+        body.addColorStop(0, "rgba(255,255,255,0.22)");
+        body.addColorStop(0.5, "rgba(255,255,255,0.10)");
+        body.addColorStop(1, "rgba(255,255,255,0.22)");
+        g.fillStyle = body;
+        g.fill();
+
+        // Rim light along the top surface only — the same cue as the panel's
+        // own edge highlight, applied to the liquid's surface.
+        g.beginPath();
+        traceSmooth(g, top);
+        g.strokeStyle = "rgba(255,255,255,0.8)";
+        g.lineWidth = 1.1;
+        g.shadowColor = "rgba(255,255,255,0.6)";
+        g.shadowBlur = 4;
+        g.stroke();
+        g.shadowBlur = 0;
+
+        // A specular highlight riding the current peak — small, soft, and it
+        // moves with the loudest point in the window, which is what reads as
+        // "wet" rather than "lit": a fixed highlight on a moving surface looks
+        // painted on; one that tracks the surface looks reflected off it.
+        if (peakV > 0.04) {
+          const spec = g.createRadialGradient(peakX, peakY, 0, peakX, peakY, 16);
+          spec.addColorStop(0, `rgba(255,255,255,${0.55 * Math.min(1, peakV * 1.4)})`);
+          spec.addColorStop(1, "rgba(255,255,255,0)");
+          g.fillStyle = spec;
           g.beginPath();
-          g.roundRect(i * step + (step - bw) / 2, mid - barH / 2, bw, barH, bw / 2);
+          g.arc(peakX, peakY, 16, 0, Math.PI * 2);
           g.fill();
         }
       }
@@ -277,6 +404,15 @@
         requestAnimationFrame(tick);
       }
       tick();
+
+      // Reduced motion: freeze the turbulence's baseFrequency animation rather
+      // than removing the distortion outright — a still, slightly-refracted
+      // glass is closer to what's asked for than a flat blur, and this is the
+      // one place vestibular-motion guidance (parallax/zoom/pan) doesn't apply,
+      // since nothing on screen appears to move on its own.
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        document.getElementById("liquidDistort")?.querySelector("animate")?.remove();
+      }
 
       // ------------------------------------------------------------- state
       let expanded = false;

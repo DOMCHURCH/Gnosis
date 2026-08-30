@@ -83,7 +83,10 @@ ok("the page drives the window size", /ipcMain\.on\("voice:resize"/.test(voice))
 ok("...frameless and always on top", /frame: false,[\s\S]*alwaysOnTop: true,/.test(voice));
 ok("...with no parent window, so the main window stays usable", !/parent: .*overlay/i.test(voice));
 ok("...glassmorphic", /backdrop-filter: blur/.test(overlay));
-ok("...with a gradient rim", /background: linear-gradient\(120deg, rgba\(34, 211, 238/.test(overlay));
+// The material itself is covered in depth by s97-liquid-glass.mjs (real
+// refraction, no colour tint, a liquid waveform). Kept here to just the
+// structural fact this suite already cared about: there is a rim.
+ok("...with a rim highlight", /\.frame \{[\s\S]*?background: linear-gradient\(180deg,/.test(overlay));
 ok("the pill has a pulsing listening dot", /@keyframes pulse/.test(overlay));
 ok("...a live waveform strip", /id="pillWave"/.test(overlay));
 ok("...and a shield that badges a count", /id="shieldBtn"/.test(overlay) && /id="badge"/.test(overlay));
