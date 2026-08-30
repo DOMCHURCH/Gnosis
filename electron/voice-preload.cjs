@@ -9,10 +9,6 @@ contextBridge.exposeInMainWorld("voice", {
   utterance: (wavBase64) => ipcRenderer.send("voice:utterance", wavBase64),
   /** Continuous 16 kHz mono PCM for the wake-word detector. */
   audio: (pcmBuffer) => ipcRenderer.send("voice:audio", pcmBuffer),
-  /** A short (~2.5s) WAV clip for the Whisper-based wake path — an alternative
-   * to `audio()` above, used instead of the continuous PCM tap when the "hey
-   * gnosis" wake engine is selected (see electron/voice.js WAKE_ENGINE). */
-  wakeChunk: (wavBase64) => ipcRenderer.send("voice:wake-chunk", wavBase64),
   /** Live input level, for the settings meter. */
   level: (v) => ipcRenderer.send("voice:level", v),
   /** Whether the microphone actually opened, and why not when it did not. */

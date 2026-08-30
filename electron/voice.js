@@ -3,34 +3,20 @@
 // the LAN cannot start a microphone.
 //
 // Pipeline:
-//   wake word ("hey jarvis" or "hey gnosis")  ->  overlay appears, tray pulses
-//   record until 1.5s silence                 ->  transcribe  ->  run as a turn
-//   agent replies                              ->  spoken via Kokoro (SAPI if missing)
+//   wake word ("hey jarvis")  ->  overlay appears, tray pulses
+//   record until 1.5s silence ->  transcribe            ->  run as a turn
+//   agent replies             ->  spoken via Kokoro (SAPI if it is missing)
 //
-// That reply step is GATED. TTS fires for a turn the wake word armed and for no
+// That last step is GATED. TTS fires for a turn the wake word armed and for no
 // other: type into the chat and nothing is spoken, because the person typing is
 // already reading. The gate is voicegate.js — separate so the rule can be tested
 // without Electron, and verify/s84-voice-gating.mjs is that test.
 //
-// TWO WAKE ENGINES, chosen in settings (config.wakeEngine):
-//
-//   "openwakeword" (default) — a local, key-free detector. Reliable, but there
-//   is no trained model for "hey gnosis": openWakeWord's own docs offer no
-//   lightweight path to train a new phrase (their "custom verifier" mechanism
-//   adapts an EXISTING model to a speaker, it does not create a new phrase; the
-//   only real training route needs several thousand synthetic samples plus
-//   ~30,000 hours of negative data). So this engine listens for "hey jarvis".
-//
-//   "whisper" — no detector at all. A mic chunk every ~2.5-3s goes to Groq
-//   Whisper, and the transcript is matched against "gnosis" (see
-//   matchesWakePhrase). This is how "hey gnosis" works without training
-//   anything, at the cost of a Whisper call every few seconds while armed and
-//   a slightly higher false-accept rate than a trained detector.
-//
-// Either way, only TRANSCRIBING what you actually say (once woken) needs a key
-// (GROQ_API_KEY); with the whisper engine, that same key is also what makes the
-// wake word itself work. Status is reported through voiceStatus() so settings
-// can name the missing piece rather than failing silently.
+// The wake word runs on openWakeWord — open source, local, and needing no
+// account or API key. Only transcription needs a key (GROQ_API_KEY for Whisper);
+// without it the overlay says so instead of pretending to hear. Status is
+// reported through voiceStatus() so settings can name the missing piece rather
+// than failing silently.
 
 import { BrowserWindow, ipcMain, Notification, screen } from "electron";
 import path from "node:path";
@@ -63,31 +49,6 @@ const PHRASES = {
   hey_rhasspy: "hey rhasspy",
 };
 const DEFAULT_WAKE_MODEL = "hey_jarvis";
-
-/**
- * The second wake path: no trained detector says "hey gnosis", so instead of a
- * model, the mic renderer captures a short WAV every ~2.5-3s (see
- * WHISPER_CHUNK_MS in voice-engine.html) and this matches the REAL transcript
- * Groq Whisper returns for it against "gnosis" and a short list of the
- * near-homophones Whisper actually produces for it in practice ("no sis",
- * "yo sis" — reported failure modes, not guesses). This trades a Whisper API
- * call every few seconds while armed for a phrase that needs no training data
- * openWakeWord's own docs don't offer a lightweight route to produce (see the
- * commit this shipped with).
- *
- * Deliberately loose rather than requiring a leading "hey": Whisper's own
- * transcription of a two-word wake phrase spoken at a distance is unreliable
- * enough on the FIRST word that anchoring to it would trade false accepts for
- * false rejects. The trade made here is the other way — matching on "gnosis"
- * alone risks firing on a sentence that happens to contain the word, which is
- * why this is the OPT-IN engine (see settings), not the default.
- */
-const WAKE_WHISPER_RE = /\b(gnosis|nosis|gnosys|no\s*sis|know\s*sis|yo\s*sis)\b/i;
-
-/** Whether a transcript should be treated as the "hey gnosis" wake phrase. */
-export function matchesWakePhrase(text) {
-  return WAKE_WHISPER_RE.test(String(text ?? ""));
-}
 
 const SCREEN_WORDS = /\b(screen|screenshot|display|what am i looking at|explain this|on my monitor)\b/i;
 const CAMERA_WORDS = /\b(camera|webcam|scan|look at me|what do you see)\b/i;
@@ -175,8 +136,7 @@ async function transcribe(wavBase64, apiKey) {
 export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   let overlay = null;
   let engine = null; // the hidden always-listening renderer
-  let detector = null; // the openWakeWord child process — null when the whisper engine is active
-  let wakeEngine = "openwakeword"; // "openwakeword" | "whisper" — set from config in start()
+  let detector = null; // the openWakeWord child process
   let enabled = false;
   let status = { enabled: false, wakeWord: false, transcription: false, reason: "not started" };
   // Live diagnostics, surfaced in the settings panel. Every field answers a
@@ -192,12 +152,6 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     runtime: null,   // probeRuntime(): installed? models downloaded? which python?
     tts: null,       // which TTS engine will actually be used
     lastWake: null,
-    // Whisper-engine only: how many wake chunks have been sent for
-    // transcription, and what the most recent one actually heard — the
-    // difference between "it isn't triggering" and "it never heard you at all"
-    // is exactly this line.
-    wakeChunks: 0,
-    lastWakeChunkText: null,
     // Which engine last spoke, and when. Empty until a voice turn has completed —
     // which is itself the answer to "does TTS fire on ordinary chat messages?".
     lastSpoke: null,
@@ -205,11 +159,8 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     lastError: null,
   };
 
-  /** The phrase to speak. Whisper mode always listens for "hey gnosis" — that
-   * is the whole reason the engine exists; openWakeWord mode derives it from
-   * whichever pretrained model is actually loaded. */
+  /** The phrase to speak, derived from whichever model is loaded. */
   function wakePhrase() {
-    if (wakeEngine === "whisper") return "hey gnosis";
     const loaded = (status.models ?? [])[0] ?? DEFAULT_WAKE_MODEL;
     const key = String(loaded).replace(/_v\d.*$/, "");
     return PHRASES[key] ?? key.replace(/_/g, " ");
@@ -724,69 +675,6 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     }
   }
 
-  /**
-   * A candidate ~2.5s WAV from the whisper wake engine: transcribe it and check
-   * whether it says "hey gnosis" (see matchesWakePhrase).
-   *
-   * Guarded on `session` the same way the mic renderer guards on `recording` —
-   * belt and braces. Once a session is open, the recorder owns the microphone
-   * and the renderer stops sending chunks; this is what stops a wake chunk from
-   * a race at the boundary being transcribed twice.
-   */
-  async function handleWakeChunk(wavBase64) {
-    if (!enabled || wakeEngine !== "whisper" || session) return;
-    diag.wakeChunks += 1;
-    const { env } = await readEnv();
-    const t = await transcribe(wavBase64, env.GROQ_API_KEY);
-    if (!t.ok) {
-      diag.lastWakeChunkText = `(transcribe failed: ${t.error})`;
-      return;
-    }
-    diag.lastWakeChunkText = t.text || "(silence)";
-    if (matchesWakePhrase(t.text)) {
-      diag.lastWake = `whisper heard "${t.text}" @ ${new Date().toISOString()}`;
-      wake();
-    }
-  }
-
-  /**
-   * The whisper engine's equivalent of testWakeWord() below: proves the whole
-   * chain — Kokoro/SAPI synthesis, the real Groq Whisper call, and the match
-   * regex — without anyone speaking. Kokoro's own output is already a WAV file,
-   * so unlike the openWakeWord test there is no resample step: Whisper accepts
-   * whatever sample rate it is given, it is only openWakeWord's frame format
-   * that is fussy.
-   */
-  async function testWhisperWake() {
-    const { env, config } = await readEnv();
-    if (!env.GROQ_API_KEY) return { ok: false, stage: "key", reason: "no GROQ_API_KEY — the whisper engine cannot transcribe anything." };
-    const spoken = await speak("hey gnosis", { voice: config.kokoroVoice });
-    if (!spoken.ok || !spoken.path) {
-      return { ok: false, stage: "tts", reason: spoken.error ?? spoken.fallbackReason ?? "could not synthesise the test phrase" };
-    }
-    let wavBase64;
-    try {
-      const { promises: fsp } = await import("node:fs");
-      wavBase64 = (await fsp.readFile(spoken.path)).toString("base64");
-    } catch (e) {
-      return { ok: false, stage: "read", reason: String(e?.message ?? e) };
-    }
-    const t = await transcribe(wavBase64, env.GROQ_API_KEY);
-    if (!t.ok) return { ok: false, stage: "transcribe", reason: t.error };
-    const matched = matchesWakePhrase(t.text);
-    if (matched) diag.lastWake = `whisper test: "${t.text}" @ ${new Date().toISOString()}`;
-    return {
-      ok: matched,
-      stage: matched ? "done" : "match",
-      phrase: "hey gnosis",
-      transcript: t.text,
-      engine: spoken.engine,
-      reason: matched
-        ? `Whisper heard "${t.text}" and it matched.`
-        : `Whisper heard "${t.text}", which did not match the wake pattern.`,
-    };
-  }
-
   /** A finished utterance: transcribe, run it, speak the reply. */
   async function handleUtterance(wavBase64) {
     vlog("utterance.received", { bytes: Math.round((wavBase64?.length ?? 0) * 0.75) });
@@ -904,8 +792,6 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     vlog("mic.mute.applied", { on: muteApplied, abortedRecording: !!m?.abortedRecording });
   });
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
-  // A candidate wake chunk from the whisper engine — see handleWakeChunk.
-  ipcMain.on("voice:wake-chunk", (_e, wavBase64) => void handleWakeChunk(wavBase64));
   // The engine renderer heard nothing at all in a recording window. Inside a
   // session that is just a pause, not a hang-up.
   ipcMain.on("voice:cancel", () => {
@@ -919,7 +805,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     status = { ...status, ...s };
   });
   ipcMain.handle("voice:status", () => status);
-  ipcMain.handle("voice:diagnostics", () => ({ ...diag, wakePhrase: wakePhrase(), wakeEngine, muteWanted, muteApplied }));
+  ipcMain.handle("voice:diagnostics", () => ({ ...diag, wakePhrase: wakePhrase(), muteWanted, muteApplied }));
   ipcMain.handle("voice:timeline", () => timeline.slice());
   // The full probe is slow (it starts Python), so it is explicit rather than
   // part of every status read.
@@ -931,7 +817,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       : { engine: "sapi", voices: [], reason: k.reason };
     return diag;
   });
-  ipcMain.handle("voice:test", async () => (wakeEngine === "whisper" ? testWhisperWake() : testWakeWord()));
+  ipcMain.handle("voice:test", async () => testWakeWord());
   ipcMain.handle("voice:speak", async (_e, text) => {
     const { config } = await readEnv();
     return speak(text, { voice: config.kokoroVoice, play });
@@ -988,46 +874,12 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   }
 
   async function start() {
-    const { env, config } = await readEnv();
+    const { env } = await readEnv();
     enabled = true;
-    wakeEngine = config.wakeEngine === "whisper" ? "whisper" : "openwakeword";
-
-    // Re-probe on start: the startup probe already ran, but a user who installed
-    // Kokoro and then switched voice on expects the panel to notice.
-    void probeKokoro().then((k) => {
-      diag.tts = k.ok
-        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python, backend: k.backend }
-        : { engine: "sapi", voices: [], reason: k.reason };
-    });
-
-    detector?.stop();
-
-    if (wakeEngine === "whisper") {
-      // No detector process at all — the mic renderer captures chunks and
-      // hands them to handleWakeChunk instead. Cheaper (no Python child) and
-      // does not need models downloaded, at the cost of a Whisper call every
-      // few seconds instead of a local prediction.
-      detector = null;
-      diag.process = "not used (whisper engine)";
-      diag.wakeChunks = 0;
-      diag.lastWakeChunkText = null;
-      status = {
-        enabled: true,
-        wakeWord: false, // flips true once the renderer's mic actually opens
-        transcription: !!env.GROQ_API_KEY,
-        reason: env.GROQ_API_KEY
-          ? `starting the microphone for “${wakePhrase()}”…`
-          : "the whisper wake engine needs GROQ_API_KEY, which is not set — it cannot transcribe anything, including the wake word itself.",
-      };
-      const e = makeEngine();
-      e.webContents.once("did-finish-load", () => {
-        e.webContents.send("voice:configure", { mode: "whisper" });
-      });
-      return status;
-    }
 
     // openWakeWord: no key, just the library. Report the install command if it
     // is missing rather than a bare "unavailable".
+    detector?.stop();
     detector = await startWakeWord({
       // Just the one model. Loading all six costs a prediction per frame each
       // and lets "alexa" or "timer" open the overlay, which is not what anyone
@@ -1055,6 +907,14 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       },
     });
 
+    // Re-probe on start: the startup probe already ran, but a user who installed
+    // Kokoro and then switched voice on expects the panel to notice.
+    void probeKokoro().then((k) => {
+      diag.tts = k.ok
+        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python, backend: k.backend }
+        : { engine: "sapi", voices: [], reason: k.reason };
+    });
+
     status = {
       enabled: true,
       wakeWord: !!detector.ok,
@@ -1065,7 +925,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // The renderer owns the microphone; it streams PCM here for the detector.
     const e = makeEngine();
     e.webContents.once("did-finish-load", () => {
-      e.webContents.send("voice:configure", { mode: detector.ok ? "openwakeword" : "none" });
+      e.webContents.send("voice:configure", { streamToDetector: detector.ok });
     });
     return status;
   }

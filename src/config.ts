@@ -69,17 +69,6 @@ export interface Config {
   voiceEnabled?: boolean;
   /** Desktop app: which Kokoro voice speaks replies (e.g. "af_heart"). */
   kokoroVoice?: string;
-  /**
-   * Which wake-word path is active. "openwakeword" (default) runs the local
-   * detector against its pretrained hey_jarvis model — no key, but the phrase is
-   * fixed to whatever that model was trained on. "whisper" instead sends short
-   * mic chunks to Groq Whisper and matches the transcript against "gnosis" and a
-   * short list of near-homophones, which is how the app can respond to "hey
-   * gnosis" without a custom-trained detector model (see electron/voice.js for
-   * why no lightweight training path exists for a new phrase). Costs a Whisper
-   * call every few seconds while armed, and needs GROQ_API_KEY.
-   */
-  wakeEngine?: "openwakeword" | "whisper";
 }
 
 export interface CostState {

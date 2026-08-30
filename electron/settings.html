@@ -167,29 +167,6 @@
       .toggle[aria-pressed="true"] .knob { transform: translateX(20px); background: var(--cyan); }
       .toggle:focus-visible { outline: 2px solid rgba(34, 211, 238, 0.5); outline-offset: 2px; }
 
-      /* Two-way segmented choice — wake detection engine. Same idea as .toggle
-       * (an inset track, an active state in cyan) but two labelled buttons
-       * instead of a knob, because "which of two engines" is not an on/off. */
-      .wake-engine-btn {
-        flex: 1 1 50%;
-        background: var(--inset);
-        color: var(--dim);
-        border: 1px solid var(--line);
-        box-shadow: var(--press);
-        padding: 9px 10px;
-        font: 10px var(--mono);
-        letter-spacing: 0.04em;
-        text-align: center;
-        cursor: pointer;
-        transition: background-color var(--ease), color var(--ease), border-color var(--ease);
-      }
-      .wake-engine-btn[aria-pressed="true"] {
-        background: rgba(34, 211, 238, 0.14);
-        border-color: rgba(34, 211, 238, 0.45);
-        color: var(--cyan);
-      }
-      .wake-engine-btn:focus-visible { outline: 2px solid rgba(34, 211, 238, 0.5); outline-offset: 2px; z-index: 1; position: relative; }
-
       /* --- API key rows ------------------------------------------------------
        * One row per key, each its own inset card so a list of eight does not read
        * as one undifferentiated wall of inputs. The head line carries the name
@@ -279,31 +256,17 @@
       <section class="magenta">
         <h2>Voice <span style="color: var(--dim); text-transform: none; letter-spacing: 0.04em">— desktop app only</span></h2>
         <p class="note">
-          Say the wake phrase below to talk to the agent. Not available in the browser UI or the CLI: the
-          microphone lives in the desktop shell and is never exposed to the served page.
+          Say “hey jarvis” to talk to the agent. Not available in the browser UI or the CLI: the microphone
+          lives in the desktop shell and is never exposed to the served page.
+        </p>
+        <p class="note">
+          Wake-word detection uses <strong>openWakeWord</strong> — open source, runs locally, and needs
+          <strong>no API key</strong>. Transcription uses the <code>GROQ_API_KEY</code> above.
         </p>
         <div class="row">
           <button class="toggle" id="voice-toggle" type="button" aria-pressed="false" title="Enable voice" aria-label="Enable voice"><span class="knob"></span></button>
           <span class="state" id="voice-state" style="margin: 0"></span>
         </div>
-
-        <p class="note" style="margin-top: 12px">Wake detection</p>
-        <!-- A two-way choice, not a boolean toggle — a pill-toggle reads as
-             on/off, which this isn't. Segmented buttons, the same shape the
-             app's own view switcher uses. -->
-        <div class="row" style="gap: 0" id="wake-engine-group" role="group" aria-label="Wake detection engine">
-          <button
-            type="button" class="wake-engine-btn" data-engine="openwakeword"
-            style="border-radius: 10px 0 0 10px; border-right-width: 0"
-            title="Local, no API key. Listens for “hey jarvis” — there is no trained “hey gnosis” model; see the note below."
-          >openWakeWord · “hey jarvis”</button>
-          <button
-            type="button" class="wake-engine-btn" data-engine="whisper"
-            style="border-radius: 0 10px 10px 0"
-            title="Sends a short mic clip to Groq Whisper every few seconds and matches the transcript. Needs GROQ_API_KEY. Slightly less reliable than a trained detector, and costs a Whisper call while armed."
-          >Whisper · “hey gnosis”</button>
-        </div>
-        <p class="note" id="wake-engine-note"></p>
 
         <p class="note" id="wake-phrase"></p>
 
@@ -627,7 +590,6 @@
           tbl.appendChild(tr);
         }
         paintVoice(s.voice);
-        paintWakeEngine(s.wakeEngine ?? "openwakeword");
         paintCwd(s.cwd ?? {});
 
         // Every key is editable above now, so the only thing left to promise is
@@ -705,33 +667,6 @@
         paintVoice(await window.gnosis.setVoiceEnabled(on));
       });
 
-      // ---- wake detection engine ----------------------------------------------
-      let wakeEngineBusy = false;
-      function paintWakeEngine(engine) {
-        for (const btn of document.querySelectorAll(".wake-engine-btn")) {
-          btn.setAttribute("aria-pressed", String(btn.dataset.engine === engine));
-        }
-        $("wake-engine-note").textContent =
-          engine === "whisper"
-            ? "Sends a short microphone clip to Groq Whisper every few seconds while voice is on, and matches the transcript against \"gnosis\". Needs GROQ_API_KEY above. Less precise than a trained detector — it can occasionally mishear an ordinary sentence as the wake word."
-            : "Runs locally, no API key needed. Listens for \"hey jarvis\" — openWakeWord has no lightweight way to train a detector for a new phrase (its \"custom verifier\" adapts an existing model to a speaker; it does not create one), so this is the closest available phrase rather than \"hey gnosis\".";
-      }
-      for (const btn of document.querySelectorAll(".wake-engine-btn")) {
-        btn.addEventListener("click", async () => {
-          if (wakeEngineBusy || btn.getAttribute("aria-pressed") === "true") return;
-          wakeEngineBusy = true;
-          const engine = btn.dataset.engine;
-          paintWakeEngine(engine); // optimistic — this is a preference, not a network call
-          try {
-            const r = await window.gnosis.setWakeEngine(engine);
-            if (r?.voice) paintVoice(r.voice); // reflects the live restart if voice was on
-            paintDiag(await window.gnosis.voiceDiagnostics());
-          } finally {
-            wakeEngineBusy = false;
-          }
-        });
-      }
-
       // ---- voice diagnostics -------------------------------------------------
       function row(label, value, cls) {
         const tr = document.createElement("tr");
@@ -753,17 +688,8 @@
         t.innerHTML = "";
         if (!d) return;
         const micOk = d.microphone === "connected";
-        const whisper = d.wakeEngine === "whisper";
         t.appendChild(row("microphone", `${d.microphone}${d.micReason ? " — " + d.micReason : ""}`, micOk ? "good" : "bad"));
-        // openWakeWord runs a process to watch; whisper mode has no process,
-        // just a running chunk count, so each engine gets the row that actually
-        // answers "is this doing anything".
-        t.appendChild(whisper
-          ? row("wake chunks sent", d.wakeChunks ?? 0, (d.wakeChunks ?? 0) > 0 ? "good" : "")
-          : row("openwakeword", d.process, d.process === "running" ? "good" : "bad"));
-        if (whisper && d.lastWakeChunkText != null) {
-          t.appendChild(row("last chunk heard", `"${d.lastWakeChunkText}"`));
-        }
+        t.appendChild(row("openwakeword", d.process, d.process === "running" ? "good" : "bad"));
 
         const meter = document.createElement("span");
         meter.style.display = "flex";
@@ -779,11 +705,8 @@
         meter.append(bar, num);
         t.appendChild(row("last audio level", meter));
 
-        // PCM-frame accounting only means something for the continuous tap
-        // openWakeWord uses; whisper mode uploads whole WAV clips instead
-        // (see "wake chunks sent" above), so this would just read "0" forever.
-        if (!whisper) t.appendChild(row("frames sent", `${d.frames ?? 0} (${Math.round((d.bytes ?? 0) / 1024)} KB)`));
-        if (!whisper && d.runtime) {
+        t.appendChild(row("frames sent", `${d.frames ?? 0} (${Math.round((d.bytes ?? 0) / 1024)} KB)`));
+        if (d.runtime) {
           t.appendChild(row("python", d.runtime.python ?? "not found", d.runtime.python ? "" : "bad"));
           t.appendChild(row("models", d.runtime.modelsDownloaded ? `downloaded (${(d.runtime.models || []).length})` : "NOT downloaded",
             d.runtime.modelsDownloaded ? "good" : "bad"));
@@ -817,9 +740,7 @@
             ? d.tts.reason ?? "using SAPI"
             : "checking…";
         $("wake-phrase").textContent = d.wakePhrase
-          ? whisper
-            ? `Wake phrase is “${d.wakePhrase}”, matched against Whisper's transcript.`
-            : `Wake phrase is currently “${d.wakePhrase}” (openWakeWord's closest available model).`
+          ? `Wake phrase is currently “${d.wakePhrase}” (openWakeWord's closest available model). Custom “hey gnosis” training coming later.`
           : "";
       }
 
