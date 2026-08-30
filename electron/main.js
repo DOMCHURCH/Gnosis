@@ -137,8 +137,16 @@ function registerWindowChrome(getWin) {
     });
   on("win:minimize", (w) => w.minimize());
   on("win:toggle-maximize", (w) => (w.isMaximized() ? w.unmaximize() : w.maximize()));
-  // Close means "close to tray" here, exactly like the frame button it replaces.
-  on("win:close", (w) => w.close());
+  // ✕ QUITS. It used to hide to the tray, which meant the button that looks
+  // exactly like every other Windows close button did not close anything — the
+  // window vanished, the app kept running, and the only real way out was a tray
+  // menu the user had no reason to look in. A close button that does not close
+  // is worse than no close button.
+  //
+  // Hiding to the tray is still available and still the right behaviour for a
+  // background agent — it is on Minimise-to-tray from the tray menu — but it is
+  // no longer what the ✕ silently does.
+  on("win:close", () => app.quit());
   ipcMain.handle("win:is-maximized", () => {
     const w = getWin();
     return !!w && !w.isDestroyed() && w.isMaximized();
@@ -282,6 +290,7 @@ if (!app.requestSingleInstanceLock()) {
 
     tray = createTray(bridge?.bus ?? null, {
       onShow: showWindow,
+      onHide: () => { if (win && !win.isDestroyed()) win.hide(); },
       onSettings: () => openSettings(win),
       onQuit: () => app.quit(),
     });

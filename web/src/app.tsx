@@ -499,15 +499,45 @@ ${text}` });
     <button type="button" onClick={() => { setQr({ title, codes }); setServeMenu(false); }} style={{ fontFamily: "inherit", fontSize: 9, letterSpacing: 2, textAlign: "left", padding: "6px 10px", cursor: "pointer", background: "transparent", color, border: 0, borderBottom: last ? 0 : "1px solid #2C2C3E" }}>{label}</button>
   );
 
-  const makeViewToggle = (docked: boolean) => (
-    <div data-testid="view-toggle" style={docked
-      ? { position: "relative", display: "flex", flexDirection: "column", alignItems: "flex-start", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-      : { position: "fixed", top: 10, right: 14, zIndex: Z.chrome, display: "flex", flexDirection: "column", alignItems: "flex-end", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+  /**
+   * The view switcher, and the only way to change view.
+   *
+   * ONE instance, always rendered, always in the same place, above everything
+   * that could otherwise cover it. It used to be two: a docked copy inside the
+   * floor column and a fixed copy for the kanban view at `top: 10, right: 14`,
+   * z-index `chrome`. Both were reachable only by luck —
+   *
+   *   - on kanban the fixed copy sat at y=10, underneath the desktop shell's
+   *     frameless title bar (z 55), so it was invisible;
+   *   - opening the terminal put the dock (z 40) over the docked copy.
+   *
+   * Either way there was no control left that could change the view, and the
+   * only way out was to kill the app. So this is now non-negotiable chrome: it
+   * does not move between views, nothing paints over it, and every destination
+   * — including TERMINAL — is on it at all times.
+   */
+  const viewToggle = (
+    <div
+      data-testid="view-toggle"
+      style={{
+        position: "fixed",
+        // Clear of the shell's fixed title bar. In a browser tab there is no
+        // title bar, so it can sit at the very top.
+        top: shell ? 66 : 10,
+        left: 24,
+        zIndex: Z.viewToggle,
+        display: "flex", flexDirection: "column", alignItems: "flex-start",
+        fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+      }}
+    >
       <div style={{ display: "flex" }}>
         {chip("FLOOR", view === "floor", () => setView("floor"), true)}
         {chip("KANBAN", view === "kanban", () => setView("kanban"), false)}
         {chip("◆ SERVE", serveMenu, () => setServeMenu((o) => !o), false)}
-        {view === "floor" && !isMobile && chip("▸_ TERMINAL", terminalOpen, () => setTerminalOpen((o) => !o), false)}
+        {/* Always present, on every view. It used to render only on the floor,
+            so from kanban there was no way to reach the terminal — and, once
+            open, no way to close it either. */}
+        {!isMobile && chip("▸_ TERMINAL", terminalOpen, () => setTerminalOpen((o) => !o), false)}
       </div>
       {serveMenu && (
         <div style={{ position: "absolute", top: "100%", marginTop: 4, zIndex: Z.chrome, background: "#0D0D12", border: "2px solid #2C2C3E", display: "flex", flexDirection: "column", minWidth: 132 }}>
@@ -517,10 +547,6 @@ ${text}` });
       )}
     </div>
   );
-  // Floating over the page for the kanban view, in the floor header for the
-  // floor view — the redesign puts the tabs at the top of the centre column.
-  const viewToggle = makeViewToggle(false);
-  const dockedViewToggle = makeViewToggle(true);
   const topBar = shell ? (
     <TopBar
       shell={shell}
@@ -552,9 +578,14 @@ ${text}` });
     <>
       {topBar}
       {shell && <UpdateToast shell={shell} />}
+      {/* The same instance, in the same place, as on every other view — see the
+          note on viewToggle. It is no longer handed to SessionsFloor to render
+          inside its column, because a copy that lives inside a view disappears
+          with that view. */}
+      {viewToggle}
       {qrPopover}
       <SessionsFloor
-        viewTabs={dockedViewToggle}
+        viewTabs={null}
         model={model}
         chat={chat}
         sel={sel}

@@ -233,7 +233,7 @@ export function TopBar(props: { shell: ShellBridge; modelId: string | null; cost
       <div data-testid="window-controls" style={{ display: "flex", alignItems: "stretch", marginLeft: 8, marginRight: -14, alignSelf: "stretch" }}>
         <ControlButton title="Minimise" label="&#x2500;" onClick={() => props.shell.minimize()} />
         <ControlButton title={maximized ? "Restore" : "Maximise"} label={maximized ? "❐" : "☐"} onClick={() => props.shell.toggleMaximize()} />
-        <ControlButton title="Close to tray" label="&#x2715;" danger onClick={() => props.shell.close()} />
+        <ControlButton title="Close Gnosis" label="&#x2715;" danger onClick={() => props.shell.close()} />
       </div>
     </div>
   );

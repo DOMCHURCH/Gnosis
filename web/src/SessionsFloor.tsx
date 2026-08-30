@@ -369,7 +369,7 @@ export function SessionsFloor(props: SessionsProps) {
     // window with the terminal closed the full 60px band held nothing at all, and
     // the chat and inspector stopped short of the bottom for no reason. That empty
     // strip is what read as a terminal notch that was never opened.
-    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px calc(${narrow ? GUTTER.bottom : 16}px + var(--dom-dock-h, 0px))`, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
+    <div data-testid="page-root" style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px calc(${narrow ? GUTTER.bottom : 16}px + var(--dom-dock-h, 0px))`, boxSizing: "border-box", display: "flex", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 1560, display: "flex", flexDirection: "column", gap: 16 }}>
         {/* header */}
         <div data-testid="page-header" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, borderBottom: "2px solid #2C2C3E", paddingBottom: 12, flexWrap: "wrap" }}>

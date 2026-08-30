@@ -77,7 +77,14 @@ export function TerminalDock(props: { tabId: number | null; open: boolean; onClo
   const dragRef = useRef<{ y: number; h: number } | null>(null);
 
   useEffect(() => {
-    const move = (e: MouseEvent) => { const d = dragRef.current; if (d) setHeight(Math.max(120, Math.min(700, d.h + (d.y - e.clientY)))); };
+    // Capped against the WINDOW, not at a fixed 700px. A flat cap is only a cap
+    // on a tall window; on a short one the dock still swallowed the page,
+    // including the view switcher, and there was then no control left that could
+    // close it. 180px is the title bar plus the switcher's band plus air.
+    const move = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (d) setHeight(Math.max(120, Math.min(window.innerHeight - 180, d.h + (d.y - e.clientY))));
+    };
     const up = () => { dragRef.current = null; };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);

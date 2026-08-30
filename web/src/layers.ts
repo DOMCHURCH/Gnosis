@@ -34,6 +34,18 @@ export const Z = {
   dock: 40,
   /** The detached chat window — a window you dragged out sits above the docks. */
   float: 45,
+  /** The view switcher (FLOOR / KANBAN / SERVE / TERMINAL).
+   *
+   * Above the docks and the detached chat on purpose: it is the ONLY way to
+   * change view, so anything that covers it strands you. It used to sit at
+   * `chrome` (30) — under the terminal dock at 40 — and at `top: 10`, which in
+   * the desktop shell is underneath the frameless title bar at 55. Between them
+   * that meant switching to Kanban or opening the terminal hid the switcher, and
+   * the only way back was to kill the app.
+   *
+   * Still below `overlay`: a modal is meant to be answered, and every modal can
+   * now be closed. */
+  viewToggle: 48,
   /** The drop-to-attach overlay, inside the chat panel it belongs to. Above the
    * panel's own content, below anything that covers the page. */
   dropZone: 25,

@@ -542,3 +542,17 @@ textarea:focus {
   padding-top: 72px !important;
   padding-bottom: 24px !important;
 }
+
+/* ------------------------------------------------ room for the view switcher
+ *
+ * The switcher is fixed chrome — one instance, every view (see app.tsx) — so the
+ * page has to leave it a band rather than draw underneath it. Layering alone
+ * decides only which of two overlapping things wins; reserving the space is what
+ * stops them overlapping at all.
+ *
+ * Shell only. In a browser tab there is no title bar, so the switcher sits at
+ * y=10 and GUTTER.top already clears it. In the shell it sits below the title
+ * bar, at 66–92, and the page must start under that. */
+.gnosis-shell [data-testid="page-root"] {
+  padding-top: 100px !important;
+}

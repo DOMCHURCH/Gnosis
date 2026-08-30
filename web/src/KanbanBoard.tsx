@@ -39,7 +39,7 @@ export function KanbanBoard(props: {
   return (
     // Same top gutter as the floor view: the fixed view/serve toggle gets its own
     // band instead of landing on the board's header.
-    <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px 24px`, boxSizing: "border-box" }}>
+    <div data-testid="page-root" style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, padding: `${GUTTER.top}px 24px 24px`, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 14, borderBottom: "2px solid #2C2C3E", paddingBottom: 12, marginBottom: 16 }}>
         <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>Gnosis</span>
         <span style={{ fontSize: 11, color: "#6B6B7B", letterSpacing: 2 }}>KANBAN · {state.order.length} SESSIONS</span>

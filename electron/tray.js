@@ -18,9 +18,10 @@ const LABEL = {
 /**
  * @param bus     the AppBridge event bus
  * @param onShow  bring the window back (created/focused by the caller)
+ * @param onHide  put the window away without quitting (what ✕ used to do)
  * @param onQuit  real quit, not hide
  */
-export function createTray(bus, { onShow, onSettings, onQuit }) {
+export function createTray(bus, { onShow, onHide, onSettings, onQuit }) {
   const tray = new Tray(trayIcon("idle"));
 
   // Busy is per-agent and agents overlap, so track the set rather than a single
@@ -42,6 +43,10 @@ export function createTray(bus, { onShow, onSettings, onQuit }) {
         { label: `Gnosis — ${detail}`, enabled: false },
         { type: "separator" },
         { label: "Show Gnosis", click: () => onShow() },
+        // ✕ quits now, so hiding to the tray needs somewhere to live. It is
+        // still the right thing for a background agent — you just have to ask
+        // for it rather than discover that the close button did it to you.
+        { label: "Hide to tray", click: () => onHide?.() },
         { label: "Settings…", click: () => onSettings?.() },
         { type: "separator" },
         { label: "Quit Gnosis", click: () => onQuit() },
