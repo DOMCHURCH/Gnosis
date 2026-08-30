@@ -21,4 +21,9 @@ contextBridge.exposeInMainWorld("voice", {
   onRecord: (cb) => ipcRenderer.on("voice:record", () => cb()),
   // main -> overlay
   onState: (cb) => ipcRenderer.on("voice:state", (_e, s) => cb(s)),
+  /** Live input level for the overlay's waveform — the same measurement the
+   * settings meter reads, forwarded rather than re-captured. */
+  onLevel: (cb) => ipcRenderer.on("voice:level-out", (_e, v) => cb(v)),
+  /** The overlay's × — ends the whole session, not just this turn. */
+  endSession: () => ipcRenderer.send("voice:end-session"),
 });

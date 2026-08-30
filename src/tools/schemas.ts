@@ -192,6 +192,13 @@ export const viewImageSchema = z.object({
   path: z.string().describe("Path to an image file (png, jpg, jpeg, gif, or webp) to load so you can see it."),
 });
 
+export const cameraSchema = z.object({
+  reason: z
+    .string()
+    .optional()
+    .describe("What you are looking for in the frame, in a few words (e.g. \"what the user is holding\")."),
+});
+
 export const webSearchSchema = z.object({
   query: z.string().describe("The web search query."),
   count: z.number().int().positive().optional().describe("How many results to return (default 8, capped at 20)."),
@@ -277,6 +284,7 @@ export type TaskArgs = z.infer<typeof taskSchema>;
 export type TodoArgs = z.infer<typeof todoSchema>;
 export type AskUserArgs = z.infer<typeof askUserSchema>;
 export type ViewImageArgs = z.infer<typeof viewImageSchema>;
+export type CameraArgs = z.infer<typeof cameraSchema>;
 export type WebSearchArgs = z.infer<typeof webSearchSchema>;
 export type OracleArgs = z.infer<typeof oracleSchema>;
 export type MemoryArgs = z.infer<typeof memorySchema>;

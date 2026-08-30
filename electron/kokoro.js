@@ -47,7 +47,27 @@ function bridgeEnv(extra = {}) {
  * weights are missing" need different fixes, and collapsing them to one message
  * sends the user to reinstall a package that was never the problem.
  */
+/** The probe result, kept. Measured at ~2.1s, and it was being paid inside EVERY
+ * synthesize() — per spoken reply, for an answer that cannot change while the app
+ * is running. Cleared by resetKokoro() so a user who installs Kokoro and then
+ * enables voice is not told "no" forever. */
+let probeCache = null;
+
+export function resetKokoro() {
+  probeCache = null;
+  stopDaemon();
+}
+
 export async function probeKokoro() {
+  if (probeCache) return probeCache;
+  const r = await probeKokoroUncached();
+  // Only a success is cached. A failure is usually something the user is in the
+  // middle of fixing, and caching "not installed" would outlive the fix.
+  if (r.ok) probeCache = r;
+  return r;
+}
+
+async function probeKokoroUncached() {
   let lastError = null;
   for (const exe of await candidates()) {
     const info = await new Promise((resolve) => {
@@ -68,6 +88,78 @@ export async function probeKokoro() {
   };
 }
 
+// --- the persistent synthesiser ---------------------------------------------
+//
+// Loading the model costs ~2.8s and the old one-shot mode paid it on every single
+// reply: a fresh interpreter and a fresh 325MB ONNX load, to say eight words. So
+// the process stays up and answers on a pipe. Started lazily on the first reply,
+// not at launch — someone who never uses voice should not be running a Python
+// process holding a third of a gigabyte.
+
+let daemon = null;      // { child, ready, pending: Map }
+let daemonSeq = 0;
+
+function stopDaemon() {
+  try { daemon?.child.kill(); } catch { /* already gone */ }
+  daemon = null;
+}
+
+/** Start (or reuse) the synthesiser. Resolves once it reports ready. */
+async function ensureDaemon() {
+  if (daemon?.ready) return daemon;
+  if (daemon?.starting) return daemon.starting;
+
+  const py = await probeKokoro();
+  if (!py.ok) return { error: py.reason };
+
+  const pending = new Map();
+  const child = spawn(py.exe, [...py.args, BRIDGE, "--serve"], {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+    env: bridgeEnv(),
+  });
+  const d = { child, ready: false, pending, backend: null };
+  daemon = d;
+
+  let carry = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    // Line-delimited JSON, and a chunk boundary can land mid-line.
+    carry += chunk;
+    const lines = carry.split("\n");
+    carry = lines.pop() ?? "";
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+      let msg;
+      try { msg = JSON.parse(t); } catch { continue; }
+      if (msg.type === "ready") { d.ready = true; d.backend = msg.backend ?? null; d.onReady?.(d); continue; }
+      const p = msg.id != null ? pending.get(msg.id) : null;
+      if (!p) continue;
+      pending.delete(msg.id);
+      if (msg.type === "spoken") p.resolve({ ok: true, path: msg.path, voice: msg.voice, backend: msg.backend ?? d.backend });
+      else p.resolve({ ok: false, reason: msg.message ?? "synthesis failed" });
+    }
+  });
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (t) => { stderr += t; });
+  const die = (reason) => {
+    for (const p of pending.values()) p.resolve({ ok: false, reason });
+    pending.clear();
+    if (daemon === d) daemon = null;
+  };
+  child.on("exit", (code) => die(`kokoro exited (${code})${stderr ? `: ${stderr.trim().split("\n").slice(-1)[0]}` : ""}`));
+  child.on("error", (e) => die(e.message));
+
+  d.starting = new Promise((resolve) => {
+    // The model load is the long pole; anything past this is a broken install.
+    const timer = setTimeout(() => resolve({ error: "kokoro did not become ready in 120s" }), 120000);
+    d.onReady = (ready) => { clearTimeout(timer); resolve(ready); };
+  });
+  return d.starting;
+}
+
 /**
  * Synthesise `text` to a WAV file.
  * @returns { ok, path } or { ok:false, reason } — the caller falls back to SAPI.
@@ -76,36 +168,32 @@ export async function synthesize(text, { voice, speed } = {}) {
   const t = String(text ?? "").trim();
   if (!t) return { ok: false, reason: "nothing to say" };
 
-  const py = await probeKokoro();
-  if (!py.ok) return { ok: false, reason: py.reason, installed: false };
+  const d = await ensureDaemon();
+  if (d?.error || !d?.child) return { ok: false, reason: d?.error ?? "kokoro unavailable", installed: false };
 
   const out = path.join(os.tmpdir(), `gnosis-tts-${crypto.randomBytes(6).toString("hex")}.wav`);
+  const id = ++daemonSeq;
   const result = await new Promise((resolve) => {
-    const child = spawn(py.exe, [...py.args, BRIDGE, "--speak", out], {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-      env: bridgeEnv({
-        ...(voice ? { GNOSIS_KOKORO_VOICE: voice } : {}),
-        ...(speed ? { GNOSIS_KOKORO_SPEED: String(speed) } : {}),
-      }),
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
-    // Kokoro loads a model on first use; that can genuinely take a while.
-    const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, 120000);
-    child.on("close", (code) => {
+    // Synthesis itself is fast once the model is up; this cap is for a wedged
+    // pipe, not for slow speech.
+    const timer = setTimeout(() => {
+      d.pending.delete(id);
+      resolve({ ok: false, reason: "kokoro timed out" });
+    }, 60000);
+    d.pending.set(id, { resolve: (r) => { clearTimeout(timer); resolve(r); } });
+    try {
+      d.child.stdin.write(JSON.stringify({ id, text: t, out, voice, speed }) + "\n");
+    } catch (e) {
       clearTimeout(timer);
-      const line = stdout.trim().split(/\r?\n/).filter(Boolean).pop();
-      let msg = null;
-      try { msg = line ? JSON.parse(line) : null; } catch { /* not JSON */ }
-      if (code === 0 && msg?.type === "spoken") resolve({ ok: true, path: out, voice: msg.voice, backend: msg.backend ?? null });
-      else resolve({ ok: false, reason: msg?.message ?? stderr.trim().split("\n").slice(-1)[0] ?? `kokoro exited ${code}` });
-    });
-    child.on("error", (e) => { clearTimeout(timer); resolve({ ok: false, reason: e.message }); });
-    child.stdin.end(t, "utf8");
+      d.pending.delete(id);
+      resolve({ ok: false, reason: e.message });
+    }
   });
   if (!result.ok) await fs.rm(out, { force: true }).catch(() => {});
   return result;
+}
+
+/** Stop the synthesiser (app quit, or voice switched off). */
+export function shutdownKokoro() {
+  stopDaemon();
 }

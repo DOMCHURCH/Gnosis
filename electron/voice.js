@@ -18,12 +18,12 @@
 // reported through voiceStatus() so settings can name the missing piece rather
 // than failing silently.
 
-import { BrowserWindow, ipcMain, Notification } from "electron";
+import { BrowserWindow, ipcMain, Notification, screen } from "electron";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startWakeWord, findPython, probeRuntime } from "./wakeword.js";
-import { synthesize, probeKokoro } from "./kokoro.js";
+import { synthesize, probeKokoro, shutdownKokoro } from "./kokoro.js";
 import { createReplyGate } from "./voicegate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -155,6 +155,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // Which engine last spoke, and when. Empty until a voice turn has completed —
     // which is itself the answer to "does TTS fire on ordinary chat messages?".
     lastSpoke: null,
+    lastSession: null,
     lastError: null,
   };
 
@@ -214,15 +215,21 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
 
   function makeOverlay() {
     if (overlay && !overlay.isDestroyed()) return overlay;
+    // Centred along the bottom of the display the app is on, not glued to the app
+    // window: this is a separate window with NO parent, so the main window stays
+    // fully usable — you can keep typing in Gnosis while the panel is up, and
+    // moving or minimising the main window does not drag the panel with it.
     const win = getWindow();
-    const b = win && !win.isDestroyed() ? win.getBounds() : null;
-    const W = 300;
-    const H = 120;
+    const area = screen.getDisplayNearestPoint(
+      win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()).bounds : screen.getPrimaryDisplay().bounds,
+    ).workArea;
+    const W = 500;
+    const H = 200;
     overlay = new BrowserWindow({
       width: W,
       height: H,
-      // Bottom-right of the app's own screen, clear of the taskbar.
-      ...(b ? { x: Math.round(b.x + b.width - W - 28), y: Math.round(b.y + b.height - H - 28) } : {}),
+      x: Math.round(area.x + (area.width - W) / 2),
+      y: Math.round(area.y + area.height - H - 48),
       frame: false,
       transparent: true,
       resizable: false,
@@ -230,7 +237,12 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       skipTaskbar: true,
       alwaysOnTop: true,
       show: false,
-      focusable: false, // listening must not steal focus from what you are doing
+      // Focusable, unlike before: the panel now has a close button, and a
+      // non-focusable window is a coin toss for reliable clicks on Windows. It is
+      // shown with showInactive() so appearing still never steals focus — you
+      // only give it focus by clicking it.
+      focusable: true,
+      hasShadow: false, // the CSS draws the shadow; two of them looks like a halo
       webPreferences: { preload: enginePreload, nodeIntegration: false, contextIsolation: true },
     });
     overlay.setAlwaysOnTop(true, "screen-saver");
@@ -256,23 +268,87 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (overlay && !overlay.isDestroyed()) overlay.webContents.send(channel, payload);
   };
 
-  /** Wake: show the overlay, pulse the tray, chime, and start recording. */
+  // --- the session ----------------------------------------------------------
+  //
+  // The wake word opens a SESSION, not a single question. It stays open across as
+  // many turns as the user wants, and ends on exactly three things: the overlay's
+  // ×, the spoken phrase "stop listening", or 60 seconds with nothing said.
+  //
+  // Anything else — a reply finishing, a turn producing nothing, a transcription
+  // coming back empty — re-arms the recorder instead of closing. Making the user
+  // say the wake word again between every sentence is what made it feel like a
+  // command line with extra steps rather than a conversation.
+  const IDLE_MS = 60000;
+  let session = false;
+  let idleTimer = null;
+
+  /** Phrases that end it. Deliberately narrow: these fire on a transcript, and a
+   * loose pattern would hang up mid-sentence on "...and then stop listening for
+   * changes". Anchored, and only at the very start or the whole utterance. */
+  const STOP_RE = /^\s*(stop listening|stop the session|end session|that'?s all|never ?mind|goodbye|nothing else)\b[.!]?\s*$/i;
+
+  function armIdle() {
+    clearTimeout(idleTimer);
+    if (!session) return;
+    idleTimer = setTimeout(() => endSession("60s of silence"), IDLE_MS);
+  }
+
+  /** Start listening again inside an open session, without a wake word. */
+  function listenAgain(hint) {
+    if (!session) return;
+    toOverlay("voice:state", { state: "listening", transcript: "", response: "", hint: hint ?? undefined });
+    armIdle();
+    if (engine && !engine.isDestroyed()) engine.webContents.send("voice:record");
+  }
+
+  /** Wake: open the overlay and the session, then start recording. */
   function wake() {
+    if (session) return; // already talking; a second detection is not a new session
+    session = true;
     setListening(true);
     const o = makeOverlay();
-    o.showInactive();
-    toOverlay("voice:state", { state: "listening", text: "what do you need?" });
+    o.showInactive(); // visible, but focus stays wherever the user left it
+    toOverlay("voice:state", {
+      state: "listening",
+      transcript: "",
+      response: "",
+      model: currentModel(),
+      hint: "say “stop listening” or press × to end · 60s idle closes it",
+    });
     if (Notification.isSupported()) {
       // The chime is the notification sound; the toast itself is deliberately
       // terse because the overlay is already on screen saying the same thing.
       new Notification({ title: "Gnosis", body: "Listening…", silent: false }).show();
     }
+    armIdle();
     if (engine && !engine.isDestroyed()) engine.webContents.send("voice:record");
   }
 
-  function sleep() {
+  /** End the session for good. Idempotent — the ×, a stop phrase and the idle
+   * timer can all arrive at once. */
+  function endSession(why) {
+    if (!session && !(overlay && !overlay.isDestroyed())) return;
+    session = false;
+    clearTimeout(idleTimer);
+    gate.disarm();
     setListening(false);
     if (overlay && !overlay.isDestroyed()) overlay.hide();
+    diag.lastSession = `ended: ${why ?? "closed"}`;
+  }
+
+  /** Close the panel for THIS turn only — kept for the non-session paths. */
+  function sleep() {
+    if (session) { listenAgain(); return; }
+    endSession("turn finished");
+  }
+
+  /** The active agent's model id, for the overlay's corner. */
+  function currentModel() {
+    try {
+      return bridge?.getAgents?.()[0]?.model ?? "";
+    } catch {
+      return "";
+    }
   }
 
   // The reply half of the pipeline: armed by the wake word, and by nothing else.
@@ -281,40 +357,109 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   // chat rail shows — one source, so the two can never disagree.
   const gate = createReplyGate(
     (reply) => {
-      toOverlay("voice:state", { state: "speaking", text: reply });
+      toOverlay("voice:state", { state: "speaking", response: reply });
       void (async () => {
         const { config } = await readEnv();
         const spoken = await speak(reply, { voice: config.kokoroVoice, play });
         diag.lastSpoke = `${spoken.engine ?? "none"} @ ${new Date().toISOString()}`;
         if (!spoken.ok) diag.lastError = spoken.error ?? spoken.fallbackReason ?? "TTS failed";
-        sleep();
+        // Back to listening rather than closing: the session outlives the turn.
+        // The reply text stays on screen so it can be read while the next
+        // question is being asked.
+        if (session) { armIdle(); listenAgain(); }
+        else sleep();
       })();
     },
-    () => sleep(),
+    // A turn that produced no prose still keeps the session open.
+    () => (session ? listenAgain() : sleep()),
   );
   bridge?.bus?.subscribe((e) => gate.handle(e));
+
+  /**
+   * "switch to gemini" — the spoken form of /model.
+   *
+   * Handled here rather than being passed to the agent because it is an
+   * instruction ABOUT the session, not a question for it: sent through as a
+   * prompt, a model is quite likely to explain how to switch models instead of
+   * switching. Resolution is resolveModelQuery — the exact function /model uses —
+   * so "gemini" means the same thing spoken as typed.
+   *
+   * @returns true when it was a switch and has been dealt with.
+   */
+  // The filler words repeat and combine — "switch to the gemini model", "switch
+  // model to deepseek" — so the lead-in is a repeating group rather than a list
+  // of fixed alternatives, which left "the" glued to the model name.
+  const SWITCH_RE = /^\s*(?:switch|change|use)\s+(?:(?:to|the|model|models)\s+)*(.+?)\s*(?:model)?\s*[.!]?\s*$/i;
+  async function tryModelSwitch(text) {
+    const m = text.match(SWITCH_RE);
+    if (!m) return false;
+    const query = (m[1] ?? "").trim();
+    // Too short to be a model name, and far too easy to hit by accident.
+    if (query.length < 3) return false;
+
+    const tabId = bridge?.getAgents?.()[0]?.id ?? 0;
+    const say = async (line) => {
+      toOverlay("voice:state", { state: "speaking", response: line, model: currentModel() });
+      const { config } = await readEnv();
+      await speak(line, { voice: config.kokoroVoice, play });
+      if (session) listenAgain();
+      else sleep();
+    };
+
+    try {
+      const { fetchModels, resolveModelQuery } = await import("../dist/models.js");
+      const all = await fetchModels();
+      const hit = resolveModelQuery(all, query);
+      // Not a model anybody has — treat it as an ordinary sentence rather than
+      // swallowing it. "switch to the other branch" is a real request.
+      if (hit.kind === "none") return false;
+      const id = hit.kind === "exact" ? hit.id : hit.ids[0];
+      bridge?.onCommand?.(tabId, `/model ${id}`);
+      await say(`Switched to ${id.split("/").pop()}.`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   /** A finished utterance: transcribe, run it, speak the reply. */
   async function handleUtterance(wavBase64) {
     const { env } = await readEnv();
-    toOverlay("voice:state", { state: "thinking", text: "…" });
+    clearTimeout(idleTimer); // the user is talking; the idle clock restarts after
+    toOverlay("voice:state", { state: "thinking", transcript: "", response: "" });
 
     const t = await transcribe(wavBase64, env.GROQ_API_KEY);
     if (!t.ok || !t.text) {
-      toOverlay("voice:state", { state: "error", text: t.error ?? "Heard nothing." });
-      setTimeout(sleep, 3500);
+      // Not hearing one utterance is not a reason to hang up. Say so and listen
+      // again; only the idle timer ends a session that has gone quiet.
+      toOverlay("voice:state", { state: "error", transcript: t.error ?? "didn't catch that" });
+      if (session) setTimeout(() => listenAgain(), 1200);
+      else setTimeout(sleep, 3500);
       return;
     }
 
-    toOverlay("voice:state", { state: "thinking", text: t.text });
+    toOverlay("voice:state", { state: "thinking", transcript: t.text, model: currentModel() });
+
+    // "stop listening" ends it. Checked before anything else so it works even
+    // while the agent would otherwise have something to say.
+    if (STOP_RE.test(t.text)) {
+      toOverlay("voice:state", { state: "speaking", transcript: t.text, response: "Stopping." });
+      const { config } = await readEnv();
+      await speak("Okay, stopping.", { voice: config.kokoroVoice, play });
+      endSession("user said stop");
+      return;
+    }
+
+    if (await tryModelSwitch(t.text)) return;
 
     // Vision escalation: a spoken question about the screen or the camera needs
-    // an image attached, and a model that can read one.
+    // an image attached, and a model that can read one. The engine borrows a
+    // vision model for that turn if the session's own model cannot see.
     const wantsScreen = SCREEN_WORDS.test(t.text);
     const wantsCamera = CAMERA_WORDS.test(t.text);
     let prefix = "";
-    if (wantsScreen) prefix = "[voice · screen] Take a screenshot with the computer tool, then answer: ";
-    else if (wantsCamera) prefix = "[voice · camera] Capture a webcam frame, then answer: ";
+    if (wantsCamera) prefix = "[voice · camera] Call the camera tool, look at the frame, then answer: ";
+    else if (wantsScreen) prefix = "[voice · screen] Take a screenshot with the computer tool, then answer: ";
     else prefix = "[voice] ";
 
     // Route through the same bridge the browser UI uses, so the exchange lands
@@ -326,12 +471,12 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       // far enough to emit its first lines, and arming afterwards would miss them.
       gate.arm(tabId);
       bridge?.onInput?.(tabId, prefix + t.text);
-      // The overlay stays up until turn.end — the gate speaks the reply and calls
-      // sleep(). A timer here would hide it mid-answer.
+      // The overlay stays up until turn.end — the gate speaks the reply and
+      // re-arms the recorder. A timer here would hide it mid-answer.
     } catch {
       /* no engine wired (boot failed) */
       gate.disarm();
-      toOverlay("voice:state", { state: "error", text: "no agent is running" });
+      toOverlay("voice:state", { state: "error", response: "no agent is running" });
       setTimeout(sleep, 3500);
     }
   }
@@ -349,15 +494,27 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   });
   // A cheap level meter so the panel can show that audio is genuinely moving,
   // not merely that a process exists.
-  ipcMain.on("voice:level", (_e, level) => { diag.lastLevel = Number(level) || 0; });
+  ipcMain.on("voice:level", (_e, level) => {
+    diag.lastLevel = Number(level) || 0;
+    // Straight through to the overlay's waveform. The overlay does not own the
+    // microphone, so this forward is what makes the trace react to real speech
+    // instead of animating a synthesised wave that ignored the room.
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible()) overlay.webContents.send("voice:level-out", diag.lastLevel);
+  });
   ipcMain.on("voice:mic", (_e, s) => {
     diag.microphone = s?.ok ? "connected" : "disconnected";
     diag.micReason = s?.reason ?? "";
   });
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
-  // Cancel means "never mind" — the turn may still be running, but its answer is
-  // no longer wanted out loud.
-  ipcMain.on("voice:cancel", () => { gate.disarm(); sleep(); });
+  // The engine renderer heard nothing at all in a recording window. Inside a
+  // session that is just a pause, not a hang-up.
+  ipcMain.on("voice:cancel", () => {
+    if (session) { armIdle(); listenAgain(); return; }
+    gate.disarm();
+    sleep();
+  });
+  // The overlay's × — the one unambiguous "stop".
+  ipcMain.on("voice:end-session", () => endSession("closed from the overlay"));
   ipcMain.on("voice:engine-status", (_e, s) => {
     status = { ...status, ...s };
   });
@@ -488,6 +645,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
 
   function stop() {
     enabled = false;
+    endSession("voice switched off");
+    // The synthesiser holds a Python process and the loaded model; voice off
+    // means it goes too rather than idling on a third of a gigabyte.
+    shutdownKokoro();
     gate.disarm(); // voice off must not leave a turn primed to talk
 
     detector?.stop();

@@ -9,6 +9,13 @@ utterance is simpler than a protocol and cannot wedge.
 
   --probe            report whether kokoro is usable and list its voices
   --speak <wav-out>  read UTF-8 text on stdin, write a WAV to <wav-out>
+  --serve            stay alive; read one JSON request per line, synthesise each
+
+--serve exists because loading the model costs ~2.8s and --speak paid it on every
+single reply: a fresh interpreter, a fresh 325MB ONNX load, for eight words. The
+served mode loads once and answers in the time synthesis actually takes. Requests
+are {"text":..., "out":..., "voice":..., "speed":...}, one per line; each reply is
+one JSON line. It is a pipe, not a protocol — the caller owns the ordering.
 
 TWO BACKENDS, because "install Kokoro" resolves to two different packages and
 picking one silently was what made this fall back to SAPI on a machine that had
@@ -178,14 +185,58 @@ def speak(out_path: str) -> int:
     return 0
 
 
+def serve() -> int:
+    """Load the model once, then synthesise on demand until stdin closes."""
+    fn, backend, err = _load()
+    if err:
+        emit({"type": "error", "message": err, "installed": False})
+        return 2
+    emit({"type": "ready", "backend": backend, "voices": VOICES, "default": DEFAULT_VOICE, "python": sys.executable})
+
+    import soundfile as sf
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            req = json.loads(line)
+        except Exception as e:  # noqa: BLE001
+            emit({"type": "error", "message": f"bad request: {e}"})
+            continue
+        text = str(req.get("text") or "").strip()
+        out_path = req.get("out")
+        rid = req.get("id")
+        if not text or not out_path:
+            emit({"type": "error", "id": rid, "message": "need text and out"})
+            continue
+        voice = req.get("voice") or DEFAULT_VOICE
+        try:
+            speed = float(req.get("speed") or 1.0)
+        except Exception:  # noqa: BLE001
+            speed = 1.0
+        try:
+            audio = fn(text, voice, speed)
+            sf.write(out_path, audio, SAMPLE_RATE)
+        except Exception as e:  # noqa: BLE001
+            # One bad request must not take the process down — the next reply
+            # would then pay the model load all over again.
+            emit({"type": "error", "id": rid, "message": f"synthesis failed: {e}"})
+            continue
+        emit({"type": "spoken", "id": rid, "path": out_path, "voice": voice, "backend": backend, "chars": len(text)})
+    return 0
+
+
 if __name__ == "__main__":
     try:
         if "--probe" in sys.argv:
             sys.exit(probe())
+        if "--serve" in sys.argv:
+            sys.exit(serve())
         if "--speak" in sys.argv:
             i = sys.argv.index("--speak")
             sys.exit(speak(sys.argv[i + 1]))
-        emit({"type": "error", "message": "usage: kokoro_bridge.py --probe | --speak <wav-out>"})
+        emit({"type": "error", "message": "usage: kokoro_bridge.py --probe | --speak <wav-out> | --serve"})
         sys.exit(3)
     except KeyboardInterrupt:
         sys.exit(0)

@@ -26,6 +26,7 @@ import { registerContextMenus } from "./context-menus.js";
 import { registerWin32Focus } from "./win32-focus.js";
 import { registerVoice } from "./voice.js";
 import { resolveRootCwd, defaultProject } from "./rootcwd.js";
+import { registerCamera } from "./camera.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -155,6 +156,7 @@ if (!app.requestSingleInstanceLock()) {
   let tray = null;
   let win = null;
   let voice = null;
+  let camera = null;
   let rootDir = process.cwd();
   // Closing the window hides to the tray; only an explicit Quit really exits.
   // Without this the tray's whole point evaporates — an agent working in the
@@ -252,6 +254,17 @@ if (!app.requestSingleInstanceLock()) {
       envCwd: ENV_CWD,
       defaultCwd: DEFAULT_PROJECT,
     });
+    // The webcam, lent to the engine. Registered against src/camera.ts so the
+    // `camera` tool can reach it without the engine ever importing from here.
+    camera = registerCamera();
+    ipcMain.on("camera:frame", (_e, { id, payload }) => camera.deliver(id, payload));
+    try {
+      const { setCameraProvider } = await import("../dist/camera.js");
+      setCameraProvider(() => camera.capture());
+    } catch {
+      /* boot failed; there is no engine to lend it to anyway */
+    }
+
     registerWindowChrome(() => win);
     registerContextMenus({ getRoot: () => rootDir });
     registerWin32Focus();
@@ -293,7 +306,7 @@ if (!app.requestSingleInstanceLock()) {
 
     // The shell's composition root, hung on `app` so the pieces that come later
     // have one place to reach for them instead of re-deriving state.
-    app.gnosis = { tray, bridge, server, showWindow, voice, rootDir };
+    app.gnosis = { tray, bridge, server, showWindow, voice, camera, rootDir };
   });
 
   // The window is hidden, not closed, so this fires only after a real quit has
@@ -305,6 +318,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", () => {
     quitting = true;
     voice?.stop();
+    camera?.stop();
     tray?.destroy();
     // Ends the session: stops the HTTP/WS server and reaps every live pty.
     void server?.close();

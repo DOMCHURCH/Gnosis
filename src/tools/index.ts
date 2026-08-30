@@ -18,6 +18,7 @@ import {
   taskSchema,
   todoSchema,
   viewImageSchema,
+  cameraSchema,
   askUserSchema,
   webSearchSchema,
   toJsonSchema,
@@ -34,6 +35,7 @@ import { runSendMessage, runListTabs } from "./tabs.js";
 import { runTask } from "./task.js";
 import { runTodo } from "./todo.js";
 import { runViewImage } from "./viewimage.js";
+import { runCamera } from "./camera.js";
 import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
 import { runMemory } from "./memory.js";
@@ -322,6 +324,16 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: viewImageSchema,
     mutating: false,
     run: runViewImage,
+  },
+  camera: {
+    name: "camera",
+    description:
+      "Take one frame from the webcam so you can SEE it — the image is attached to your next message. Use it when " +
+      "the user asks what you can see, what they are holding, or anything about the room. Desktop app only; there " +
+      "is no camera from the terminal. If the active model has no vision input, the turn switches to one and back.",
+    schema: cameraSchema,
+    mutating: false,
+    run: runCamera,
   },
   web_search: {
     name: "web_search",

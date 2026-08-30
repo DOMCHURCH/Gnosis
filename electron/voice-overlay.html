@@ -5,110 +5,178 @@
     <meta name="color-scheme" content="dark" />
     <title>Gnosis voice</title>
     <style>
-      :root { --cyan: #22d3ee; --magenta: #e879f9; --text: #c9d1d9; --dim: #6b7280; }
+      /* A frameless glass panel, detached from the main window. The main window
+       * stays fully usable while this is open — it is a separate BrowserWindow
+       * with no parent, so it never modal-blocks anything.
+       *
+       * One blur, one gradient border, one canvas. Effects are rationed on
+       * purpose: this sits on top of everything the user is doing, and a panel
+       * that costs frames while they work is worse than a plain one. */
+      :root {
+        --cyan: #22d3ee;
+        --magenta: #e879f9;
+        --text: #d7dbe4;
+        --dim: #7b8494;
+      }
       html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
       body {
-        font: 10px/1.5 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-        letter-spacing: 0.12em;
-        -webkit-app-region: drag;
+        font: 11px/1.55 "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+        letter-spacing: 0.04em;
+        -webkit-app-region: drag; /* the whole panel is a handle... */
       }
-      .clay {
+      button, #transcript, #response { -webkit-app-region: no-drag; } /* ...except what you click or read */
+
+      /* The gradient edge is a 1px border drawn as a gradient, which CSS cannot do
+       * directly: the outer element carries the gradient and 1px of padding, the
+       * inner one covers all but that rim. */
+      .frame {
         height: 100%;
-        margin: 6px;
-        border-radius: 18px;
-        background: linear-gradient(160deg, rgba(28, 28, 40, 0.97), rgba(16, 16, 23, 0.97));
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.07),
-          0 0 30px -12px var(--cyan);
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 0 14px;
         box-sizing: border-box;
+        padding: 1px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, var(--cyan), rgba(232, 121, 249, 0.55) 55%, rgba(34, 211, 238, 0.25));
+        box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.75), 0 0 34px -14px var(--cyan);
       }
-      .mic {
-        flex: 0 0 auto;
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        background: radial-gradient(circle at 40% 35%, var(--cyan), var(--magenta));
-        box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.45);
-        animation: pulse 1.7s ease-out infinite;
-      }
-      .mic svg { width: 16px; height: 16px; fill: #0d0d12; }
-      @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
-        70% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
-      }
-      .body { flex: 1 1 auto; min-width: 0; }
-      #label {
-        color: var(--text);
-        text-transform: uppercase;
-        white-space: nowrap;
+      .glass {
+        height: 100%;
+        box-sizing: border-box;
+        border-radius: 19px;
+        background: rgba(14, 14, 20, 0.62);
+        backdrop-filter: blur(22px) saturate(1.25);
+        display: flex;
+        flex-direction: column;
+        padding: 12px 14px 10px;
+        gap: 6px;
         overflow: hidden;
-        text-overflow: ellipsis;
       }
-      #sub { color: var(--dim); font-size: 9px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      canvas { display: block; width: 100%; height: 22px; margin-top: 4px; }
-      body.thinking .mic { animation-duration: 0.9s; }
-      body.error .mic { background: radial-gradient(circle at 40% 35%, #f87171, #b91c1c); animation: none; }
-      @media (prefers-reduced-motion: reduce) { .mic { animation: none; } }
+
+      .top { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+      .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 10px var(--cyan);
+        flex: 0 0 auto;
+      }
+      #state {
+        color: var(--text); text-transform: uppercase; letter-spacing: 0.16em; font-size: 9px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto;
+      }
+      #model { color: var(--dim); font-size: 9px; white-space: nowrap; }
+      #close {
+        -webkit-app-region: no-drag;
+        flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--dim); font: inherit; font-size: 12px; line-height: 1;
+        cursor: pointer; display: grid; place-items: center;
+        transition: background-color 160ms ease-out, color 160ms ease-out;
+      }
+      #close:hover { background: rgba(248, 113, 113, 0.18); color: #fca5a5; }
+
+      canvas { display: block; width: 100%; height: 34px; flex: 0 0 auto; }
+
+      .text { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 3px; }
+      #transcript {
+        color: var(--text); font-size: 11px;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      }
+      #response {
+        color: var(--dim); font-size: 10px; line-height: 1.5;
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+      }
+      #hint { color: #565e6d; font-size: 8.5px; letter-spacing: 0.1em; flex: 0 0 auto; }
+
+      body.thinking .dot { background: #fbbf24; box-shadow: 0 0 10px #fbbf24; }
+      body.speaking .dot { background: var(--magenta); box-shadow: 0 0 10px var(--magenta); }
+      body.error .dot { background: #f87171; box-shadow: 0 0 10px #f87171; }
+      @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
   </head>
   <body>
-    <div class="clay">
-      <div class="mic">
-        <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z"/></svg>
-      </div>
-      <div class="body">
-        <div id="label">what do you need?</div>
-        <div id="sub"></div>
-        <canvas id="wave" width="240" height="22"></canvas>
+    <div class="frame">
+      <div class="glass">
+        <div class="top">
+          <span class="dot"></span>
+          <span id="state">listening</span>
+          <span id="model"></span>
+          <button id="close" type="button" title="End the voice session" aria-label="End the voice session">×</button>
+        </div>
+        <canvas id="wave" width="520" height="34"></canvas>
+        <div class="text">
+          <div id="transcript"></div>
+          <div id="response"></div>
+        </div>
+        <div id="hint">say “stop listening” or press × to end · 60s idle closes it</div>
       </div>
     </div>
 
     <script>
-      const label = document.getElementById("label");
-      const sub = document.getElementById("sub");
-      const cv = document.getElementById("wave");
+      const $ = (id) => document.getElementById(id);
+      const cv = $("wave");
       const g = cv.getContext("2d");
 
-      // The waveform is decorative — the overlay is not the microphone owner
-      // (voice-engine.html is), so this animates a synthesised trace rather than
-      // opening a second capture of the same device.
-      let phase = 0;
-      let amp = 0.35;
+      // The waveform is driven by the REAL input level. The overlay does not own
+      // the microphone (voice-engine.html does), so the level is pushed here from
+      // the main process — one message every ~200ms, which is plenty for a meter
+      // and far cheaper than a second capture of the same device.
+      //
+      // Those samples are too sparse to draw directly, so each one seeds a rolling
+      // history and the bars interpolate toward it. That is what makes it look
+      // like a waveform rather than a bar chart updating five times a second.
+      const BARS = 64;
+      const history = new Array(BARS).fill(0);
+      let target = 0;
+      let current = 0;
+
       function draw() {
-        const w = cv.width, h = cv.height;
+        const w = cv.width, h = cv.height, mid = h / 2;
+        // Ease toward the newest level so the trace moves smoothly between samples.
+        current += (target - current) * 0.18;
+        history.push(current);
+        history.shift();
+
         g.clearRect(0, 0, w, h);
         const grad = g.createLinearGradient(0, 0, w, 0);
         grad.addColorStop(0, "#22d3ee");
         grad.addColorStop(1, "#e879f9");
-        g.strokeStyle = grad;
-        g.lineWidth = 1.5;
-        g.beginPath();
-        for (let x = 0; x < w; x++) {
-          const t = x / w;
-          const env = Math.sin(Math.PI * t); // taper at both ends
-          const y = h / 2 + Math.sin(t * 22 + phase) * Math.sin(t * 7 - phase * 0.6) * env * amp * h * 0.42;
-          x === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+        g.fillStyle = grad;
+
+        const step = w / BARS;
+        const bw = Math.max(1.5, step * 0.55);
+        for (let i = 0; i < BARS; i++) {
+          // RMS of speech sits well under 0.2, so scale generously and clamp.
+          const v = Math.min(1, history[i] * 7);
+          // A floor so an idle mic still shows a living line rather than nothing.
+          const barH = Math.max(2, v * (h - 6));
+          const x = i * step + (step - bw) / 2;
+          g.beginPath();
+          g.roundRect(x, mid - barH / 2, bw, barH, bw / 2);
+          g.fill();
         }
-        g.stroke();
-        phase += 0.16;
         requestAnimationFrame(draw);
       }
       draw();
 
+      const STATES = {
+        listening: "listening",
+        thinking: "thinking",
+        speaking: "answering",
+        error: "error",
+      };
+
       window.voice.onState((s) => {
         document.body.className = s.state ?? "";
-        const titles = { listening: "what do you need?", thinking: "thinking…", speaking: "answering…", error: "voice error" };
-        label.textContent = titles[s.state] ?? "what do you need?";
-        sub.textContent = s.state === "listening" ? "" : (s.text ?? "");
-        amp = s.state === "listening" ? 0.35 : s.state === "thinking" ? 0.12 : 0.22;
+        $("state").textContent = STATES[s.state] ?? s.state ?? "";
+        if (s.transcript !== undefined) $("transcript").textContent = s.transcript ?? "";
+        if (s.response !== undefined) $("response").textContent = s.response ?? "";
+        if (s.model !== undefined) $("model").textContent = s.model ?? "";
+        if (s.hint !== undefined) $("hint").textContent = s.hint ?? "";
       });
+
+      // Real audio level, straight from the microphone tap.
+      window.voice.onLevel((v) => { target = Number(v) || 0; });
+
+      $("close").addEventListener("click", () => window.voice.endSession());
     </script>
   </body>
 </html>

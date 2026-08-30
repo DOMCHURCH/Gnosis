@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Gnosis camera</title>
+  </head>
+  <body>
+    <script>
+      // One webcam frame, on request. Hidden, like the microphone engine, and for
+      // the same reason: getUserMedia needs a DOM and the main process has none.
+      //
+      // The camera is opened per capture and closed immediately after. A held-open
+      // camera means the indicator light stays on, and a light that is on when
+      // nothing is being recorded is exactly the thing nobody should have to
+      // wonder about.
+
+      // Cameras take a moment to expose and white-balance. Grabbing the very first
+      // frame reliably yields a black or half-lit image, which the model then
+      // describes as a dark room — confidently and wrongly. So settle first.
+      const SETTLE_MS = 700;
+
+      // Virtual cameras — phone-as-webcam bridges, OBS, Teams backgrounds — install
+      // themselves as ordinary video inputs and frequently sort FIRST, so the
+      // browser default picks them. When the phone is not actually streaming, the
+      // driver still hands over a live 1280x720 track showing its own "connecting"
+      // placeholder: a perfectly valid frame of a spinner. Nothing errors, and the
+      // model dutifully describes a loading spinner.
+      //
+      // So choose deliberately: a real device if there is one, and only fall back
+      // to whatever the browser wanted if every camera looks virtual.
+      const VIRTUAL = /\b(virtual|obs|droidcam|iriun|epoccam|ndi|snap|manycam|xsplit|teams|streamlabs)\b/i;
+
+      async function pickDevice() {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const cams = devices.filter((d) => d.kind === "videoinput");
+          // Labels are empty until permission has been granted once; with no
+          // labels there is nothing to judge, so let the browser decide.
+          const real = cams.find((d) => d.label && !VIRTUAL.test(d.label));
+          return real ? { deviceId: { exact: real.deviceId }, label: real.label } : null;
+        } catch {
+          return null;
+        }
+      }
+
+      async function capture() {
+        let stream = null;
+        try {
+          // A first open is what makes device labels readable; pickDevice needs
+          // them, so this runs after permission has been granted at least once.
+          const chosen = await pickDevice();
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              ...(chosen ? { deviceId: chosen.deviceId } : {}),
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+          const video = document.createElement("video");
+          video.srcObject = stream;
+          video.muted = true;
+          await video.play();
+          await new Promise((r) => setTimeout(r, SETTLE_MS));
+
+          const w = video.videoWidth || 1280;
+          const h = video.videoHeight || 720;
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(video, 0, 0, w, h);
+          // JPEG, not PNG: a 1280x720 PNG of a camera frame runs into megabytes
+          // of base64 for no visible gain, and every byte is prompt tokens.
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+          // Mean luminance, sampled coarsely. A lens cap, a privacy shutter or an
+          // unlit room all produce a valid frame of nothing, and a model handed
+          // one will describe a dark room in complete confidence. Measuring it
+          // costs a few milliseconds and lets the tool say "this frame is dark"
+          // instead of letting the model invent what is in it.
+          let sum = 0;
+          let n = 0;
+          try {
+            const px = ctx.getImageData(0, 0, w, h).data;
+            for (let i = 0; i < px.length; i += 4 * 37) { // every 37th pixel
+              sum += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+              n++;
+            }
+          } catch { n = 0; }
+          const luma = n ? sum / n / 255 : null;
+
+          video.pause();
+          video.srcObject = null;
+          const track = stream.getVideoTracks()[0];
+          return {
+            ok: true, mime: "image/jpeg", data: dataUrl.slice(dataUrl.indexOf(",") + 1),
+            width: w, height: h, device: track?.label ?? "", luma,
+          };
+        } catch (e) {
+          const why = e?.name === "NotAllowedError"
+            ? "permission denied — check Windows camera privacy settings"
+            : e?.name === "NotFoundError"
+              ? "no camera found on this machine"
+              : (e?.message ?? String(e));
+          return { ok: false, error: why };
+        } finally {
+          // Always, on every path: the light goes out.
+          try { stream?.getTracks().forEach((t) => t.stop()); } catch {}
+        }
+      }
+
+      window.camera.onCapture(async (id) => {
+        window.camera.frame(id, await capture());
+      });
+      window.camera.ready();
+    </script>
+  </body>
+</html>

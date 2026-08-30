@@ -11,6 +11,7 @@ import { runPreToolUse, runNonBlockingHook } from "./hooks.js";
 import { appendTrace, truncateDeep, type TraceEvent } from "./trace.js";
 import { gitHead, gitDiff, gitDiffHead } from "./gitinfo.js";
 import { redactSecrets } from "./redact.js";
+import { cheapestVisionModel, fetchModels } from "./models.js";
 import { streamCompletion, ProviderError, FallbackNeededError, TooLargeError, type ModelInfo, type Usage } from "./provider.js";
 import { recordSession } from "./sessionmemory.js";
 import { isWebFile } from "./design.js";
@@ -66,7 +67,10 @@ const MAX_FIX_ITERATIONS = 3;
 // the FILESYSTEM, and plan mode is a promise that the turn changes nothing the
 // user can see. Yanking a window to the front is very much something they can
 // see.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "web_search", "oracle", "memory", "office", "focus_window"]);
+// `camera` sits here beside view_image for the same reason, plus one of its own:
+// plan mode is read-only exploration, and opening the webcam during it would turn
+// a light on for something the user did not ask to be looked at.
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "camera", "web_search", "oracle", "memory", "office", "focus_window"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];
@@ -942,6 +946,13 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
         if (this.pendingImages.length) {
           this.messages.push({ role: "user", text: "", images: this.pendingImages });
           this.pendingImages = [];
+          // An image the model cannot receive is worse than no image: serialize()
+          // drops the block for a text-only model, so the model answers about the
+          // FILE — its name, its size — having never seen a pixel, and sounds
+          // completely confident doing it. That is the "reads metadata, not
+          // content" failure. Borrow a vision model for the rest of this turn and
+          // give the session's own model back at the end.
+          await this.borrowVisionModel(cb);
         }
         if (stop) break;
       }
@@ -970,6 +981,9 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
       const stopHook = await runNonBlockingHook(this.cwd, "Stop", { sessionId: this.sessionId(), model: this.modelId });
       if (stopHook.warn) cb.onSystem(`! ${stopHook.warn}`);
     } finally {
+      // A borrowed vision model is for ONE turn. In `finally` so an abort or a
+      // provider error cannot strand the session on a model the user never chose.
+      this.restoreBorrowedModel(cb);
       // Automatic session memory: on a turn that touched files, distill what happened
       // into the learned bank. Best-effort and never allowed to break the turn.
       if (this.turnEditedFiles.size > 0 && !this.isSubAgent) {
@@ -996,6 +1010,43 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
   }
 
   /** Force compaction (the /compact command). */
+  /** The model to give back once the images have been looked at, or null when we
+   * never borrowed one. */
+  private borrowedFrom: string | null = null;
+
+  /**
+   * Switch to a vision model for the rest of this turn, if the active one cannot
+   * see. Restored by restoreBorrowedModel() when the turn ends.
+   *
+   * Cheapest-first, from the same catalog the picker uses: this runs without
+   * being asked, so it must not silently move the user onto an expensive model.
+   */
+  private async borrowVisionModel(cb: Callbacks): Promise<void> {
+    if (this.supportsImageInput() || this.borrowedFrom) return;
+    let pick: string | null = null;
+    try {
+      pick = cheapestVisionModel(await fetchModels())?.id ?? null;
+    } catch {
+      pick = null; // catalog unreachable — fall through to the honest message
+    }
+    if (!pick) {
+      cb.onSystem(`✗ ${this.modelId} cannot see images, and no vision model was found in the catalog.`);
+      return;
+    }
+    this.borrowedFrom = this.modelId;
+    this.setModel(pick);
+    cb.onSystem(`◉ ${this.borrowedFrom} can't see images — using ${pick} for this turn`);
+  }
+
+  /** Give the session's model back. Called at the end of every turn. */
+  private restoreBorrowedModel(cb: Callbacks): void {
+    if (!this.borrowedFrom) return;
+    const back = this.borrowedFrom;
+    this.borrowedFrom = null;
+    this.setModel(back);
+    cb.onSystem(`◉ back on ${back}`);
+  }
+
   forceCompact(cb: Callbacks): void {
     if (this.messages.length <= 12) {
       cb.onSystem("nothing to compact yet");

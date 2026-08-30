@@ -200,7 +200,12 @@ export function isVisionModel(m: ModelEntry): boolean {
  * ordering. A zero prompt price is a free variant and legitimately ranks first.
  */
 export function cheapestVisionModel(models: ModelEntry[]): ModelEntry | null {
-  const vision = models.filter(isVisionModel);
+  // `openrouter/auto` advertises every modality because it is a router, not a
+  // model: it picks something at request time, and what it picks may not have
+  // vision at all. It sorts first on price (it lists as free), so it was winning
+  // this outright — which makes "switch to a vision model" a coin toss. A router
+  // is never the answer to "which model can definitely see".
+  const vision = models.filter((m) => isVisionModel(m) && !/^openrouter\/auto\b/i.test(m.id));
   if (!vision.length) return null;
   return vision.slice().sort((a, b) =>
     a.pricing.prompt - b.pricing.prompt ||
