@@ -10,9 +10,15 @@
       // needs a DOM and the main process does not have one. Nothing is shown;
       // the visible part is voice-overlay.html.
       //
-      // Two jobs:
-      //   1. stream 16 kHz PCM to the main process, which feeds openWakeWord
-      //      (a local, key-free detector running as a Python child process)
+      // Three jobs:
+      //   1. WAKE DETECTION, one of two ways depending on the user's setting:
+      //      - openwakeword: stream 16 kHz PCM continuously to the main
+      //        process, which feeds a local, key-free Python detector.
+      //      - whisper: there is no trained detector for "hey gnosis" (see the
+      //        WAKE_ENGINE comment in electron/voice.js for why no lightweight
+      //        training path exists), so instead this captures a short WAV
+      //        every ~2.5-3s and hands it to Groq Whisper for a real
+      //        transcript, which the main process matches against "gnosis".
       //   2. utterance capture — record until 1.5s of silence, emit WAV
       //
       // Silence detection is a plain RMS gate rather than a real VAD. That is
@@ -22,6 +28,15 @@
       const SILENCE_MS = 1500;
       const SILENCE_RMS = 0.012; // below this counts as room tone
       const MAX_UTTERANCE_MS = 20000; // never record forever
+
+      // Whisper wake chunks: long enough for "hey gnosis" to be intelligible to
+      // an ASR model, short enough that this is "a clip every few seconds," not
+      // a stream. A near-silent chunk is dropped before it is ever uploaded —
+      // there is no reason to pay for a Whisper call on room tone, and it keeps
+      // the request rate down while nobody is talking.
+      const WHISPER_CHUNK_MS = 2500;
+      const WHISPER_GAP_MS = 300; // between chunks: ~2.8s cadence end to end
+      const WHISPER_SILENCE_RMS = 0.010;
 
       let stream = null;
       let ctx = null;
@@ -207,8 +222,90 @@
         record().catch((e) => window.voice.engineStatus({ reason: String(e.message) }));
       });
 
+      /** RMS of a flat Float32 buffer — the same measure `rms()` reads live off
+       * the analyser, computed here over an already-captured chunk instead. */
+      function rmsOf(samples) {
+        let sum = 0;
+        for (const v of samples) sum += v * v;
+        return Math.sqrt(sum / (samples.length || 1));
+      }
+
+      let whisperRunning = false;
+
+      /** One capture-and-maybe-send cycle of the Whisper wake loop, then
+       * reschedules itself. Structured as "always reschedule" rather than
+       * "reschedule unless X" — a chunk that errors, comes back silent, or gets
+       * skipped because an utterance is recording must not stall the loop, or
+       * the app would go permanently deaf until voice was toggled off and on. */
+      async function whisperWakeTick() {
+        if (!whisperRunning) return; // voice was switched off mid-cycle
+        if (recording || muted) {
+          // The recorder or our own TTS owns the microphone right now; do not
+          // fight it for a ScriptProcessor node, just wait.
+          setTimeout(whisperWakeTick, WHISPER_CHUNK_MS);
+          return;
+        }
+        try {
+          const proc = ctx.createScriptProcessor(4096, 1, 1);
+          const src = ctx.createMediaStreamSource(stream);
+          src.connect(proc);
+          const mute = ctx.createGain();
+          mute.gain.value = 0;
+          proc.connect(mute);
+          mute.connect(ctx.destination);
+          const chunks = [];
+          const started = Date.now();
+          await new Promise((done) => {
+            proc.onaudioprocess = (e) => {
+              // Bail mid-chunk rather than uploading a clip that started as
+              // ambient room audio and ended with our own reply, or vice versa.
+              if (recording || muted) { proc.onaudioprocess = null; done(); return; }
+              chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+              if (Date.now() - started >= WHISPER_CHUNK_MS) { proc.onaudioprocess = null; done(); }
+            };
+          });
+          try { proc.disconnect(); src.disconnect(); mute.disconnect(); } catch {}
+
+          if (chunks.length && !recording && !muted) {
+            const total = chunks.reduce((n, c) => n + c.length, 0);
+            const flat = new Float32Array(total);
+            let o = 0;
+            for (const c of chunks) { flat.set(c, o); o += c.length; }
+            if (rmsOf(flat) >= WHISPER_SILENCE_RMS) {
+              window.voice.wakeChunk(toWav(flat, ctx.sampleRate));
+            }
+          }
+        } catch (e) {
+          window.voice.engineStatus({ reason: "whisper wake capture failed: " + String(e?.message ?? e) });
+        }
+        setTimeout(whisperWakeTick, WHISPER_GAP_MS);
+      }
+
+      async function startWhisperWake() {
+        try {
+          await mic();
+          whisperRunning = true;
+          window.voice.mic({ ok: true, reason: "microphone open, listening for “hey gnosis” via Whisper" });
+          window.voice.engineStatus({ wakeWord: true, reason: "listening for “hey gnosis” (Whisper)" });
+          setInterval(() => window.voice.level(muted ? 0 : rms()), 200);
+          whisperWakeTick();
+        } catch (e) {
+          const why = String(e?.name === "NotAllowedError"
+            ? "permission denied — Windows microphone privacy settings, or the app was not granted media access"
+            : (e?.message ?? e));
+          window.voice.mic({ ok: false, reason: why });
+          window.voice.engineStatus({ wakeWord: false, reason: "microphone unavailable: " + why });
+        }
+      }
+
       window.voice.onConfigure(async (cfg) => {
-        if (!cfg?.streamToDetector) {
+        const mode = cfg?.mode ?? "none";
+        whisperRunning = false; // stop any previous whisper loop before switching
+        if (mode === "whisper") {
+          await startWhisperWake();
+          return;
+        }
+        if (mode !== "openwakeword") {
           window.voice.engineStatus({ wakeWord: false, reason: "wake-word detector unavailable" });
           return;
         }

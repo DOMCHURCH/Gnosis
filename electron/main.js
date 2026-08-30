@@ -258,6 +258,14 @@ if (!app.requestSingleInstanceLock()) {
       getMainWindow: () => win,
       voiceStatus: () => voice?.status() ?? null,
       setVoiceEnabled: (on) => (on ? voice?.start() : (voice?.stop(), voice?.status())),
+      // Live-switch: if voice is already on, restart the pipeline so the new
+      // engine takes effect immediately — start() re-reads config.wakeEngine —
+      // rather than leaving the OLD engine running until the app relaunches.
+      setWakeEngine: async () => {
+        if (!voice?.status()?.enabled) return voice?.status() ?? null;
+        voice.stop();
+        return voice.start();
+      },
       // Where the agent is actually working, so the panel can show the live
       // directory next to the configured one and make a pending restart obvious.
       getRootDir: () => rootDir,

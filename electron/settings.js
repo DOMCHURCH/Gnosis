@@ -135,7 +135,7 @@ export function openSettings(parent) {
 }
 
 /** Register the handlers once, at startup. */
-export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnabled, getRootDir, envCwd = null, defaultCwd = null }) {
+export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnabled, setWakeEngine, getRootDir, envCwd = null, defaultCwd = null }) {
   ipcMain.handle("settings:load", async () => {
     const env = parseEnv(await readEnvText());
     // One ordered list: the pinned pair first so the required key is never below
@@ -163,12 +163,15 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
           masked: maskSecret(env[k]),
         })),
     ];
-    let appCwd;
+    let appCwd, wakeEngine;
     try {
       const { loadConfig } = await import("../dist/config.js");
-      appCwd = (await loadConfig()).appCwd;
+      const cfg = await loadConfig();
+      appCwd = cfg.appCwd;
+      wakeEngine = cfg.wakeEngine === "whisper" ? "whisper" : "openwakeword";
     } catch {
       /* unreadable config — the panel shows the live directory instead */
+      wakeEngine = "openwakeword";
     }
     return {
       path: await envFilePath(),
@@ -198,6 +201,10 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
       // Reference only — the accelerators themselves live in shortcuts.js.
       shortcuts: SHORTCUTS.map((x) => ({ keys: x.keys, label: x.label })),
       voice: voiceStatus?.() ?? { enabled: false, wakeWord: false, transcription: false, reason: "unavailable" },
+      // Which wake path is selected, independent of `voice` above — voice is
+      // live runtime status, this is the saved preference, and they can
+      // disagree until a restart-or-relive-switch has happened.
+      wakeEngine,
     };
   });
 
@@ -305,6 +312,25 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
       const { saveConfig } = await import("../dist/config.js");
       await saveConfig({ kokoroVoice: String(name ?? "") });
       return { ok: true, voice: name };
+    } catch (e) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  });
+
+  // Which wake path is active: openWakeWord's trained "hey jarvis" detector, or
+  // sending short mic chunks to Groq Whisper and matching "hey gnosis" on the
+  // transcript (see electron/voice.js for why there is no trained detector for
+  // that phrase). Saved immediately, and — unlike appCwd, which needs a
+  // restart because the engine, repo map and file tree are all built from cwd
+  // at boot — applied live: if voice is currently on, the caller restarts the
+  // pipeline so a toggle here takes effect without relaunching the app.
+  ipcMain.handle("settings:set-wake-engine", async (_e, engine) => {
+    try {
+      const eng = engine === "whisper" ? "whisper" : "openwakeword";
+      const { saveConfig } = await import("../dist/config.js");
+      await saveConfig({ wakeEngine: eng });
+      const status = await setWakeEngine?.(eng);
+      return { ok: true, engine: eng, voice: status ?? null };
     } catch (e) {
       return { ok: false, error: String(e?.message ?? e) };
     }
