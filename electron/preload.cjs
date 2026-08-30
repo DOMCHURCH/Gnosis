@@ -11,6 +11,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("gnosis", {
   loadSettings: () => ipcRenderer.invoke("settings:load"),
   saveSettings: (updates) => ipcRenderer.invoke("settings:save", updates),
+  renameSettingsKey: (from, to) => ipcRenderer.invoke("settings:rename-key", from, to),
   openSettings: () => ipcRenderer.send("settings:open"),
   relaunch: () => ipcRenderer.send("app:relaunch"),
   closeSettings: () => ipcRenderer.send("settings:close"),

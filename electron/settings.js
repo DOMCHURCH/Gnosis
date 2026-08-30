@@ -15,9 +15,50 @@ import { SHORTCUTS } from "./shortcuts.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-/** The only keys this panel may write. The renderer names the key to set, so
- * without this an injected page could write arbitrary entries into .env. */
-const KNOWN_KEYS = ["OPENROUTER_API_KEY", "BRAVE_API_KEY"];
+/**
+ * The keys this panel always shows, whether or not they are set, because the app
+ * does not work without the first and the web-search tool does not exist without
+ * the second. Everything else in .env is listed too, but only once it exists.
+ *
+ * These are PINNED, not an allowlist. The panel used to refuse to write anything
+ * outside this pair, which meant GROQ_API_KEY — already in the file, already used
+ * by transcription — was visible as "1 other entry … left untouched" and editable
+ * nowhere. Any key the user wants is now editable; the guard moved from "which
+ * names" to "what a name may look like".
+ */
+const PINNED_KEYS = [
+  { name: "OPENROUTER_API_KEY", note: "Required. Gnosis reaches every model through OpenRouter.", placeholder: "sk-or-v1-…" },
+  { name: "BRAVE_API_KEY", note: "Optional. Enables the web-search tool.", placeholder: "brv-…" },
+];
+
+/** Notes for keys we happen to recognise. Purely informational — a key not listed
+ * here is still perfectly editable, it just gets no caption. */
+const KEY_NOTES = {
+  GROQ_API_KEY: "Speech-to-text for the voice session, and Groq-hosted models.",
+  CONTEXT7_API_KEY: "Context7 MCP — higher documentation rate limits.",
+};
+
+/**
+ * What a name is allowed to look like. The renderer names the key to write, so
+ * without a guard an injected page could set PATH, NODE_OPTIONS or
+ * ELECTRON_RUN_AS_NODE and turn a settings dialog into code execution the next
+ * time anything reads this file. Screaming snake case only: no lowercase, no
+ * dots, no dashes, no whitespace, and it may not begin with a digit.
+ */
+const KEY_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+const MAX_KEY_NAME = 96;
+
+/** Throw unless `name` is a legal env key. Used by both save and rename, so the
+ * two cannot drift apart into one being stricter than the other. */
+function assertKeyName(name) {
+  const k = String(name ?? "");
+  if (!k) throw new Error("A key needs a name.");
+  if (k.length > MAX_KEY_NAME) throw new Error(`Key name is too long (max ${MAX_KEY_NAME}).`);
+  if (!KEY_NAME_RE.test(k)) {
+    throw new Error(`"${k}" is not a valid key name — use A–Z, 0–9 and underscores, starting with a letter.`);
+  }
+  return k;
+}
 
 let win = null;
 
@@ -34,6 +75,22 @@ async function readEnvText() {
   } catch {
     return ""; // absent is normal on a first run
   }
+}
+
+/**
+ * Apply `updates` (string sets the key, null deletes it) to ~/.dom/.env.
+ *
+ * Write-then-rename, because a crash mid-write must not leave the user with a
+ * truncated file holding every secret they had. Mode 0600 on the temp file, so
+ * the secrets are never briefly world-readable even for the moment it exists.
+ */
+async function writeEnv(updates) {
+  const file = await envFilePath();
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const next = mergeEnv(await readEnvText(), updates);
+  const tmp = `${file}.tmp-${process.pid}`;
+  await fs.writeFile(tmp, next, { encoding: "utf8", mode: 0o600 });
+  await fs.rename(tmp, file);
 }
 
 export function openSettings(parent) {
@@ -81,8 +138,31 @@ export function openSettings(parent) {
 export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnabled, getRootDir, envCwd = null, defaultCwd = null }) {
   ipcMain.handle("settings:load", async () => {
     const env = parseEnv(await readEnvText());
-    const keys = {};
-    for (const k of KNOWN_KEYS) keys[k] = { set: !!env[k], masked: maskSecret(env[k]) };
+    // One ordered list: the pinned pair first so the required key is never below
+    // the fold, then everything else in the file alphabetically. Values never
+    // leave the main process — only whether a key is set, and a mask of it.
+    const pinned = new Set(PINNED_KEYS.map((k) => k.name));
+    const keys = [
+      ...PINNED_KEYS.map((k) => ({
+        name: k.name,
+        pinned: true,
+        note: k.note,
+        placeholder: k.placeholder,
+        set: !!env[k.name],
+        masked: maskSecret(env[k.name]),
+      })),
+      ...Object.keys(env)
+        .filter((k) => !pinned.has(k))
+        .sort()
+        .map((k) => ({
+          name: k,
+          pinned: false,
+          note: KEY_NOTES[k] ?? "",
+          placeholder: "",
+          set: true,
+          masked: maskSecret(env[k]),
+        })),
+    ];
     let appCwd;
     try {
       const { loadConfig } = await import("../dist/config.js");
@@ -108,9 +188,9 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
         envPin: envCwd,
         default: defaultCwd,
       },
-      // Everything else in the file, named so the user can see what "left
-      // untouched" refers to. Names only — never their values.
-      otherKeys: Object.keys(env).filter((k) => !KNOWN_KEYS.includes(k)),
+      // Kept for anything still reading the old shape; `keys` above now covers
+      // these properly, with an editor each rather than a sentence about them.
+      otherKeys: Object.keys(env).filter((k) => !pinned.has(k)),
       // resolveApiKey() reads process.env FIRST, so a key in the environment
       // silently wins over anything saved here. Saying so beats the user editing
       // this file three times and wondering why nothing changes.
@@ -125,21 +205,39 @@ export function registerSettingsIpc({ getMainWindow, voiceStatus, setVoiceEnable
     try {
       const clean = {};
       for (const [k, v] of Object.entries(updates ?? {})) {
-        if (!KNOWN_KEYS.includes(k)) throw new Error(`Refusing to write unknown key ${k}.`);
+        assertKeyName(k);
         if (v !== null && typeof v !== "string") throw new Error(`Bad value for ${k}.`);
         clean[k] = v;
       }
       if (!Object.keys(clean).length) return { ok: false, error: "Nothing to save." };
-
-      const file = await envFilePath();
-      await fs.mkdir(path.dirname(file), { recursive: true });
-      const next = mergeEnv(await readEnvText(), clean);
-      // Write-then-rename: a crash mid-write must not leave the user with a
-      // truncated file holding every secret they had.
-      const tmp = `${file}.tmp-${process.pid}`;
-      await fs.writeFile(tmp, next, { encoding: "utf8", mode: 0o600 });
-      await fs.rename(tmp, file);
+      await writeEnv(clean);
       return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e?.message ?? String(e) };
+    }
+  });
+
+  /**
+   * Rename a key, keeping its value.
+   *
+   * This has to happen in the main process, not the renderer, for the same reason
+   * the panel never receives a value: renaming from the page would mean reading
+   * the secret out, deleting the old line and writing it back — putting the key
+   * on a surface that has no business holding it. Here it is one merge: old set
+   * to null, new set to the value that was already on disk.
+   */
+  ipcMain.handle("settings:rename-key", async (_e, from, to) => {
+    try {
+      const oldName = assertKeyName(from);
+      const newName = assertKeyName(to);
+      if (oldName === newName) return { ok: true, unchanged: true };
+      const env = parseEnv(await readEnvText());
+      if (!(oldName in env)) return { ok: false, error: `${oldName} is not in this file.` };
+      // Refused rather than merged: silently overwriting a key the user cannot
+      // see the value of is a good way to lose a working credential.
+      if (newName in env) return { ok: false, error: `${newName} already exists — delete it first.` };
+      await writeEnv({ [oldName]: null, [newName]: env[oldName] });
+      return { ok: true, name: newName };
     } catch (e) {
       return { ok: false, error: e?.message ?? String(e) };
     }

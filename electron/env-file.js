@@ -64,7 +64,13 @@ export function mergeEnv(text, updates) {
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== null) assertWritableValue(value);
-    const re = new RegExp(`^\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\$&")}\s*=`);
+    // `\\s` and `\\$&`, not `\s` and `\$&`: in a template literal a lone backslash
+    // before an ordinary character is dropped, so the previous spelling compiled
+    // to `^s*KEY s*=` — zero-or-more literal "s" — and quietly failed to find any
+    // line that was indented. It matched the common unindented case, which is why
+    // it survived. `\\$&` in the replacement is a literal backslash followed by
+    // the match, i.e. the escape that makes a regex-special character literal.
+    const re = new RegExp(`^\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=`);
     // Last occurrence wins, because that is the one parseEnv/loadEnv resolves to.
     let idx = -1;
     for (let i = 0; i < lines.length; i++) if (re.test(lines[i]) && !lines[i].trim().startsWith("#")) idx = i;

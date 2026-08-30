@@ -167,6 +167,48 @@
       .toggle[aria-pressed="true"] .knob { transform: translateX(20px); background: var(--cyan); }
       .toggle:focus-visible { outline: 2px solid rgba(34, 211, 238, 0.5); outline-offset: 2px; }
 
+      /* --- API key rows ------------------------------------------------------
+       * One row per key, each its own inset card so a list of eight does not read
+       * as one undifferentiated wall of inputs. The head line carries the name
+       * and the row's own actions; the note under it is optional. */
+      .keyrow {
+        background: var(--inset);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: var(--press);
+        padding: 12px 13px;
+        margin: 0 0 10px;
+      }
+      .keyhead { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+      .keyname {
+        font-size: 10px; letter-spacing: 0.1em; color: var(--cyan);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .keyrow input.namein {
+        flex: 0 1 240px; padding: 5px 8px; font-size: 10px; letter-spacing: 0.08em;
+        background: var(--panel); border-radius: 8px;
+      }
+      .tag {
+        font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase;
+        border-radius: 999px; padding: 2px 7px; white-space: nowrap;
+        border: 1px solid var(--line); color: var(--dim);
+      }
+      .tag.req { color: var(--amber); border-color: rgba(251, 191, 36, 0.32); }
+      .tag.new { color: var(--green); border-color: rgba(74, 222, 128, 0.32); }
+      .keyhead .spacer { flex: 1 1 auto; }
+      /* Row actions are quieter than the panel's own buttons — they act on one
+       * key, not on the dialog, and shouldn't compete with Save. */
+      .keyrow button.mini {
+        padding: 5px 9px; font-size: 9px; letter-spacing: 0.1em;
+        background: transparent; box-shadow: none;
+      }
+      .keyrow button.mini:hover { background: var(--raised); }
+      .keyrow button.mini.danger:hover { border-color: rgba(248, 113, 113, 0.45); color: var(--red); }
+      .keyrow input[type="password"], .keyrow input[type="text"] { background: var(--panel); }
+      .keyrow .state { margin-top: 8px; }
+      #keys:empty + .addrow { margin-top: 0; }
+      .addrow { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+
       .state { font-size: 10px; color: var(--dim); margin-top: 10px; }
       table { border-collapse: collapse; width: 100%; font-size: 10px; }
       td { padding: 5px 0; color: var(--dim); }
@@ -197,25 +239,18 @@
       <div class="sub" id="envpath"></div>
 
       <section>
-        <h2>OpenRouter API key</h2>
-        <p class="note">Required. Gnosis reaches every model through OpenRouter.</p>
-        <div class="row">
-          <input id="openrouter" type="password" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" />
-          <button class="toggle" id="or-reveal" type="button" aria-pressed="false" title="Show the key" aria-label="Show the key"><span class="knob"></span></button>
-          <button id="or-clear" type="button">Clear</button>
+        <h2>API keys</h2>
+        <p class="note">
+          Every key in the file above, editable. The first two are always shown because Gnosis needs
+          them; add any other your tools or MCP servers expect. Values are never sent to this window —
+          a blank box means “leave it alone”, not “erase it”.
+        </p>
+        <div id="keys"></div>
+        <div class="row addrow">
+          <input id="new-key-name" type="text" placeholder="ANOTHER_API_KEY" autocomplete="off" spellcheck="false" />
+          <button id="key-add" type="button">Add key</button>
         </div>
-        <div class="state" id="or-state"></div>
-      </section>
-
-      <section class="magenta">
-        <h2>Brave Search API key</h2>
-        <p class="note">Optional. Enables the web-search tool.</p>
-        <div class="row">
-          <input id="brave" type="password" placeholder="brv-…" autocomplete="off" spellcheck="false" />
-          <button class="toggle" id="br-reveal" type="button" aria-pressed="false" title="Show the key" aria-label="Show the key"><span class="knob"></span></button>
-          <button id="br-clear" type="button">Clear</button>
-        </div>
-        <div class="state" id="br-state"></div>
+        <div class="state" id="keys-state"></div>
       </section>
 
       <section class="magenta">
@@ -285,36 +320,212 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
-      // Leaving a field blank means "don't change it" — the key itself is never
-      // sent to this page, so a blank box can't be read as "erase it". Clearing
-      // is its own explicit button.
-      const cleared = { OPENROUTER_API_KEY: false, BRAVE_API_KEY: false };
 
-      function wire(prefix, inputId, stateId, envKey) {
-        const toggle = $(prefix + "-reveal");
-        toggle.addEventListener("click", () => {
-          const el = $(inputId);
-          const show = el.type === "password";
-          el.type = show ? "text" : "password";
-          toggle.setAttribute("aria-pressed", String(show));
-          toggle.title = show ? "Hide the key" : "Show the key";
-        });
-        $(prefix + "-clear").addEventListener("click", () => {
-          cleared[envKey] = true;
-          $(inputId).value = "";
-          $(stateId).className = "state";
-          $(stateId).textContent = "Will be removed from .env when you save.";
-        });
-        $(inputId).addEventListener("input", () => { cleared[envKey] = false; });
-      }
-      wire("or", "openrouter", "or-state", "OPENROUTER_API_KEY");
-      wire("br", "brave", "br-state", "BRAVE_API_KEY");
+      // --- API keys ------------------------------------------------------------
+      // The list is data-driven: the main process says which keys exist and which
+      // are pinned, and this renders a row each. Nothing about OPENROUTER or BRAVE
+      // is special here beyond arriving first with `pinned: true`.
+      //
+      // Leaving a value box blank means "don't change it" — the value itself is
+      // never sent to this page, so a blank box cannot be read as "erase it".
+      // Removing is its own explicit button.
 
-      function paint(info, id) {
-        const el = $(id);
-        el.className = "state" + (info.set ? " set" : "");
-        el.textContent = info.set ? `Currently set · ${info.masked}` : "Not set.";
+      // Must agree with assertKeyName() in settings.js. Checked here too so a typo
+      // is refused as you type it rather than after a round trip.
+      const KEY_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+
+      let keyList = [];        // from the last load()
+      let pendingNew = [];     // added in this session, not on disk until Save
+      const cleared = new Set(); // names the user hit Clear/Remove on
+
+      function keyRow(info) {
+        const row = document.createElement("div");
+        row.className = "keyrow";
+        row.dataset.key = info.name;
+
+        const head = document.createElement("div");
+        head.className = "keyhead";
+        const nameEl = document.createElement("span");
+        nameEl.className = "keyname";
+        nameEl.textContent = info.name;
+        head.appendChild(nameEl);
+
+        if (info.name === "OPENROUTER_API_KEY") {
+          const t = document.createElement("span");
+          t.className = "tag req";
+          t.textContent = "required";
+          head.appendChild(t);
+        }
+        if (info.isNew) {
+          const t = document.createElement("span");
+          t.className = "tag new";
+          t.textContent = "unsaved";
+          head.appendChild(t);
+        }
+
+        const spacer = document.createElement("span");
+        spacer.className = "spacer";
+        head.appendChild(spacer);
+
+        // Renaming a pinned key would just make the app stop finding it, so the
+        // button is only offered where it means something.
+        if (!info.pinned && !info.isNew) {
+          const ren = document.createElement("button");
+          ren.type = "button";
+          ren.className = "mini";
+          ren.textContent = "Rename";
+          ren.addEventListener("click", () => beginRename(row, nameEl, info));
+          head.appendChild(ren);
+        }
+
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "mini danger";
+        // A pinned key stays in the list once emptied, so "Clear" is honest for it;
+        // a custom one disappears entirely, so that one says "Remove".
+        del.textContent = info.pinned ? "Clear" : "Remove";
+        head.appendChild(del);
+        row.appendChild(head);
+
+        if (info.note) {
+          const p = document.createElement("p");
+          p.className = "note";
+          p.style.margin = "0 0 9px";
+          p.textContent = info.note;
+          row.appendChild(p);
+        }
+
+        const controls = document.createElement("div");
+        controls.className = "row";
+        const input = document.createElement("input");
+        input.type = "password";
+        input.placeholder = info.placeholder || (info.set ? "" : "paste the key");
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        const reveal = document.createElement("button");
+        reveal.type = "button";
+        reveal.className = "toggle";
+        reveal.setAttribute("aria-pressed", "false");
+        reveal.title = "Show the key";
+        reveal.setAttribute("aria-label", "Show the key");
+        reveal.appendChild(Object.assign(document.createElement("span"), { className: "knob" }));
+        reveal.addEventListener("click", () => {
+          const show = input.type === "password";
+          input.type = show ? "text" : "password";
+          reveal.setAttribute("aria-pressed", String(show));
+          reveal.title = show ? "Hide the key" : "Show the key";
+        });
+        controls.append(input, reveal);
+        row.appendChild(controls);
+
+        const state = document.createElement("div");
+        state.className = "state" + (info.set ? " set" : "");
+        state.textContent = info.isNew
+          ? "New — type a value and press Save to write it."
+          : info.set ? `Currently set · ${info.masked}` : "Not set.";
+        row.appendChild(state);
+
+        del.addEventListener("click", () => {
+          if (info.isNew) {
+            // Never written, so there is nothing to schedule — just drop the row.
+            pendingNew = pendingNew.filter((k) => k.name !== info.name);
+            renderKeys();
+            return;
+          }
+          cleared.add(info.name);
+          input.value = "";
+          state.className = "state";
+          state.textContent = "Will be removed from .env when you save.";
+        });
+        input.addEventListener("input", () => { cleared.delete(info.name); });
+
+        row._info = info;
+        row._input = input;
+        return row;
       }
+
+      /** Swap the name for an editable box. Committing calls the main process
+       * straight away: the rename moves a value this page has never seen, so it
+       * cannot be batched into Save with the rest. */
+      function beginRename(row, nameEl, info) {
+        const box = document.createElement("input");
+        box.type = "text";
+        box.className = "namein";
+        box.value = info.name;
+        box.spellcheck = false;
+        box.autocomplete = "off";
+        nameEl.replaceWith(box);
+        box.focus();
+        box.select();
+
+        let done = false;
+        const cancel = () => { if (!done) { done = true; box.replaceWith(nameEl); } };
+        const commit = async () => {
+          if (done) return;
+          const next = box.value.trim().toUpperCase();
+          if (next === info.name || !next) return cancel();
+          if (!KEY_NAME_RE.test(next)) {
+            setKeyStatus(`"${next}" is not a valid key name — A–Z, 0–9 and underscores, starting with a letter.`, "err");
+            box.focus();
+            return;
+          }
+          done = true;
+          const r = await window.gnosis.renameSettingsKey(info.name, next);
+          if (!r.ok) { setKeyStatus(r.error, "err"); box.replaceWith(nameEl); return; }
+          setKeyStatus(`Renamed to ${next}.`, "ok");
+          await load();
+        };
+        box.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); void commit(); }
+          if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        });
+        box.addEventListener("blur", () => void commit());
+      }
+
+      function renderKeys() {
+        const host = $("keys");
+        // Values typed but not yet saved must survive a re-render, or adding a
+        // second key would silently wipe the first one you had just pasted.
+        const typed = new Map();
+        for (const r of host.querySelectorAll(".keyrow")) {
+          if (r._input?.value) typed.set(r.dataset.key, r._input.value);
+        }
+        host.textContent = "";
+        for (const info of [...keyList, ...pendingNew]) {
+          const row = keyRow(info);
+          if (typed.has(info.name)) row._input.value = typed.get(info.name);
+          host.appendChild(row);
+        }
+      }
+
+      function setKeyStatus(msg, kind) {
+        const el = $("keys-state");
+        el.className = "state" + (kind === "ok" ? " set" : "");
+        el.style.color = kind === "err" ? "var(--red)" : "";
+        el.textContent = msg;
+      }
+
+      $("key-add").addEventListener("click", () => {
+        const box = $("new-key-name");
+        const name = box.value.trim().toUpperCase();
+        if (!name) return;
+        if (!KEY_NAME_RE.test(name)) {
+          setKeyStatus(`"${name}" is not a valid key name — A–Z, 0–9 and underscores, starting with a letter.`, "err");
+          return;
+        }
+        if ([...keyList, ...pendingNew].some((k) => k.name === name)) {
+          setKeyStatus(`${name} is already in the list.`, "err");
+          return;
+        }
+        pendingNew.push({ name, pinned: false, note: "", placeholder: "", set: false, masked: null, isNew: true });
+        box.value = "";
+        setKeyStatus("");
+        renderKeys();
+        $("keys").querySelector(`.keyrow[data-key="${name}"]`)?._input.focus();
+      });
+      $("new-key-name").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); $("key-add").click(); }
+      });
 
       // --- working directory ---------------------------------------------------
       // What is currently SAVED, so Save can tell whether the box was actually
@@ -351,8 +562,12 @@
       async function load() {
         const s = await window.gnosis.loadSettings();
         $("envpath").textContent = s.path;
-        paint(s.keys.OPENROUTER_API_KEY, "or-state");
-        paint(s.keys.BRAVE_API_KEY, "br-state");
+        keyList = s.keys ?? [];
+        // A key that has just been written is no longer "pending" — drop it from
+        // the unsaved list rather than showing it twice.
+        pendingNew = pendingNew.filter((p) => !keyList.some((k) => k.name === p.name));
+        cleared.clear();
+        renderKeys();
         if (s.envOverride) {
           const w = $("override");
           w.textContent =
@@ -377,19 +592,20 @@
         paintVoice(s.voice);
         paintCwd(s.cwd ?? {});
 
-        $("others").textContent = s.otherKeys.length
-          ? `${s.otherKeys.length} other entr${s.otherKeys.length === 1 ? "y" : "ies"} in this file (${s.otherKeys.join(", ")}) ${s.otherKeys.length === 1 ? "is" : "are"} left untouched when you save.`
-          : "";
+        // Every key is editable above now, so the only thing left to promise is
+        // that the comments and formatting around them survive a save.
+        $("others").textContent =
+          "Comments and layout in this file are preserved — only the lines you change are rewritten.";
       }
 
       $("save").addEventListener("click", async () => {
         const updates = {};
-        const or = $("openrouter").value.trim();
-        const br = $("brave").value.trim();
-        if (or) updates.OPENROUTER_API_KEY = or;
-        else if (cleared.OPENROUTER_API_KEY) updates.OPENROUTER_API_KEY = null;
-        if (br) updates.BRAVE_API_KEY = br;
-        else if (cleared.BRAVE_API_KEY) updates.BRAVE_API_KEY = null;
+        for (const row of $("keys").querySelectorAll(".keyrow")) {
+          const name = row.dataset.key;
+          const v = row._input.value.trim();
+          if (v) updates[name] = v;
+          else if (cleared.has(name)) updates[name] = null;
+        }
 
         // The working directory saves on the same button as the keys — two Save
         // buttons on one panel is how half a change gets left behind.
@@ -421,9 +637,8 @@
             return;
           }
         }
-        $("openrouter").value = "";
-        $("brave").value = "";
-        cleared.OPENROUTER_API_KEY = cleared.BRAVE_API_KEY = false;
+        for (const row of $("keys").querySelectorAll(".keyrow")) row._input.value = "";
+        cleared.clear();
         await load();
         status.className = "ok";
         // The key is read once, by boot(), at startup — saying "saved" without
