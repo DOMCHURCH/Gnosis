@@ -9,7 +9,7 @@
 // The events are the ones servehost.ts actually emits (mirrorCallbacks), so a
 // change to the wire shape breaks this rather than passing on a shape nobody
 // sends any more.
-import { createReplyGate, speakableReply } from "../electron/voicegate.js";
+import { createReplyGate, speakableReply, takeSentences } from "../electron/voicegate.js";
 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
@@ -109,6 +109,51 @@ ok("blank lines are empty", speakableReply(["   ", "\n"]) === "");
   const long = speakableReply([`${"word ".repeat(200)}`]);
   ok("a long reply is capped", long.length <= 401);
   ok("...on a word boundary, with an ellipsis", long.endsWith("…") && !long.includes("wor…"));
+}
+
+// --- streaming: sentences are handed over as they finish ----------------------
+// Waiting for turn.end meant the user heard nothing until the whole reply had
+// been generated. These assert the split, because a bad one either fragments
+// speech at every abbreviation or never emits until the end.
+{
+  const t = (s) => takeSentences(s);
+  ok("a complete sentence is taken", t("This is a whole sentence. ").chunks[0] === "This is a whole sentence.");
+  ok("...and the remainder is kept", t("One sentence here. And a part").rest === "And a part");
+  ok("a lowercase continuation is not a sentence break", t("Version v1.2 is out. it says").chunks.length <= 1);
+  ok("an unfinished sentence is not spoken early", t("This has no terminator yet").chunks.length === 0);
+  ok("two sentences come out as two", t("First one here. Second one here. ").chunks.length === 2);
+  ok("a question mark ends a sentence", t("Are you sure about that? ").chunks.length === 1);
+  // The reason for the minimum length: an abbreviation is not a sentence.
+  ok("an abbreviation does not split the line", t("Use a flag, e.g. --force, to do it. ").chunks.length === 1);
+  ok("...and that sentence stays intact", t("Use a flag, e.g. --force, to do it. ").chunks[0] === "Use a flag, e.g. --force, to do it.");
+}
+
+{
+  // The gate in streaming mode: chunks during the turn, leftover at the end.
+  const spokenChunks = [];
+  const finals = [];
+  const gate = createReplyGate((r) => finals.push(r), () => finals.push(null), (c) => spokenChunks.push(c));
+  gate.arm(0);
+  gate.handle(assistant(0, "I looked at the repo."));
+  ok("the first sentence is spoken before the turn ends", spokenChunks.length === 1);
+  gate.handle(assistant(0, "It has 118 test suites."));
+  ok("...and so is the second", spokenChunks.length === 2);
+  gate.handle(assistant(0, "No trailing stop here"));
+  ok("an unterminated tail is not spoken yet", spokenChunks.length === 2);
+  gate.handle(turnEnd(0));
+  ok("...it is spoken at the end", finals[0] === "No trailing stop here");
+}
+
+{
+  // A streamed turn ending exactly on a full stop has nothing left over, and must
+  // NOT be reported as silent — it spoke.
+  const finals = [];
+  const silent = [];
+  const gate = createReplyGate((r) => finals.push(r), () => silent.push(true), () => {});
+  gate.arm(0);
+  gate.handle(assistant(0, "All done."));
+  gate.handle(turnEnd(0));
+  ok("a fully-streamed turn is not reported as silent", silent.length === 0);
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nall voice-gating checks passed");

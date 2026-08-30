@@ -70,7 +70,7 @@ const MAX_FIX_ITERATIONS = 3;
 // `camera` sits here beside view_image for the same reason, plus one of its own:
 // plan mode is read-only exploration, and opening the webcam during it would turn
 // a light on for something the user did not ask to be looked at.
-const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "camera", "web_search", "oracle", "memory", "office", "focus_window"]);
+const PLAN_EXCLUDED = new Set(["write", "edit", "bash", "send_message", "list_tabs", "task", "todo", "view_image", "camera", "screen", "web_search", "oracle", "memory", "office", "focus_window"]);
 
 // A sub-agent's tools: read-only research only, and no `task` (no recursion).
 const SUBAGENT_TOOLS = ["read", "glob", "grep", "http"];

@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld("voice", {
   /** Whether the microphone actually opened, and why not when it did not. */
   mic: (s) => ipcRenderer.send("voice:mic", s),
   onPlay: (cb) => ipcRenderer.on("voice:play", (_e, file) => cb(file)),
+  /** Playback of one clip finished — the signal the session waits for before
+   * reopening the microphone, so it never hears the tail of its own reply. */
+  playDone: () => ipcRenderer.send("voice:play-done"),
+  /** Stop the current clip immediately (the overlay was closed). */
+  onStopAudio: (cb) => ipcRenderer.on("voice:stop-audio", () => cb()),
+  /** Mute the microphone while we are talking, to kill the echo loop. */
+  onMute: (cb) => ipcRenderer.on("voice:mute", (_e, m) => cb(!!m?.on)),
   cancel: () => ipcRenderer.send("voice:cancel"),
   engineStatus: (s) => ipcRenderer.send("voice:engine-status", s),
   // main -> engine

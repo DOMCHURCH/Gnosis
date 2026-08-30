@@ -27,6 +27,7 @@ import { registerWin32Focus } from "./win32-focus.js";
 import { registerVoice } from "./voice.js";
 import { resolveRootCwd, defaultProject } from "./rootcwd.js";
 import { registerCamera } from "./camera.js";
+import { registerScreen } from "./screen.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -157,6 +158,7 @@ if (!app.requestSingleInstanceLock()) {
   let win = null;
   let voice = null;
   let camera = null;
+  let screenCap = null;
   let rootDir = process.cwd();
   // Closing the window hides to the tray; only an explicit Quit really exits.
   // Without this the tray's whole point evaporates — an agent working in the
@@ -258,9 +260,13 @@ if (!app.requestSingleInstanceLock()) {
     // `camera` tool can reach it without the engine ever importing from here.
     camera = registerCamera();
     ipcMain.on("camera:frame", (_e, { id, payload }) => camera.deliver(id, payload));
+    // The display, on the same terms as the camera.
+    screenCap = registerScreen();
     try {
       const { setCameraProvider } = await import("../dist/camera.js");
       setCameraProvider(() => camera.capture());
+      const { setScreenProvider } = await import("../dist/screen.js");
+      setScreenProvider((o) => screenCap.capture(o));
     } catch {
       /* boot failed; there is no engine to lend it to anyway */
     }
@@ -306,7 +312,7 @@ if (!app.requestSingleInstanceLock()) {
 
     // The shell's composition root, hung on `app` so the pieces that come later
     // have one place to reach for them instead of re-deriving state.
-    app.gnosis = { tray, bridge, server, showWindow, voice, camera, rootDir };
+    app.gnosis = { tray, bridge, server, showWindow, voice, camera, screenCap, rootDir };
   });
 
   // The window is hidden, not closed, so this fires only after a real quit has

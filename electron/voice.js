@@ -330,6 +330,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (!session && !(overlay && !overlay.isDestroyed())) return;
     session = false;
     clearTimeout(idleTimer);
+    // Closing means silence NOW — mid-word if that is where it is. A panel that
+    // keeps talking after you close it is the most obviously broken thing a
+    // voice feature can do.
+    stopSpeaking();
     gate.disarm();
     setListening(false);
     if (overlay && !overlay.isDestroyed()) overlay.hide();
@@ -355,23 +359,110 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   // See voicegate.js for why that gate is a separate, testable module. Feeding it
   // the bus rather than a callback means the spoken answer is the SAME text the
   // chat rail shows — one source, so the two can never disagree.
-  const gate = createReplyGate(
-    (reply) => {
-      toOverlay("voice:state", { state: "speaking", response: reply });
-      void (async () => {
-        const { config } = await readEnv();
-        const spoken = await speak(reply, { voice: config.kokoroVoice, play });
+  // --- speaking ---------------------------------------------------------------
+  //
+  // A queue, not a call, because three things all had to change at once:
+  //
+  //  * ECHO. speak() used to resolve as soon as playback was HANDED to the
+  //    renderer, not when it finished — so the session re-armed the recorder
+  //    while the reply was still coming out of the speakers, transcribed its own
+  //    voice, and answered itself. Nothing here re-opens the microphone until the
+  //    renderer reports the audio actually ended, plus a tail for the room.
+  //  * LATENCY. Sentences arrive one at a time now (see the gate), so there has
+  //    to be somewhere to line them up while the previous one plays.
+  //  * STOPPING. Closing the overlay has to cut speech off mid-word, which means
+  //    something must own the queue and the currently-playing clip.
+  const MIC_REOPEN_MS = 500;
+
+  const speech = { queue: [], busy: false, epoch: 0, onDrain: null };
+
+  /** Tell the renderer to stop feeding the detector and refuse to record. */
+  function micMuted(on) {
+    if (engine && !engine.isDestroyed()) engine.webContents.send("voice:mute", { on });
+  }
+
+  /** Resolves when the renderer says the clip finished (or the wait times out —
+   * a lost `ended` event must not wedge the session forever). */
+  function playAndWait(file, epoch) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { speech.onDrain = null; resolve(); }, 60000);
+      speech.onDrain = () => {
+        if (epoch !== speech.epoch) return; // a stop happened; this clip is stale
+        clearTimeout(timer);
+        speech.onDrain = null;
+        resolve();
+      };
+      play(file);
+    });
+  }
+
+  /** Say everything queued, in order, then reopen the microphone. */
+  async function drainSpeech() {
+    if (speech.busy) return;
+    speech.busy = true;
+    const epoch = speech.epoch;
+    micMuted(true);
+    try {
+      const { config } = await readEnv();
+      while (speech.queue.length && epoch === speech.epoch) {
+        const text = speech.queue.shift();
+        const spoken = await speak(text, { voice: config.kokoroVoice });
+        if (epoch !== speech.epoch) break; // stopped while synthesising
         diag.lastSpoke = `${spoken.engine ?? "none"} @ ${new Date().toISOString()}`;
-        if (!spoken.ok) diag.lastError = spoken.error ?? spoken.fallbackReason ?? "TTS failed";
-        // Back to listening rather than closing: the session outlives the turn.
-        // The reply text stays on screen so it can be read while the next
-        // question is being asked.
+        if (!spoken.ok) { diag.lastError = spoken.error ?? spoken.fallbackReason ?? "TTS failed"; continue; }
+        if (spoken.path) await playAndWait(spoken.path, epoch);
+      }
+    } finally {
+      speech.busy = false;
+      if (epoch === speech.epoch) {
+        // The tail: speakers and room reverb outlive the audio file, and reopening
+        // the microphone on the same millisecond hears the end of our own sentence.
+        setTimeout(() => {
+          if (epoch !== speech.epoch) return;
+          micMuted(false);
+          if (session) { armIdle(); listenAgain(); }
+          else sleep();
+        }, MIC_REOPEN_MS);
+      }
+    }
+  }
+
+  function enqueueSpeech(text) {
+    const t = String(text ?? "").trim();
+    if (!t) return;
+    speech.queue.push(t);
+    void drainSpeech();
+  }
+
+  /** Cut speech off now: drop the queue, stop the clip, unmute. */
+  function stopSpeaking() {
+    speech.epoch++;          // invalidates every in-flight await above
+    speech.queue.length = 0;
+    speech.onDrain = null;
+    speech.busy = false;
+    if (engine && !engine.isDestroyed()) engine.webContents.send("voice:stop-audio");
+    micMuted(false);
+  }
+
+  const gate = createReplyGate(
+    // Whatever is left at the end of the turn (usually a tail with no full stop).
+    (leftover) => {
+      if (leftover) {
+        toOverlay("voice:state", { state: "speaking", response: leftover });
+        enqueueSpeech(leftover);
+      } else if (!speech.busy && !speech.queue.length) {
+        // The turn spoke and the queue already drained — nothing left to wait for.
         if (session) { armIdle(); listenAgain(); }
         else sleep();
-      })();
+      }
     },
     // A turn that produced no prose still keeps the session open.
     () => (session ? listenAgain() : sleep()),
+    // Each finished sentence, spoken while the rest is still being written.
+    (chunk) => {
+      toOverlay("voice:state", { state: "speaking", response: chunk });
+      enqueueSpeech(chunk);
+    },
   );
   bridge?.bus?.subscribe((e) => gate.handle(e));
 
@@ -400,10 +491,8 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     const tabId = bridge?.getAgents?.()[0]?.id ?? 0;
     const say = async (line) => {
       toOverlay("voice:state", { state: "speaking", response: line, model: currentModel() });
-      const { config } = await readEnv();
-      await speak(line, { voice: config.kokoroVoice, play });
-      if (session) listenAgain();
-      else sleep();
+      // Through the queue, so the microphone stays muted until it has finished.
+      enqueueSpeech(line);
     };
 
     try {
@@ -444,8 +533,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // while the agent would otherwise have something to say.
     if (STOP_RE.test(t.text)) {
       toOverlay("voice:state", { state: "speaking", transcript: t.text, response: "Stopping." });
+      // Said, then closed: endSession() stops speech, so the confirmation has to
+      // finish before it runs or it would cut off its own "okay".
       const { config } = await readEnv();
-      await speak("Okay, stopping.", { voice: config.kokoroVoice, play });
+      const bye = await speak("Okay, stopping.", { voice: config.kokoroVoice });
+      if (bye.ok && bye.path) await playAndWait(bye.path, speech.epoch);
       endSession("user said stop");
       return;
     }
@@ -459,7 +551,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     const wantsCamera = CAMERA_WORDS.test(t.text);
     let prefix = "";
     if (wantsCamera) prefix = "[voice · camera] Call the camera tool, look at the frame, then answer: ";
-    else if (wantsScreen) prefix = "[voice · screen] Take a screenshot with the computer tool, then answer: ";
+    else if (wantsScreen) prefix = "[voice · screen] Call the screen tool, look at the capture, then answer: ";
     else prefix = "[voice] ";
 
     // Route through the same bridge the browser UI uses, so the exchange lands
@@ -505,6 +597,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     diag.microphone = s?.ok ? "connected" : "disconnected";
     diag.micReason = s?.reason ?? "";
   });
+  // The renderer reports when a clip actually finished playing. Waiting for THIS
+  // rather than for speak() to resolve is what stops the microphone hearing the
+  // tail of our own reply and answering it.
+  ipcMain.on("voice:play-done", () => speech.onDrain?.());
   ipcMain.on("voice:utterance", (_e, wavBase64) => void handleUtterance(wavBase64));
   // The engine renderer heard nothing at all in a recording window. Inside a
   // session that is just a pause, not a hang-up.

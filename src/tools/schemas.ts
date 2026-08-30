@@ -199,6 +199,13 @@ export const cameraSchema = z.object({
     .describe("What you are looking for in the frame, in a few words (e.g. \"what the user is holding\")."),
 });
 
+export const screenSchema = z.object({
+  window: z
+    .string()
+    .optional()
+    .describe("Capture only the window whose title contains this text. Omit to capture the whole display, which is almost always what is wanted."),
+});
+
 export const webSearchSchema = z.object({
   query: z.string().describe("The web search query."),
   count: z.number().int().positive().optional().describe("How many results to return (default 8, capped at 20)."),
@@ -285,6 +292,7 @@ export type TodoArgs = z.infer<typeof todoSchema>;
 export type AskUserArgs = z.infer<typeof askUserSchema>;
 export type ViewImageArgs = z.infer<typeof viewImageSchema>;
 export type CameraArgs = z.infer<typeof cameraSchema>;
+export type ScreenArgs = z.infer<typeof screenSchema>;
 export type WebSearchArgs = z.infer<typeof webSearchSchema>;
 export type OracleArgs = z.infer<typeof oracleSchema>;
 export type MemoryArgs = z.infer<typeof memorySchema>;

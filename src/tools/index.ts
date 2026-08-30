@@ -19,6 +19,7 @@ import {
   todoSchema,
   viewImageSchema,
   cameraSchema,
+  screenSchema,
   askUserSchema,
   webSearchSchema,
   toJsonSchema,
@@ -36,6 +37,7 @@ import { runTask } from "./task.js";
 import { runTodo } from "./todo.js";
 import { runViewImage } from "./viewimage.js";
 import { runCamera } from "./camera.js";
+import { runScreen } from "./screen.js";
 import { runWebSearch } from "./websearch.js";
 import { runOracle } from "./oracle.js";
 import { runMemory } from "./memory.js";
@@ -334,6 +336,17 @@ export const TOOLS: Record<string, ToolDef> = {
     schema: cameraSchema,
     mutating: false,
     run: runCamera,
+  },
+  screen: {
+    name: "screen",
+    description:
+      "Capture the user's SCREEN so you can see it — the image is attached to your next message. Use it for " +
+      "\"what's on my screen\", \"what am I looking at\", or any question about what is displayed. It captures the " +
+      "whole display by default, which is what the user means; pass `window` only when they name one. Desktop " +
+      "app only. If the active model has no vision input, the turn switches to one and back.",
+    schema: screenSchema,
+    mutating: false,
+    run: runScreen,
   },
   web_search: {
     name: "web_search",

@@ -28,6 +28,7 @@
       let analyser = null;
       let streamNode = null;   // continuous tap feeding the wake-word detector
       let recording = false;   // suspends the tap while an utterance is captured
+      let muted = false;       // true while our own TTS is playing (echo suppression)
 
       async function mic() {
         if (stream) return stream;
@@ -126,16 +127,63 @@
 
       // Playing back synthesised speech: the main process has no audio output,
       // so it hands this renderer a file path.
+      //
+      // The `ended` report matters as much as the playback. speak() used to be
+      // treated as finished the moment the file was handed over, so the session
+      // reopened the microphone while the reply was still coming out of the
+      // speakers — it transcribed its own voice and answered itself. Whoever is
+      // waiting needs to hear about the END, and about failures too, or a clip
+      // that never plays leaves the session waiting forever.
+      let playing = null;
       window.voice.onPlay((file) => {
         try {
+          stopAudio();
           const a = new Audio("file:///" + String(file).replace(/\\/g, "/"));
-          a.play().catch((e) => window.voice.engineStatus({ reason: "playback failed: " + e.message }));
+          playing = a;
+          const done = () => {
+            if (playing !== a) return; // superseded by a newer clip
+            playing = null;
+            window.voice.playDone();
+          };
+          a.addEventListener("ended", done);
+          a.addEventListener("error", done);
+          a.play().catch((e) => {
+            window.voice.engineStatus({ reason: "playback failed: " + e.message });
+            done();
+          });
         } catch (e) {
           window.voice.engineStatus({ reason: "playback failed: " + String(e?.message ?? e) });
+          window.voice.playDone();
         }
       });
 
-      window.voice.onRecord(() => { record().catch((e) => window.voice.engineStatus({ reason: String(e.message) })); });
+      /** Cut the current clip off wherever it is. */
+      function stopAudio() {
+        const a = playing;
+        playing = null; // before pause(), so the `ended` handler stays quiet
+        if (!a) return;
+        try { a.pause(); a.currentTime = 0; a.src = ""; } catch {}
+      }
+      // Closing the overlay must silence it immediately, mid-word if that is
+      // where it is — a panel that keeps talking after you close it is the most
+      // obviously broken thing a voice feature can do.
+      window.voice.onStopAudio(() => stopAudio());
+
+      // While we are talking, the microphone is deaf. This is the echo fix: with
+      // the tap live during playback the detector hears the reply (and can
+      // re-trigger on it), and the recorder captures it as if it were the user.
+      window.voice.onMute((on) => {
+        muted = on;
+        if (on) window.voice.level(0); // park the meter rather than freezing it
+      });
+
+      window.voice.onRecord(() => {
+        // A record request that arrives while we are still speaking is the echo
+        // bug in its other form. Ignore it; the main process re-arms once
+        // playback has genuinely finished.
+        if (muted) return;
+        record().catch((e) => window.voice.engineStatus({ reason: String(e.message) }));
+      });
 
       window.voice.onConfigure(async (cfg) => {
         if (!cfg?.streamToDetector) {
@@ -158,8 +206,10 @@
           tap.onaudioprocess = (e) => {
             // While capturing an utterance the recorder owns the microphone;
             // feeding the detector at the same time would let the user's own
-            // command re-trigger the wake word.
-            if (recording) return;
+            // command re-trigger the wake word. `muted` is the same idea for our
+            // OWN speech: the reply coming out of the speakers must not reach the
+            // detector either, or the app wakes itself up.
+            if (recording || muted) return;
             const input = e.inputBuffer.getChannelData(0);
             const pcm = new Int16Array(input.length);
             for (let i = 0; i < input.length; i++) {
@@ -173,7 +223,7 @@
           window.voice.engineStatus({ wakeWord: true, reason: "microphone open, streaming to the detector" });
           // A level every ~200ms: enough for a meter, far less chatty than a
           // message per audio frame.
-          setInterval(() => window.voice.level(rms()), 200);
+          setInterval(() => window.voice.level(muted ? 0 : rms()), 200);
         } catch (e) {
           const why = String(e?.name === "NotAllowedError"
             ? "permission denied — Windows microphone privacy settings, or the app was not granted media access"
