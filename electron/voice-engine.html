@@ -19,7 +19,21 @@
       // enough for "stop when they stop talking" in a quiet room, and it costs
       // no model and no network.
 
-      const SILENCE_MS = 1500;
+      /*
+       * How long you have to stop talking before the recorder decides you have.
+       *
+       * This is dead air on every single turn, and it was 1500ms — longer than
+       * the model call that follows it once a fast model is in use (1.5-2.3s
+       * measured). Cutting it to 800ms is the most noticeable single change to
+       * how quickly voice answers, because unlike the model round trip it is
+       * pure waiting and nothing is happening during it.
+       *
+       * It cannot go much lower. This is an RMS gate, not a real VAD: it cannot
+       * tell "finished the sentence" from "paused to think", so the whole
+       * safety margin for a mid-sentence pause is this number. Too short and it
+       * cuts people off mid-thought, which is far more annoying than waiting.
+       */
+      const SILENCE_MS = 800;
       /*
        * The speech gate is ADAPTIVE, not a fixed number.
        *

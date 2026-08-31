@@ -179,8 +179,7 @@ export function createReplyGate(onReply, onSilent, onChunk) {
  * answering.
  */
 const ACK_TOOLS = {
-  focus_window: (args, ok) => {
-    if (!ok) return null;
+  focus_window: (args) => {
     const app = String(args?.app ?? "").trim();
     if (!app) return null;
     const name = app.charAt(0).toUpperCase() + app.slice(1);
@@ -196,6 +195,6 @@ const ACK_TOOLS = {
  * decision — what the user hears — and because voice.js cannot be imported
  * without Electron, which would leave it untested.
  */
-export function ackLineFor(tool, args, ok) {
-  return ACK_TOOLS[tool]?.(args, ok) ?? null;
+export function ackLineFor(tool, args) {
+  return ACK_TOOLS[tool]?.(args) ?? null;
 }

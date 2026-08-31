@@ -490,8 +490,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   /** This turn was confirmed by a tool acknowledgement; the model's own prose
    * for it is redundant and is not spoken. Reset when the next turn is armed. */
   let ackSpoken = false;
-  /** tool.end carries no args, so the call that started it is remembered here. */
-  let lastToolArgs = null;
+
 
   /**
    * A timestamped trace of the voice pipeline.
@@ -574,12 +573,37 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     micMuted(true);
     try {
       const { config } = await readEnv();
-      while (speech.queue.length && epoch === speech.epoch) {
-        const text = speech.queue.shift();
+
+      /*
+       * Synthesise the NEXT sentence while the current one is playing.
+       *
+       * Synthesis and playback used to be strictly serial, so every gap between
+       * sentences cost a full synth — 0.98-2.24s of measured silence, with the
+       * user listening to nothing while Kokoro worked on words it already had.
+       * Nothing about the two stages requires them to take turns: the audio for
+       * sentence two can be ready before sentence one has finished playing.
+       *
+       * Only one synth is ever in flight, so the timeline still alternates
+       * start/end per stage and the per-turn summary stays readable — the synth
+       * and play totals simply overlap in time now, which is the point.
+       */
+      const synth = (text) => {
         vlog("tts.synth.start", { chars: text.length });
-        const spoken = await speak(text, { voice: config.kokoroVoice });
-        vlog("tts.synth.end", { ok: spoken.ok, engine: spoken.engine });
+        return speak(text, { voice: config.kokoroVoice }).then((s) => {
+          vlog("tts.synth.end", { ok: s.ok, engine: s.engine });
+          return s;
+        });
+      };
+
+      let ahead = null; // synth already running for the sentence after this one
+      while ((ahead || speech.queue.length) && epoch === speech.epoch) {
+        const current = ahead ?? synth(speech.queue.shift());
+        ahead = null;
+        const spoken = await current;
         if (epoch !== speech.epoch) break; // stopped while synthesising
+        // Start the next one BEFORE waiting on this one's playback — that wait
+        // is the whole opportunity, and after it the chance is gone.
+        if (speech.queue.length) ahead = synth(speech.queue.shift());
         diag.lastSpoke = `${spoken.engine ?? "none"} @ ${new Date().toISOString()}`;
         if (!spoken.ok) { diag.lastError = spoken.error ?? spoken.fallbackReason ?? "TTS failed"; continue; }
         if (spoken.path) await playAndWait(spoken.path, epoch);
@@ -661,15 +685,30 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
  * anyone can see, and a number you cannot read is not a measurement.
  */
 function summariseTurn(timeline) {
-  const last = (name) => [...timeline].reverse().find((e) => e.event === name);
-  const at = (name) => last(name)?.at ?? null;
+  const lastOf = (name, ok) => [...timeline].reverse().find((e) => e.event === name && (!ok || ok(e)))?.at ?? null;
+  const at = (name) => lastOf(name);
 
-  const recStart = at("record.start");
+  // The transcript is the spine of a turn: the listening half happens before it
+  // and the speaking half after, which is what makes each event attributable to
+  // one turn rather than the one either side of it.
+  const sttEnd = at("transcribe.end");
+
+  /*
+   * Anchor on the recording that produced THIS transcript, not the newest one.
+   *
+   * The microphone reopens as soon as the speech queue drains, which for a
+   * multi-sentence reply happens while the turn is still going: a newer
+   * record.start then lands in the timeline before the turn has finished. Taking
+   * the latest one measured the turn from a point inside itself — one real turn
+   * logged "total 5.99s" against stages summing to over ten, and no listen stage
+   * at all, because there was no utterance after the start it had chosen.
+   */
+  const before = (e) => sttEnd === null || e.at <= sttEnd;
+  const recStart = lastOf("record.start", before);
   if (!recStart) return null; // no turn in this timeline yet
 
   // The first sentence queued AFTER the transcript came back — later ones are
   // the rest of the same reply streaming in, not a second turn.
-  const sttEnd = at("transcribe.end");
   const firstQueued = timeline.find((e) => e.event === "tts.queued" && sttEnd && e.at >= sttEnd)?.at ?? null;
 
   const span = (a, b) => (a && b && b >= a ? b - a : null);
@@ -690,8 +729,8 @@ function summariseTurn(timeline) {
   };
 
   const stages = {
-    listen: span(recStart, at("utterance.received")),
-    transcribe: span(at("transcribe.start"), sttEnd),
+    listen: span(recStart, lastOf("utterance.received", before)),
+    transcribe: span(lastOf("transcribe.start", before), sttEnd),
     model: span(sttEnd, firstQueued),
     synth: totalOf("tts.synth.start", "tts.synth.end"),
     play: totalOf("tts.play.start", "tts.play.end"),
@@ -755,14 +794,34 @@ async function writeTurnTiming(timeline) {
    */
   function ackTool(e) {
     if (!gate.armed || !e) return;
-    if (e.type === "tool.start") { lastToolArgs = e.args; return; }
-    if (e.type !== "tool.end" || ackSpoken) return;
-    const line = ackLineFor(e.tool, lastToolArgs, e.ok);
-    if (!line) return;
-    ackSpoken = true;
-    vlog("tool.ack", { tool: e.tool, line });
-    toOverlay("voice:state", { state: "speaking", response: line });
-    enqueueSpeech(line);
+
+    if (e.type === "tool.start") {
+      if (ackSpoken) return;
+      const line = ackLineFor(e.tool, e.args);
+      if (!line) return;
+      ackSpoken = true;
+      vlog("tool.ack", { tool: e.tool, line });
+      toOverlay("voice:state", { state: "speaking", response: line });
+      enqueueSpeech(line);
+      return;
+    }
+
+    /*
+     * Launching Spotify took 4.11s, almost all of it Spotify starting rather
+     * than anything we control. Waiting for that before saying "Opening
+     * Spotify." put the entire app launch on the critical path of the answer —
+     * for a sentence that was already true when the tool was called.
+     *
+     * So the line is a statement of intent now, spoken at tool.start. Which
+     * makes the failure case a promise to keep: if the launch did not work, the
+     * acknowledgement is revoked and the model's own explanation is spoken
+     * after all. The user hears "Opening Spotify." and then why it did not,
+     * which is honest and still faster than silence for four seconds.
+     */
+    if (e.type === "tool.end" && ackSpoken && !e.ok) {
+      ackSpoken = false;
+      vlog("tool.ack.revoked", { tool: e.tool });
+    }
   }
 
   bridge?.bus?.subscribe((e) => { ackTool(e); gate.handle(e); });
@@ -941,7 +1000,6 @@ async function writeTurnTiming(timeline) {
       // Arm BEFORE handing the turn over: onInput runs the engine synchronously
       // far enough to emit its first lines, and arming afterwards would miss them.
       ackSpoken = false;
-      lastToolArgs = null;
       gate.arm(tabId);
       bridge?.onInput?.(tabId, prefix + t.text);
       // The overlay stays up until turn.end — the gate speaks the reply and

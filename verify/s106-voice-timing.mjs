@@ -37,6 +37,14 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
   const gate = src.slice(src.indexOf("const gate = createReplyGate("), src.indexOf("bridge?.bus?.subscribe"));
   ok("the reply gate marks the turn ended", /turnEnded = true/.test(gate));
 
+  // Synthesis runs a sentence ahead of playback, so the gap between sentences
+  // is not a full synth of silence. The ordering is the whole fix: start the
+  // next synth BEFORE awaiting this one's playback, or nothing overlaps.
+  const nextSynth = drain.indexOf("ahead = synth(speech.queue.shift())");
+  const awaitPlay = drain.indexOf("await playAndWait");
+  ok("the next sentence starts synthesising before the current one plays",
+    nextSynth !== -1 && awaitPlay !== -1 && nextSynth < awaitPlay);
+
   // A turn cut off mid-sentence has no honest total, and must not be logged as
   // if it completed — nor leave the flag set for the next turn to trip over.
   const stop = src.slice(src.indexOf("function stopSpeaking(why)"), src.indexOf("function stopSpeaking(why)") + 500);
@@ -87,6 +95,30 @@ const turn = [
     ...turn,
   ]);
   ok("an earlier turn's audio is not counted", s.stages.synth === 700);
+}
+
+{
+  /*
+   * The microphone reopens the moment the speech queue drains, which for a
+   * multi-sentence reply happens while the turn is still speaking. That puts a
+   * record.start INSIDE the turn, newer than the one that started it.
+   *
+   * Anchoring on the newest one measured the turn from a point inside itself:
+   * a real turn logged "total 5.99s" while its own stages summed past ten, with
+   * no listen stage at all. A total shorter than its parts is not a slow turn
+   * reported badly, it is a number that means nothing.
+   */
+  const reopened = [
+    ...turn.slice(0, 9),                          // through the first sentence playing
+    { at: t + 5135, event: "record.start" },      // mic reopens mid-turn
+    ...turn.slice(9),                             // the rest of the same reply
+  ];
+  const s = summariseTurn(reopened);
+  ok("a mid-turn mic reopen does not become the start of the turn", s.total === 6360);
+  ok("...and the listen stage survives it", s.stages.listen === 1200);
+  // The guard is the transcript: a record.start after it belongs to the NEXT
+  // turn, and one before it is the recording that produced this transcript.
+  ok("...and the turn is still anchored before its own transcript", s.stages.transcribe === 400);
 }
 
 {
