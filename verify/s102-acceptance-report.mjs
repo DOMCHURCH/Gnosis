@@ -115,6 +115,30 @@ const clearQueue = () => fs.rm(rep.queuePath(), { force: true }).catch(() => {})
   ok("a thrown request means retry", (await rep.postOnce(p, stub("throw"))) === "retry");
 }
 
+// --- reportDurable: the user never waits, and nothing is lost -----------------
+// Both halves of the first-run bug this replaced: the window used to stay open
+// for the whole request, and a process that died mid-request lost the
+// acceptance entirely because queueing only happened AFTER a reply came back.
+{
+  const p = rep.buildPayload({ machine: MACHINE, entry: entry(), email: null });
+
+  // A server that never answers. If reportDurable awaited it, this would sit
+  // here for TIMEOUT_MS; the assertion is that it does not.
+  const hang = () => new Promise(() => {});
+  const started = Date.now();
+  const out = await rep.reportDurable(p, hang);
+  const elapsed = Date.now() - started;
+
+  ok("reportDurable returns without waiting for the server", elapsed < 1000, `${elapsed}ms`);
+  ok("...reporting that it queued rather than sent", out === "queued");
+
+  // Durable BEFORE the socket: the payload is on disk even though the request
+  // above is still hanging and will never come back.
+  const q = JSON.parse(await fs.readFile(rep.queuePath(), "utf8"));
+  ok("...with the acceptance already on disk", q.length === 1);
+  ok("...carrying the same install id", q[0]?.payload?.installId === p.installId);
+}
+
 // --- 5. a failure queues, and a success does not ----------------------------
 {
   await clearQueue();
@@ -173,9 +197,14 @@ const clearQueue = () => fs.rm(rep.queuePath(), { force: true }).catch(() => {})
   // Source-level, because the property is "no other code path calls this". The
   // only callers may be the accept handler and the launch-time drain.
   const w = read("electron", "welcome.js");
-  ok("the report is made from the accept handler", /report\(buildPayload\(/.test(w));
+  ok("the report is made from the accept handler", /reportDurable\(buildPayload\(/.test(w));
   ok("...after the local record is written",
-    w.indexOf("recordAcceptance(terms, version)") < w.indexOf("report(buildPayload("));
+    w.indexOf("recordAcceptance(terms, version)") < w.indexOf("reportDurable(buildPayload("));
+  // It must be the DURABLE variant. report() waits for the server, and awaiting
+  // it here is what held the first-run window open for up to ten seconds and
+  // lost the acceptance outright if the process exited mid-request.
+  ok("...via the variant that does not wait for the server",
+    !/await report\(/.test(w));
 
   const main = read("electron", "main.js");
   ok("the queue is drained at launch", /drainQueue\(\)/.test(main));

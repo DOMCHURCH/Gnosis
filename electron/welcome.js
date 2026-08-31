@@ -21,7 +21,7 @@
 import { BrowserWindow, ipcMain, app, shell } from "electron";
 import { readFileSync } from "node:fs";
 import { loadTerms, isAccepted, recordAcceptance, readAcceptance, acceptancePath } from "./acceptance.js";
-import { report, buildPayload, isConfigured } from "./acceptance-report.js";
+import { reportDurable, buildPayload, isConfigured } from "./acceptance-report.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -150,11 +150,18 @@ export async function maybeShowWelcome({ getWindow }) {
 
         // Then, and only then, the copy the user cannot edit. Local first is
         // deliberate: the local record is what gates this window, so it must be
-        // durable before anything touches the network. This call is awaited but
-        // cannot throw and cannot block for long — it queues on failure.
+        // durable before anything touches the network.
+        //
+        // reportDurable writes the payload to the queue and returns — it does
+        // NOT wait for the server. Awaiting the send here used to hold this
+        // window open for up to ten seconds on a slow or unreachable server,
+        // which on first run reads as a hang, and it meant an app that exited
+        // mid-request lost the acceptance entirely. The queue makes the record
+        // durable before any socket opens; the send follows in the background
+        // and the next launch retries whatever is left.
         const rec = await readAcceptance();
         if (entry && rec?.machine) {
-          await report(buildPayload({ machine: rec.machine, entry, email: payload?.email }));
+          await reportDurable(buildPayload({ machine: rec.machine, entry, email: payload?.email }));
         }
       } catch {
         /* a record we could not write must not trap the user in this window */

@@ -176,6 +176,61 @@ export async function report(payload, fetchImpl = globalThis.fetch) {
 }
 
 /**
+ * Record an acceptance durably, without making the user wait for the network.
+ *
+ * This is what the welcome window calls, and it exists because the obvious
+ * shape — await report(), then close the window — got both halves wrong:
+ *
+ *   THE USER WAITED. postOnce allows TIMEOUT_MS (10s) for an answer. Awaiting
+ *   it before closing meant a first-run click on Accept could sit on an
+ *   apparently frozen window for ten seconds against a slow or unreachable
+ *   server. "Offline must never block acceptance" has to mean the UI too, not
+ *   just the record.
+ *
+ *   AND IT COULD STILL BE LOST. report() only queues AFTER a request comes
+ *   back as transient. A process that exits mid-request — quit, crash, sleep —
+ *   never reaches that line, so the payload was neither sent nor kept, and the
+ *   acceptance was silently absent from the server forever.
+ *
+ * Queueing FIRST fixes both. The payload is on disk before any socket opens,
+ * so the worst case is a duplicate send that the server already answers
+ * idempotently (same id, created:false). The send then happens in the
+ * background and clears the queue entry on success; if it does not, the next
+ * launch's drainQueue picks it up.
+ *
+ * Returns immediately after the durable write. Never throws.
+ */
+export async function reportDurable(payload, fetchImpl = globalThis.fetch) {
+  if (PLACEHOLDER) return "skipped";
+  await enqueue(payload);
+  // Deliberately NOT awaited: the caller is free to close its window now.
+  void (async () => {
+    const outcome = await postOnce(payload, fetchImpl);
+    // "drop" clears it too — a payload the server calls malformed will never
+    // become valid, and leaving it queued would retry it sixty times for
+    // nothing.
+    if (outcome === "sent" || outcome === "drop") await dequeue(payload);
+  })();
+  return "queued";
+}
+
+const sameRecord = (a, b) =>
+  a?.installId === b?.installId && a?.termsSha256 === b?.termsSha256;
+
+/** Add a payload to the queue unless the same acceptance is already waiting. */
+export async function enqueue(payload) {
+  const queue = await readQueue();
+  if (queue.some((q) => sameRecord(q?.payload, payload))) return;
+  await writeQueue([...queue, { payload, attempts: 0 }]);
+}
+
+/** Remove a payload from the queue. */
+export async function dequeue(payload) {
+  const queue = await readQueue();
+  await writeQueue(queue.filter((q) => !sameRecord(q?.payload, payload)));
+}
+
+/**
  * Retry everything queued. Called once at launch.
  *
  * Runs after the window is already up — draining a queue is never a reason for
