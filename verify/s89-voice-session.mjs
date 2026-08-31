@@ -93,7 +93,17 @@ ok("...and a shield that badges a count", /id="shieldBtn"/.test(overlay) && /id=
 ok("the expanded panel has the four tabs",
   ["permissions", "memory", "tools", "settings"].every((t) => overlay.includes(`data-tab="${t}"`)));
 ok("...state labels", /LISTENING/.test(overlay) && /PROCESSING/.test(overlay) && /READY/.test(overlay));
-ok("...an ESC TO END hint", /ESC TO END/.test(overlay));
+// The hint names BOTH exits now, because there are two and they do different
+// things: Esc ends the conversation and leaves the wake word armed, the × turns
+// voice off outright. It used to say only "ESC TO END", while the pill's own
+// hint promised a × that did not exist in the markup at all.
+ok("...a hint naming the Esc exit", /ESC ENDS CHAT/.test(overlay));
+ok("...and the × exit", /TURNS VOICE OFF/.test(overlay));
+ok("the × actually exists in the markup", /id="closeBtn"/.test(overlay));
+ok("...and turns voice off rather than merely ending the session",
+  /stopVoice\(\)/.test(overlay) && /ipcMain\.on\("voice:stop-voice"/.test(voice));
+// The two exits must stay distinct: a × wired to endSession is the original bug.
+ok("Esc still only ends the conversation", /Escape[\s\S]{0,120}voice\.endSession\(\)/.test(overlay));
 ok("...a Clear all link", /id="clearAll"/.test(overlay));
 ok("...and the footer promise", /always ask before taking actions/.test(overlay));
 ok("Esc ends the session", /e\.key === "Escape"/.test(overlay));

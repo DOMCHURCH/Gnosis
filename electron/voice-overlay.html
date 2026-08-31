@@ -25,10 +25,19 @@
         --violet: #8b7cf6;
         --magenta: #e879f9;
         --text: #e6e9f0;
-        --dim: #8b93a3;
-        --dimmer: #5c6373;
-        --line: rgba(255, 255, 255, 0.08);
+        /* Raised from #8b93a3 / #5c6373. Those were picked against the old
+         * near-opaque dark panel; over a translucent surface whose backdrop can
+         * be anything, the dimmer of the two fell well under WCAG AA for body
+         * text — the footer note was legibly there and practically unreadable.
+         * These clear 4.5:1 against the darkest the scrim guarantees. */
+        --dim: #cdd4de;
+        --dimmer: #b9c1cd;
+        --line: rgba(255, 255, 255, 0.14);
         --ease: 220ms cubic-bezier(0.22, 1, 0.36, 1);
+        /* Collapsed is a pill: the radius is half the height, whatever the
+         * height turns out to be. Hard-coding 999px worked only because the
+         * window happened to be 92px tall — see the responsive note below. */
+        --radius: 999px;
       }
       html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
       body {
@@ -41,80 +50,140 @@
       button { font: inherit; color: inherit; cursor: pointer; }
 
       /*
-       * LIQUID GLASS, not a colored blur.
+       * FROSTED GLASS — the standard recipe, not a heavy blur.
        *
-       * The previous version was a dark, near-opaque tint (rgba(12,13,20,0.72))
-       * wrapped in a cyan/violet/magenta gradient border. That reads as "a panel
-       * with a glow", because a strong colour and a strong tint both fight the
-       * thing that makes glass read as glass: you should see THROUGH it, not AT
-       * it. Real glass is defined by what it does to the light passing through —
-       * refraction, saturation, a rim catching one light source — not by being
-       * painted a colour.
+       * Two things were making this read as a grey blob rather than glass.
        *
-       * Three layers now, each doing one job:
+       * 1. The blur was far too strong (38px). Past roughly 20px every backdrop
+       *    averages out to its own mean colour, and the mean of anything is
+       *    grey. Glass reads as glass because you can still make out WHAT is
+       *    behind it — shapes, edges, colour — just softened. 16px keeps that;
+       *    38px destroys the very information the effect is made of, and no
+       *    amount of saturate() puts back detail that has already been averaged
+       *    away.
+       * 2. The fill was 5.5% white and the shadow was pure black. A near-zero
+       *    fill leaves nothing to catch light, and a black shadow drains colour
+       *    from everything it touches. The fill is now 10% and the shadow is
+       *    BLUE (rgba(31,38,135,.37)) — a coloured shadow is what makes the
+       *    surface look lifted off the page instead of stamped into it.
+       *
+       * The animated SVG feDisplacementMap that used to be chained onto
+       * backdrop-filter is gone. It re-evaluated a turbulence filter over the
+       * whole backdrop every frame, on a window that floats permanently above
+       * real work — the compositor cost was real and the payoff was a warp
+       * nobody could see through a 38px blur anyway. Smooth beats clever here.
+       *
+       * Three layers, each doing one job:
        *   .frame  — the rim. A bright highlight along the TOP edge only, fading
-       *             to almost nothing by the bottom — light from above catching
-       *             a curved edge, not a gradient wrapping the whole shape.
-       *   .glass  — the body. A near-transparent white wash (6%, not a colour)
-       *             over a heavy blur+saturate, so whatever is behind reads as
-       *             vivid-through-frost rather than washed to grey.
-       *   .liquid — the refraction. An SVG feTurbulence + feDisplacementMap
-       *             chained onto the SAME backdrop-filter (Chromium accepts an
-       *             SVG filter reference inside backdrop-filter), so what shows
-       *             through the glass visibly warps rather than sitting as a
-       *             static blur. The turbulence's own baseFrequency animates
-       *             slowly, which is what reads as "liquid" instead of "foggy".
+       *             out by the bottom: light from above catching a curved edge,
+       *             not a gradient wrapping the whole shape.
+       *   .glass  — the body. Blur + saturate + a low-opacity white fill, so
+       *             what is behind reads as vivid-through-frost, not washed out.
+       *   ::before/::after — the specular highlight, and a soft scrim that keeps
+       *             text legible over a backdrop we do not control.
        */
       .frame {
         height: 100%;
         box-sizing: border-box;
         padding: 1px;
-        border-radius: 999px;
+        border-radius: var(--radius);
         background: linear-gradient(180deg,
           rgba(255, 255, 255, 0.75) 0%,
           rgba(255, 255, 255, 0.22) 14%,
           rgba(255, 255, 255, 0.05) 32%,
           rgba(255, 255, 255, 0.02) 55%,
           rgba(255, 255, 255, 0.14) 100%);
-        box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.85), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+        /* The coloured lift, then a short contact shadow to seat it. */
+        box-shadow:
+          0 8px 32px 0 rgba(31, 38, 135, 0.37),
+          0 16px 48px -12px rgba(10, 12, 30, 0.55),
+          0 2px 6px -2px rgba(0, 0, 0, 0.4);
         transition: border-radius var(--ease);
       }
       .glass {
         height: 100%;
         box-sizing: border-box;
-        border-radius: 999px;
-        /* Clear frosted glass: almost no tint at all. Any more than this and it
-         * stops being "glass with something behind it" and becomes a panel
-         * again. */
-        background: rgba(255, 255, 255, 0.055);
-        backdrop-filter: blur(38px) saturate(1.85) url(#liquidDistort);
-        -webkit-backdrop-filter: blur(38px) saturate(1.85);
+        border-radius: var(--radius);
+        /* Low-opacity fill: enough to catch the rim light and hold the surface
+         * together, not enough to become a painted panel. */
+        background: rgba(255, 255, 255, 0.10);
+        /* The 1px inner edge — light catching the lip of the glass from inside.
+         * inset, so it survives the .frame gradient sitting outside it. */
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.20);
+        /*
+         * brightness(0.45) is the contrast guarantee, and it is why the text
+         * colours below can stay honestly dim.
+         *
+         * This panel floats over whatever the user has on screen, which can be a
+         * white document — and light text on frosted white is unreadable no
+         * matter how the fill is tuned. brightness() clamps the backdrop BEFORE
+         * anything is composited over it, so a white desktop arrives as mid-grey
+         * while a dark or colourful one keeps its hue and detail (brightness
+         * scales channels, it does not wash them toward grey the way a heavier
+         * opaque scrim would). With the scrim below it, every text colour in
+         * here clears WCAG AA against a pure-white backdrop — the worst case —
+         * which is checked numerically rather than guessed at.
+         */
+        backdrop-filter: blur(16px) saturate(1.8) brightness(0.45);
+        -webkit-backdrop-filter: blur(16px) saturate(1.8) brightness(0.45);
         overflow: hidden;
         position: relative;
         transition: border-radius var(--ease);
       }
-      /* A second, faint highlight sweeping the inside of the curve — the
-       * "wet, reflective" quality asked for. Positioned top-left, since that is
-       * where the rim light already lives; a specular highlight not aligned with
-       * its own rim light reads as two different light sources. Static (not
-       * animated): a highlight that visibly moves on its own, with nothing
-       * moving the glass, reads as a shimmer effect rather than a material. */
+      /* The specular highlight — top-left, aligned with the rim light above it,
+       * because a highlight that does not agree with its own rim light reads as
+       * two light sources. Static: a highlight that moves on its own, with
+       * nothing moving the glass, reads as a shimmer effect, not a material. */
       .glass::before {
         content: "";
         position: absolute;
         inset: 0;
         pointer-events: none;
-        background: radial-gradient(140px 70px at 18% -20%, rgba(255, 255, 255, 0.35), transparent 70%);
+        background: radial-gradient(140px 70px at 18% -20%, rgba(255, 255, 255, 0.30), transparent 70%);
         mix-blend-mode: screen;
       }
-      body.expanded .frame, body.expanded .glass { border-radius: 22px; }
-      @media (prefers-reduced-motion: reduce) {
-        .glass { backdrop-filter: blur(38px) saturate(1.85); }
+      /*
+       * The contrast floor. Everything above is transparent by design, and the
+       * backdrop is whatever the user happens to have on screen — which can be a
+       * white document, where --text (#e6e9f0) on 10% white would be unreadable
+       * and nowhere near WCAG AA.
+       *
+       * So: a soft dark scrim under the content, strongest where the text
+       * actually sits (left, where the state label and transcript live) and
+       * fading out across the rest so the glass still reads as transparent. This
+       * is what lets the fill above stay honestly low-opacity instead of being
+       * quietly raised until text happened to be legible.
+       */
+      .glass::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: rgba(8, 10, 18, 0.45);
       }
+      /* Content sits above both pseudo-layers. */
+      #collapsed, #expanded { position: relative; z-index: 1; }
+      body.expanded { --radius: 22px; }
 
-      /* ------------------------------------------------------------ collapsed */
-      #collapsed { height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; box-sizing: border-box; }
+      /* ------------------------------------------------------------ collapsed
+       *
+       * The right-hand padding is not cosmetic. The pill's right end is a
+       * semicircular cap of radius h/2, so a round control parked near it is
+       * clipped by the curve long before its bounding box leaves the element —
+       * the shield read as fused to the edge (VOICE-UI-ISSUES.md #2) because
+       * 10px of padding is only 10px at the exact vertical centre and less
+       * everywhere else, and the notification badge (which overhangs the shield
+       * by 2px on two sides) came within a couple of pixels of the rim.
+       *
+       * The controls now sit in their own group inset far enough that the badge
+       * corner clears the cap with room to spare, and the gap is what separates
+       * them from the waveform rather than the window edge doing it.
+       */
+      #collapsed { height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 20px 0 18px; box-sizing: border-box; }
       body.expanded #collapsed { display: none; }
+      /* The shield and × travel together, so one gap governs the pair and
+       * neither can drift into the curve on its own. */
+      .pillActions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
       .orb { position: relative; width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; }
       .orb .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(139, 124, 246, 0.35); }
@@ -130,20 +199,42 @@
       }
       @media (prefers-reduced-motion: reduce) { .orb .dot { animation: none; } }
 
-      .pillText { flex: 0 0 auto; min-width: 0; }
-      #pillState { font-size: 13px; font-weight: 500; white-space: nowrap; }
-      #pillHint { font-size: 10.5px; color: var(--dimmer); white-space: nowrap; margin-top: 1px; }
-      #pillWave { flex: 1 1 auto; height: 26px; min-width: 60px; }
+      /*
+       * `flex: 0 0 auto` here meant the label refused to give up a single pixel,
+       * so on a narrow pill it was the waveform that collapsed to nothing and
+       * then the CONTROLS that got pushed out past the rounded edge and clipped
+       * by overflow:hidden — the × simply was not there any more. Priority now
+       * runs: controls (never shrink) > label (shrinks, ellipsises) > waveform
+       * (goes first, and is the one thing nobody needs to operate the panel).
+       */
+      .pillText { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+      #pillState { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #pillHint { font-size: 10.5px; color: var(--dimmer); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+      /* Below this the waveform is a sliver and the hint is a row of dots; drop
+       * both rather than render two things too small to mean anything. */
+      @media (max-width: 380px) {
+        #pillWave { display: none; }
+        #pillHint { display: none; }
+      }
+      /* min-width:0 (not 60px) is what lets this actually give way when the pill
+       * is narrow — a flex item's default min-width is auto, so without it the
+       * canvas refuses to shrink and pushes the shield and × off the edge. */
+      #pillWave { flex: 1 1 auto; height: 26px; min-width: 0; display: block; }
 
-      .shield {
+      .shield, .closeBtn {
         position: relative; flex: 0 0 auto;
-        width: 40px; height: 40px; border-radius: 50%;
-        border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04);
+        width: 34px; height: 34px; border-radius: 50%;
+        border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06);
         display: grid; place-items: center;
         transition: background-color var(--ease), border-color var(--ease);
       }
-      .shield:hover { background: rgba(139, 124, 246, 0.16); border-color: rgba(139, 124, 246, 0.5); }
-      .shield svg { width: 16px; height: 16px; stroke: var(--dim); fill: none; stroke-width: 1.6; }
+      .shield:hover { background: rgba(139, 124, 246, 0.20); border-color: rgba(139, 124, 246, 0.55); }
+      .shield svg, .closeBtn svg { width: 15px; height: 15px; stroke: var(--dim); fill: none; stroke-width: 1.6; }
+      /* The × is a stop button, so it warms to red rather than to the accent —
+       * it turns the feature off, which is not the same kind of action as
+       * opening a panel. */
+      .closeBtn:hover { background: rgba(248, 113, 113, 0.20); border-color: rgba(248, 113, 113, 0.55); }
+      .closeBtn:hover svg { stroke: #fca5a5; }
       .badge {
         position: absolute; top: -2px; right: -2px; min-width: 17px; height: 17px; padding: 0 4px;
         border-radius: 999px; background: linear-gradient(135deg, var(--violet), var(--magenta));
@@ -157,7 +248,41 @@
       #expanded { display: none; height: 100%; box-sizing: border-box; }
       body.expanded #expanded { display: flex; }
 
-      .left { flex: 0 0 300px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+      /*
+       * The conversation column. `flex: 0 0 300px` was the single worst
+       * fixed-pixel assumption in here (VOICE-UI-ISSUES.md #3): at any width
+       * below ~620px it refused to give up a pixel, so the tab strip and the
+       * permission cards were squeezed to nothing while this column sat at its
+       * full size. It now has a preferred width it will shrink from, and a floor
+       * it will not go under.
+       */
+      .left {
+        flex: 1 1 300px; max-width: 340px; min-width: 190px;
+        padding: 20px; box-sizing: border-box;
+        display: flex; flex-direction: column; min-height: 0;
+        border-right: 1px solid var(--line);
+      }
+      /* Below this the two-column split stops being a split — the right pane
+       * would be narrower than a single permission card's buttons. Stack it, and
+       * let the conversation column keep the top. */
+      @media (max-width: 560px) {
+        #expanded { flex-direction: column; }
+        /* `flex: 0 0 auto` here pushed .right — and with it the × pinned to its
+         * corner — clean off the bottom of a short panel. The conversation
+         * column gives way first; the controls are what must stay reachable. */
+        .left {
+          flex: 0 1 auto; min-height: 0; max-width: none; overflow: hidden;
+          border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px;
+        }
+        .right { flex: 1 1 auto; min-height: 0; padding: 12px 16px 14px; }
+        .bigOrb { display: none; } /* the collapsed pill's orb already said this */
+      }
+      /* A short window (a small display, or a scaled one) has no room for the
+       * orb and the step rail on top of the actual conversation. */
+      @media (max-height: 260px) {
+        .bigOrb { display: none; }
+        .steps { display: none; }
+      }
       .bigOrb { position: relative; width: 74px; height: 74px; flex: 0 0 auto; display: grid; place-items: center; margin-bottom: 14px; }
       .bigOrb .arc { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--cyan); border-left-color: var(--violet); animation: spin 3.4s linear infinite; }
       @keyframes spin { to { transform: rotate(360deg); } }
@@ -170,17 +295,31 @@
       #response { font-size: 11.5px; color: var(--dim); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
       .spacer { flex: 1 1 auto; min-height: 8px; }
 
-      .steps { display: flex; align-items: center; gap: 10px; white-space: nowrap; padding-top: 12px; border-top: 1px solid var(--line); font-size: 9.5px; letter-spacing: 0.1em; color: var(--dimmer); }
+      .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 9.5px; letter-spacing: 0.1em; color: var(--dimmer); }
       .step { display: flex; align-items: center; gap: 5px; }
       .step .bullet { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--dimmer); }
       .step.on { color: var(--text); }
       .step.on .bullet { background: #4ade80; border-color: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
       #escHint { margin-left: auto; color: var(--dimmer); white-space: nowrap; }
 
-      .right { flex: 1 1 auto; min-width: 0; padding: 16px 18px; box-sizing: border-box; display: flex; flex-direction: column; }
-      .tabs { display: flex; gap: 6px; flex: 0 0 auto; margin-bottom: 14px; }
+      .right { position: relative; flex: 1 1 auto; min-width: 0; padding: 16px 18px; box-sizing: border-box; display: flex; flex-direction: column; }
+      /* The tab strip wraps rather than overflowing: at a narrow width four tabs
+       * do not fit on one line, and a non-wrapping strip pushed them off the
+       * edge of the panel entirely. The right padding is the ×'s parking space. */
+      .tabs { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; margin-bottom: 14px; padding-right: 34px; }
+      /* The × is OUT of the wrapping flow. As a flex item it was pushed onto a
+       * second line the moment the four tabs filled the first one — a close
+       * button floating on its own row under the tabs, which is exactly where a
+       * close button should not be. Pinned to the panel's top-right corner it
+       * stays put at every width. */
+      .right > .closeBtn { position: absolute; top: 14px; right: 16px; z-index: 2; width: 28px; height: 28px; }
+      .right > .closeBtn svg { width: 13px; height: 13px; }
       .tab {
-        display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px;
+        /* 12px of horizontal padding put the four tabs 17px over the width left
+         * after the ×'s reserved corner, so "Settings" wrapped to a second row.
+         * 9px fits them on one line with room to spare at the panel's design
+         * width, and the strip still wraps gracefully below it. */
+        display: flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 9px;
         border: 1px solid transparent; background: transparent; color: var(--dim); font-size: 11.5px;
         transition: background-color var(--ease), color var(--ease);
       }
@@ -220,28 +359,6 @@
     </style>
   </head>
   <body>
-    <!--
-      The refraction filter `.glass` applies through backdrop-filter.
-      `width/height: 0` plus `position: absolute` (not display:none) keeps this
-      out of layout and out of sight while leaving its <animate> running — a
-      hidden ancestor with display:none stops SMIL animation in Chromium, which
-      would leave the distortion frozen on its first frame.
-    -->
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
-      <filter id="liquidDistort" x="-25%" y="-25%" width="150%" height="150%">
-        <!-- Low-frequency, low-octave noise: cheap to evaluate every frame, and
-             coarse noise is what reads as a WARP (things bend) rather than a
-             GRAIN (things sparkle) — the latter reads as noise, not liquid. -->
-        <feTurbulence type="fractalNoise" baseFrequency="0.010 0.014" numOctaves="2" seed="7" result="noise">
-          <animate attributeName="baseFrequency" dur="16s" repeatCount="indefinite"
-            values="0.010 0.014; 0.014 0.009; 0.009 0.015; 0.010 0.014" />
-        </feTurbulence>
-        <!-- The displacement itself. `scale` is the max pixel offset — kept
-             small (10) because this floats over real work: the goal is "the
-             glass gently bends what's under it", not a funhouse mirror. -->
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-    </svg>
     <div class="frame">
       <div class="glass">
         <!-- ----------------------------------------------------- collapsed -->
@@ -249,13 +366,18 @@
           <div class="orb"><div class="ring"></div><div class="dot"></div></div>
           <div class="pillText">
             <div id="pillState">Listening…</div>
-            <div id="pillHint">say “stop listening” or press Esc to end</div>
+            <div id="pillHint">Esc ends the chat · × turns voice off</div>
           </div>
-          <canvas id="pillWave" width="440" height="26"></canvas>
-          <button class="shield" id="shieldBtn" type="button" tabindex="-1" title="Permissions">
-            <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3z"/></svg>
-            <span class="badge" id="badge">0</span>
-          </button>
+          <canvas id="pillWave"></canvas>
+          <div class="pillActions">
+            <button class="shield" id="shieldBtn" type="button" tabindex="-1" title="Permissions">
+              <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3z"/></svg>
+              <span class="badge" id="badge">0</span>
+            </button>
+            <button class="closeBtn" id="closeBtn" type="button" tabindex="-1" title="Turn voice off (Esc ends the conversation but keeps the wake word)">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
         </div>
 
         <!-- ------------------------------------------------------ expanded -->
@@ -263,7 +385,7 @@
           <div class="left">
             <div class="bigOrb"><div class="arc"></div><div class="core"></div></div>
             <div id="bigState">Listening…</div>
-            <canvas id="bigWave" width="520" height="26"></canvas>
+            <canvas id="bigWave"></canvas>
             <div id="transcript"></div>
             <div id="response"></div>
             <div class="spacer"></div>
@@ -271,11 +393,14 @@
               <span class="step" id="stepListening"><span class="bullet"></span>LISTENING</span>
               <span class="step" id="stepProcessing"><span class="bullet"></span>PROCESSING</span>
               <span class="step" id="stepReady"><span class="bullet"></span>READY</span>
-              <span id="escHint">ESC TO END</span>
+              <span id="escHint">ESC ENDS CHAT · × TURNS VOICE OFF</span>
             </div>
           </div>
 
           <div class="right">
+            <button class="closeBtn" id="closeBtn2" type="button" tabindex="-1" title="Turn voice off (Esc ends the conversation but keeps the wake word)">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
             <div class="tabs">
               <button class="tab active" data-tab="permissions" type="button" tabindex="-1">
                 <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3z"/></svg>Permissions
@@ -339,18 +464,49 @@
         g.quadraticCurveTo(last.x, last.y, last.x, last.y);
       }
 
+      /*
+       * Match the canvas backing store to the size it is actually displayed at.
+       *
+       * Both canvases used to carry hard-coded width/height attributes (440x26
+       * and 520x26) while their CSS width was `flex: 1 1 auto` / `100%`. The
+       * backing store is what you draw into; the CSS box is what it is scaled to
+       * on screen. Whenever those two disagree the browser stretches the result,
+       * so the waveform was drawn at one aspect ratio and squashed into another
+       * — the visible half of VOICE-UI-ISSUES.md #3, and it got worse the
+       * further the window was from the one size the numbers were written for.
+       *
+       * devicePixelRatio is folded in for the same reason: on a scaled display a
+       * 1:1 backing store is upscaled by the compositor and the 1px rim light
+       * turns to mush.
+       */
+      function fitCanvas(cv) {
+        if (!cv) return false;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2); // 2x is plenty; 3x is just heat
+        const w = Math.round(cv.clientWidth * dpr);
+        const h = Math.round(cv.clientHeight * dpr);
+        if (!w || !h) return false;
+        if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+        return true;
+      }
+
       function drawInto(cv) {
-        if (!cv || !cv.clientWidth) return;
+        if (!fitCanvas(cv)) return;
         const g = cv.getContext("2d");
         const w = cv.width, h = cv.height, mid = h / 2;
         g.clearRect(0, 0, w, h);
+
+        // Line widths and highlight radii are in backing-store pixels, so they
+        // have to scale with it — otherwise a 1.1px rim light on a 2x display is
+        // a half-pixel hairline and the specular highlight is half the size it
+        // was drawn to be.
+        const s = w / Math.max(1, cv.clientWidth);
 
         const step = w / (BARS - 1);
         const top = [], bottom = [];
         let peakX = 0, peakY = mid, peakV = -1;
         for (let i = 0; i < BARS; i++) {
           const v = Math.min(1, history[i] * 7); // speech RMS sits well under 0.2
-          const amp = Math.max(1.5, v * (h / 2 - 2)); // a floor, so idle still lives
+          const amp = Math.max(1.5 * s, v * (h / 2 - 2 * s)); // a floor, so idle still lives
           const x = i * step;
           top.push({ x, y: mid - amp });
           bottom.push({ x, y: mid + amp });
@@ -375,9 +531,9 @@
         g.beginPath();
         traceSmooth(g, top);
         g.strokeStyle = "rgba(255,255,255,0.8)";
-        g.lineWidth = 1.1;
+        g.lineWidth = 1.1 * s;
         g.shadowColor = "rgba(255,255,255,0.6)";
-        g.shadowBlur = 4;
+        g.shadowBlur = 4 * s;
         g.stroke();
         g.shadowBlur = 0;
 
@@ -386,12 +542,13 @@
         // "wet" rather than "lit": a fixed highlight on a moving surface looks
         // painted on; one that tracks the surface looks reflected off it.
         if (peakV > 0.04) {
-          const spec = g.createRadialGradient(peakX, peakY, 0, peakX, peakY, 16);
+          const r = 16 * s;
+          const spec = g.createRadialGradient(peakX, peakY, 0, peakX, peakY, r);
           spec.addColorStop(0, `rgba(255,255,255,${0.55 * Math.min(1, peakV * 1.4)})`);
           spec.addColorStop(1, "rgba(255,255,255,0)");
           g.fillStyle = spec;
           g.beginPath();
-          g.arc(peakX, peakY, 16, 0, Math.PI * 2);
+          g.arc(peakX, peakY, r, 0, Math.PI * 2);
           g.fill();
         }
       }
@@ -405,14 +562,12 @@
       }
       tick();
 
-      // Reduced motion: freeze the turbulence's baseFrequency animation rather
-      // than removing the distortion outright — a still, slightly-refracted
-      // glass is closer to what's asked for than a flat blur, and this is the
-      // one place vestibular-motion guidance (parallax/zoom/pan) doesn't apply,
-      // since nothing on screen appears to move on its own.
-      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-        document.getElementById("liquidDistort")?.querySelector("animate")?.remove();
-      }
+      // A resize has to re-fit the canvases before the next frame draws into
+      // them. The rAF loop calls fitCanvas() anyway, so this exists for the one
+      // case the loop cannot see: the collapsed↔expanded swap changes which
+      // canvas is visible AND the window size at the same moment.
+      const refit = () => { fitCanvas($("pillWave")); fitCanvas($("bigWave")); };
+      window.addEventListener("resize", refit);
 
       // ------------------------------------------------------------- state
       let expanded = false;
@@ -431,12 +586,25 @@
 
       $("shieldBtn").addEventListener("click", () => setExpanded(!expanded));
       $("collapsed").addEventListener("click", (e) => {
-        if (e.target.closest("#shieldBtn")) return;
+        if (e.target.closest("#shieldBtn") || e.target.closest(".closeBtn")) return;
         setExpanded(true);
       });
 
-      // Esc ends the session. The hint says so, and it is the one key people
-      // already try on a floating panel.
+      // The × turns voice OFF — detector down, microphone released, setting
+      // persisted. It used only to end the conversation, which left the app
+      // listening for "hey jarvis" behind a panel the user had just dismissed
+      // (VOICE-UI-ISSUES.md #5). Closing the thing that represents a feature
+      // has to turn the feature off.
+      for (const b of document.querySelectorAll(".closeBtn")) {
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          window.voice.stopVoice();
+        });
+      }
+
+      // Esc is the lighter exit: it ends this conversation and leaves the wake
+      // word armed, so the next "hey jarvis" opens a new one. Two different
+      // actions, and the hints below name which is which.
       window.addEventListener("keydown", (e) => {
         if (e.key === "Escape") window.voice.endSession();
       });

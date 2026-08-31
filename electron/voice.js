@@ -216,19 +216,52 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   /** The two shapes the panel takes. The page decides which; this owns the size. */
   const OVERLAY = { collapsed: { w: 440, h: 92 }, expanded: { w: 720, h: 320 } };
 
-  /** Resize in place, keeping it centred horizontally so it grows both ways
-   * rather than lurching off to one side. */
-  function resizeOverlay(state) {
-    if (!overlay || overlay.isDestroyed()) return;
+  /**
+   * The work area of whichever display the overlay is currently on (falling back
+   * to the main window's display, then the primary). Everything below sizes
+   * against this rather than against the constants, because the constants are
+   * only ever a REQUEST: 720x320 does not fit on a 1024x600 netbook or on a
+   * heavily scaled display, and asking for it anyway is what put the panel
+   * half off-screen (VOICE-UI-ISSUES.md #3).
+   */
+  function workAreaFor(win) {
+    try {
+      if (win && !win.isDestroyed()) return screen.getDisplayMatching(win.getBounds()).workArea;
+      const main = getWindow();
+      if (main && !main.isDestroyed()) return screen.getDisplayMatching(main.getBounds()).workArea;
+    } catch { /* a display can vanish mid-call when one is unplugged */ }
+    return screen.getPrimaryDisplay().workArea;
+  }
+
+  /**
+   * The bounds to actually use for `state` on `area`: the requested size capped
+   * to what fits (with a margin so it never sits flush against an edge), then
+   * positioned around `cx` and clamped so no part of it leaves the work area.
+   */
+  function boundsFor(state, area, cx) {
     const to = OVERLAY[state] ?? OVERLAY.collapsed;
+    const MARGIN = 16;
+    const w = Math.min(to.w, Math.max(240, area.width - MARGIN * 2));
+    const h = Math.min(to.h, Math.max(64, area.height - MARGIN * 2));
+    const x = Math.round(Math.min(Math.max(cx - w / 2, area.x + MARGIN), area.x + area.width - w - MARGIN));
+    // Sits above the bottom edge, but never pushed off the top of a short display.
+    const y = Math.round(Math.max(area.y + MARGIN, area.y + area.height - h - 48));
+    return { x, y, width: Math.round(w), height: Math.round(h) };
+  }
+
+  /** Which of the two shapes the page is currently in. Tracked rather than
+   * inferred from the window width, because boundsFor() caps that width on a
+   * small display — an expanded panel on a narrow screen can legitimately be
+   * narrower than the collapsed constant. */
+  let overlayState = "collapsed";
+
+  /** Resize in place, keeping it centred horizontally so it grows both ways
+   * rather than lurching off to one side — and on-screen at either size. */
+  function resizeOverlay(state) {
+    overlayState = state;
+    if (!overlay || overlay.isDestroyed()) return;
     const b = overlay.getBounds();
-    const cx = b.x + b.width / 2;
-    overlay.setBounds({
-      x: Math.round(cx - to.w / 2),
-      y: Math.round(b.y + b.height - to.h),
-      width: to.w,
-      height: to.h,
-    }, true);
+    overlay.setBounds(boundsFor(state, workAreaFor(overlay), b.x + b.width / 2), true);
   }
 
   function makeOverlay() {
@@ -237,17 +270,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // window: this is a separate window with NO parent, so the main window stays
     // fully usable — you can keep typing in Gnosis while the panel is up, and
     // moving or minimising the main window does not drag the panel with it.
-    const win = getWindow();
-    const area = screen.getDisplayNearestPoint(
-      win && !win.isDestroyed() ? screen.getDisplayMatching(win.getBounds()).bounds : screen.getPrimaryDisplay().bounds,
-    ).workArea;
-    const W = OVERLAY.collapsed.w;
-    const H = OVERLAY.collapsed.h;
+    const area = workAreaFor(getWindow());
+    overlayState = "collapsed"; // the page always loads in the pill state
+    const start = boundsFor("collapsed", area, area.x + area.width / 2);
     overlay = new BrowserWindow({
-      width: W,
-      height: H,
-      x: Math.round(area.x + (area.width - W) / 2),
-      y: Math.round(area.y + area.height - H - 48),
+      ...start,
       frame: false,
       transparent: true,
       resizable: false,
@@ -340,7 +367,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       transcript: "",
       response: "",
       model: currentModel(),
-      hint: "say “stop listening” or press × to end · 60s idle closes it",
+      hint: "say “stop listening” or press Esc · × turns voice off · 60s idle closes it",
     });
     if (Notification.isSupported()) {
       // The chime is the notification sound; the toast itself is deliberately
@@ -628,6 +655,19 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   });
 
   ipcMain.on("voice:resize", (_e, state) => resizeOverlay(state === "expanded" ? "expanded" : "collapsed"));
+
+  // Unplugging a monitor, changing resolution or changing the scale factor can
+  // leave a long-lived always-on-top window sitting on coordinates that no
+  // longer exist — the panel is simply gone, with no way to get it back short of
+  // restarting. Re-clamp it to whatever the display layout is now.
+  const reclamp = () => {
+    if (!overlay || overlay.isDestroyed() || !overlay.isVisible()) return;
+    const b = overlay.getBounds();
+    overlay.setBounds(boundsFor(overlayState, workAreaFor(overlay), b.x + b.width / 2));
+  };
+  screen.on("display-metrics-changed", reclamp);
+  screen.on("display-removed", reclamp);
+  screen.on("display-added", reclamp);
   ipcMain.on("voice:permission-answer", (_e, m) => answerPerm(m?.id, m?.answer === "yes" ? "yes" : "no"));
 
   /**
@@ -801,6 +841,33 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   });
   // The overlay's × — the one unambiguous "stop".
   ipcMain.on("voice:end-session", (e) => endSession(`overlay close (from wc ${e?.sender?.id ?? "?"})`));
+
+  /**
+   * The overlay's × — stop voice ENTIRELY, not just this conversation.
+   *
+   * endSession() alone was what the × used to do, and it left the wake-word
+   * detector running and the microphone engine open: the panel vanished but the
+   * app kept listening for "hey jarvis" until it was quit outright
+   * (VOICE-UI-ISSUES.md #5). Closing the thing that represents a feature has to
+   * turn the feature off, or the × is a lie about what it did.
+   *
+   * The config write is the other half. stop() flips the in-memory state, but
+   * the settings window reads config.voiceEnabled — without persisting, Settings
+   * would go on showing voice as ON while nothing was listening, which is a
+   * worse failure than the one being fixed. Written first so a failed save
+   * cannot leave the switch on with the detector already dead.
+   */
+  ipcMain.on("voice:stop-voice", () => {
+    void (async () => {
+      try {
+        const { saveConfig } = await import("../dist/config.js");
+        await saveConfig({ voiceEnabled: false });
+      } catch (e) {
+        vlog("voice.stop.persist-failed", { reason: String(e?.message ?? e) });
+      }
+      stop();
+    })();
+  });
   ipcMain.on("voice:engine-status", (_e, s) => {
     status = { ...status, ...s };
   });
@@ -818,6 +885,42 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     return diag;
   });
   ipcMain.handle("voice:test", async () => testWakeWord());
+
+  /**
+   * Install the Python side of voice, from the Settings button.
+   *
+   * The app has always been able to SAY that openWakeWord and Kokoro are
+   * missing; it has never been able to do anything about it. A fresh install
+   * therefore showed voice in Settings with a toggle that turned on a feature
+   * with nothing behind it, and the only route forward was a pip command the
+   * user had to find in a diagnostics table and run themselves.
+   *
+   * Progress is streamed back to the settings window as it goes: this downloads
+   * ~330MB of model weights, and a button that goes quiet for five minutes is
+   * indistinguishable from one that has hung.
+   */
+  ipcMain.handle("voice:setup", async (e, parts) => {
+    const { installVoiceDeps } = await import("./voicesetup.js");
+    const send = (s) => { if (!e.sender.isDestroyed()) e.sender.send("voice:setup-step", s); };
+    const r = await installVoiceDeps({
+      onStep: send,
+      parts: { wakeword: parts?.wakeword !== false, kokoro: parts?.kokoro !== false },
+    });
+    // The probes cache their answers, so a successful install would otherwise go
+    // unnoticed until the app was restarted — which is exactly the "I installed
+    // it and it still says it is missing" report this whole path exists to end.
+    try {
+      const { resetKokoro } = await import("./kokoro.js");
+      resetKokoro();
+    } catch { /* not fatal — the next restart picks it up */ }
+    if (r.ok && enabled) { stop(); await start(); } // reload the detector against the new packages
+    void probeKokoro().then((k) => {
+      diag.tts = k.ok
+        ? { engine: "kokoro", voices: k.voices, default: k.default, python: k.python, backend: k.backend }
+        : { engine: "sapi", voices: [], reason: k.reason };
+    });
+    return r;
+  });
   ipcMain.handle("voice:speak", async (_e, text) => {
     const { config } = await readEnv();
     return speak(text, { voice: config.kokoroVoice, play });

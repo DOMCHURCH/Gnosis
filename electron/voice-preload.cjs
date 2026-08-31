@@ -33,8 +33,13 @@ contextBridge.exposeInMainWorld("voice", {
   /** Live input level for the overlay's waveform — the same measurement the
    * settings meter reads, forwarded rather than re-captured. */
   onLevel: (cb) => ipcRenderer.on("voice:level-out", (_e, v) => cb(v)),
-  /** The overlay's × — ends the whole session, not just this turn. */
+  /** Esc — ends the conversation, leaving the wake word armed for the next
+   * "hey jarvis". The lighter of the two exits. */
   endSession: () => ipcRenderer.send("voice:end-session"),
+  /** The overlay's × — turns voice OFF, the same way the Settings switch does:
+   * detector stopped, microphone released, and the setting persisted so
+   * Settings does not go on claiming voice is on. */
+  stopVoice: () => ipcRenderer.send("voice:stop-voice"),
   /** Collapsed pill <-> expanded panel: the page owns the state, the main
    * process owns the window size. */
   resize: (state) => ipcRenderer.send("voice:resize", state),

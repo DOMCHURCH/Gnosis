@@ -1,24 +1,43 @@
-// Verify (voice overlay): the glass is glass, not a colored blur.
+// Verify (voice overlay): the glass is glass, not a grey blob.
 //
-// The previous material was rgba(12, 13, 20, 0.72) — a near-opaque dark tint —
-// wrapped in a cyan/violet/magenta gradient border. That reads as "a panel with
-// a glow": a strong tint and a strong colour both fight the one thing that makes
-// glass read as glass, which is seeing THROUGH it. This asserts the replacement
-// against the actual properties of real glass rather than against a mood:
+// This suite has been through two designs, and the history is the point.
 //
-//   - near-transparent (you can tell something is behind it)
-//   - refractive (what's behind visibly warps, not just blurs)
-//   - a rim catching light from one direction, not a rainbow wrapping the shape
+// The FIRST material was rgba(12,13,20,0.72) — a near-opaque dark tint wrapped
+// in a cyan/violet/magenta gradient border. That read as "a panel with a glow".
+// It was replaced by a near-transparent wash under a 38px blur with an animated
+// SVG feTurbulence/feDisplacementMap chained onto backdrop-filter.
+//
+// That second version is what this suite used to pin, and it was ALSO wrong, in
+// a way the assertions could not see because they checked for the mechanism
+// rather than the result. Two reasons (VOICE-UI-ISSUES.md #1):
+//
+//   - 38px of blur destroys the information the effect is made of. Past roughly
+//     20px a backdrop averages to its own mean colour, and the mean of anything
+//     is grey. saturate() cannot restore detail that has already been averaged
+//     away, so the panel read as a washed grey blob no matter how vivid the
+//     desktop behind it was. The refraction was invisible for the same reason:
+//     there was nothing left with an edge to bend.
+//   - The fill was 5.5% white and the shadow was pure black — nothing to catch
+//     light, and a shadow that drains colour from everything it touches.
+//
+// So the checks below now pin the RESULT the user asked for — the standard
+// frosted-glass recipe — rather than a particular filter graph:
+//
+//   - a moderate blur that leaves the backdrop legible
+//   - a low-opacity fill, a 1px lit edge, and a COLOURED lift shadow
+//   - a rim catching light from one direction, not a hue wrapped round the shape
+//   - text that clears WCAG AA over the worst backdrop (a white desktop)
 //   - the waveform reads as liquid motion, not a bar chart
 //
-// Rendering was also confirmed live: `.glass`'s COMPUTED backdrop-filter
-// resolved to `blur(38px) saturate(1.85) url("#liquidDistort")` (a typo'd
-// property name fails silently, so computed style is what actually matters),
-// and screenshots at the real window sizes (electron/voice.js OVERLAY: 440x92
-// collapsed, 720x320 expanded) over both a saturated rainbow background and a
-// near-black one show the rainbow's colours surviving through the blur, the
-// stripes bending across the panel's edge, and a rim highlight visible against
-// the dark background that isn't there at all in the old version.
+// The animated displacement filter is deliberately GONE, and there is an
+// assertion below that it stays gone: it re-evaluated a turbulence filter over
+// the whole backdrop every frame on a window that floats permanently above real
+// work, which is the compositor cost this project has repeatedly chosen not to
+// pay for an effect nobody could see.
+//
+// Rendering and geometry are checked for real, in a browser, by
+// s90-voice-overlay.mjs. This suite is the static half: it pins the intent in
+// the stylesheet so a future edit has to argue with the comments above.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,12 +48,16 @@ const overlay = readFileSync(path.join(root, "electron", "voice-overlay.html"), 
 let fails = 0;
 const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails++; };
 
-// --- near-transparent, not tinted ------------------------------------------
-ok("the glass body is a clear wash, not a dark panel", /background: rgba\(255, 255, 255, 0\.055\);/.test(overlay));
-ok("...low enough opacity to actually see through", (() => {
+// --- translucent, but with something there to catch light -------------------
+// A fill this low used to be 0.055, which is close enough to nothing that the
+// rim light had no surface to sit on. The band is two-sided on purpose: too high
+// and it is a painted panel again.
+ok("the glass body is a low-opacity wash, not a dark panel", (() => {
   const m = overlay.match(/\.glass \{[\s\S]*?background: rgba\(255, 255, 255, ([\d.]+)\);/);
-  return !!m && Number(m[1]) <= 0.1;
+  return !!m && Number(m[1]) >= 0.07 && Number(m[1]) <= 0.16;
 })());
+ok("...with a 1px lit edge along the inside of the lip",
+  /box-shadow: inset 0 0 0 1px rgba\(255, 255, 255, 0\.[12]\d?\)/.test(overlay));
 // The old dark tint, and the old colour-wrapped rim, must both be gone —
 // otherwise this is a second coat of paint over the first, not a replacement.
 ok("the old dark tint is gone", !/rgba\(12, 13, 20, 0\.72\)/.test(overlay));
@@ -44,29 +67,37 @@ ok("the old cyan/violet/magenta rim gradient is gone",
 // --- saturation, the cue that makes "through frost" read as vivid ----------
 {
   const m = overlay.match(/backdrop-filter:\s*blur\((\d+)px\)\s*saturate\(([\d.]+)\)/);
-  ok("blur is in the 30-40px range asked for", !!m && Number(m[1]) >= 30 && Number(m[1]) <= 40);
-  ok("saturation is boosted (~180%), not left flat", !!m && Number(m[2]) >= 1.6);
+  // The upper bound is the whole fix. Anything past ~20px averages the backdrop
+  // to its mean colour and the panel goes grey; that is what "still isn't
+  // reading as real glass" was.
+  ok("blur is moderate enough to keep the backdrop legible", !!m && Number(m[1]) >= 10 && Number(m[1]) <= 20);
+  ok("saturation is boosted, not left flat", !!m && Number(m[2]) >= 1.6);
+  // Contrast over an unknown desktop cannot be won with the fill alone; the
+  // backdrop itself is clamped. s90 computes the resulting ratios.
+  ok("the backdrop is clamped so text can pass WCAG over a white desktop", (() => {
+    const b = overlay.match(/backdrop-filter:[^;]*brightness\(([\d.]+)\)/);
+    return !!b && Number(b[1]) < 1;
+  })());
 }
 
-// --- real refraction, not a static blur -------------------------------------
-ok("an SVG turbulence+displacement filter is defined", /feTurbulence/.test(overlay) && /feDisplacementMap/.test(overlay));
-ok("...chained onto the SAME backdrop-filter as the blur",
-  /backdrop-filter:\s*blur\(\d+px\)\s*saturate\([\d.]+\)\s*url\(#liquidDistort\)/.test(overlay));
-ok("...displacing the actual backdrop content", /feDisplacementMap in="SourceGraphic"/.test(overlay));
-ok("the warp moves over time rather than sitting static",
-  /<animate attributeName="baseFrequency"/.test(overlay));
-// A static-looking hidden ancestor stops SMIL animation in Chromium.
-ok("the filter defs stay out of layout without stopping the animation",
-  /<svg width="0" height="0" style="position: absolute" aria-hidden="true">/.test(overlay));
-ok("reduced motion freezes the warp instead of leaving it moving",
-  /prefers-reduced-motion: reduce.*\)\.matches/.test(overlay) && /querySelector\("animate"\)\?\.remove\(\)/.test(overlay));
-// The displacement scale is a deliberate design choice (subtle bend, not a
-// funhouse mirror) — pin it so a future edit has to change this test to change
-// the feel, rather than drifting silently.
-ok("the displacement is subtle (scale <= 16px)", (() => {
-  const m = overlay.match(/feDisplacementMap[^>]*scale="(\d+)"/);
-  return !!m && Number(m[1]) <= 16;
+// --- the animated displacement filter is gone, and stays gone ---------------
+// Not a regression: a deliberate removal. See the header. Pinned so it cannot
+// creep back in the next time someone wants the panel to look livelier.
+// Matched as ELEMENTS, not as bare words: the stylesheet's comment explains why
+// the filter was removed and names it doing so, and a comment saying "this is
+// gone" must not read as evidence that it is still here.
+ok("no SVG turbulence/displacement filter remains",
+  !/<feTurbulence/.test(overlay) && !/<feDisplacementMap/.test(overlay) && !/<filter\b/.test(overlay));
+ok("...and backdrop-filter references no SVG filter", (() => {
+  const m = overlay.match(/backdrop-filter:([^;]*);/g) ?? [];
+  return m.length > 0 && m.every((d) => !/url\(/.test(d));
 })());
+ok("the now-orphaned filter id is gone too", !/liquidDistort/.test(overlay));
+
+// --- the shadow lifts the surface, and is coloured --------------------------
+// A pure-black shadow drains colour from everything it touches and reads as the
+// panel being stamped into the page rather than floating above it.
+ok("the lift shadow is coloured, not black", /0 8px 32px 0 rgba\(31, 38, 135, 0\.37\)/.test(overlay));
 
 // --- a rim, not a rainbow ----------------------------------------------------
 // One direction (top-down), fading out, not a hue wrapped around the whole
