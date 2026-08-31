@@ -20,8 +20,50 @@
       // no model and no network.
 
       const SILENCE_MS = 1500;
-      const SILENCE_RMS = 0.012; // below this counts as room tone
+      /*
+       * The speech gate is ADAPTIVE, not a fixed number.
+       *
+       * It used to be a flat `SILENCE_RMS = 0.012`: anything quieter counted as
+       * room tone and was thrown away. A whisper measures roughly 0.002-0.010
+       * RMS, so it sat entirely below the gate — `heardAnything` never became
+       * true, and the recorder discarded the whole utterance as silence. It was
+       * not that whispering transcribed badly; it never reached the transcriber.
+       *
+       * A fixed threshold cannot work anyway. The right value depends on the
+       * microphone, its gain, how far away it is and how loud the room is — all
+       * of which differ per machine and change during a session (a fan spins up,
+       * a window opens). Any constant is simultaneously too high for someone
+       * speaking quietly on a quiet mic and too low for a hot mic in a loud room.
+       *
+       * So the floor is measured instead. `noiseFloor` tracks the quietest
+       * recent audio, and speech is anything a clear multiple above it. That
+       * makes the gate self-calibrating: in a silent room it drops low enough to
+       * hear a whisper, and in a noisy one it rises rather than treating the
+       * noise as speech.
+       */
+      const GATE_MULT = 2.2;      // speech is this many times the noise floor
+      const GATE_MIN = 0.0025;    // absolute floor — below this is mic self-noise
+      const GATE_MAX = 0.02;      // never demand more than this, however loud the room
       const MAX_UTTERANCE_MS = 20000; // never record forever
+
+      // The rolling estimate of room tone. Seeded high so the first moments of a
+      // session do not treat a burst of speech as the floor; it falls fast and
+      // rises slowly, so a door slam does not deafen the gate for a minute.
+      let noiseFloor = 0.01;
+
+      /** Fold one RMS reading into the noise-floor estimate. */
+      function trackNoise(level) {
+        // Down fast (0.05) so an over-high estimate corrects within a second or
+        // two; up slowly (0.002) so speech itself barely lifts it.
+        const a = level < noiseFloor ? 0.05 : 0.002;
+        noiseFloor += (level - noiseFloor) * a;
+        if (!(noiseFloor > 0)) noiseFloor = GATE_MIN; // NaN/denormal guard
+      }
+
+      /** The level above which audio counts as speech, right now. */
+      function speechGate() {
+        return Math.min(GATE_MAX, Math.max(GATE_MIN, noiseFloor * GATE_MULT));
+      }
 
       let stream = null;
       let ctx = null;
@@ -34,7 +76,25 @@
       async function mic() {
         if (stream) return stream;
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+          audio: {
+            channelCount: 1,
+            // Load-bearing: this is half of the echo suppression that stops the
+            // assistant hearing its own reply and answering itself.
+            echoCancellation: true,
+            // OFF, deliberately. Chromium's noise suppressor is a spectral gate
+            // tuned to remove steady low-level signal — which is an excellent
+            // description of a whisper. With it on, quiet speech was being
+            // erased in the browser before any of our own thresholds saw it, so
+            // no amount of lowering the gate below could have recovered it.
+            // The adaptive floor above is what replaces it: it handles room
+            // noise by measuring it rather than by filtering the input.
+            noiseSuppression: false,
+            // ON: lifts a quiet or distant voice toward a level Whisper can
+            // actually transcribe. Whisper degrades badly on very low-amplitude
+            // audio, so capturing a whisper is only half the job — it has to
+            // arrive loud enough to be worth transcribing.
+            autoGainControl: true,
+          },
         });
         ctx = new AudioContext({ sampleRate: 16000 });
         const src = ctx.createMediaStreamSource(stream);
@@ -109,7 +169,13 @@
             const input = e.inputBuffer.getChannelData(0);
             chunks.push(new Float32Array(input));
             const level = rms();
-            if (level > SILENCE_RMS) { lastVoice = Date.now(); heardAnything = true; }
+            const gate = speechGate();
+            if (level > gate) { lastVoice = Date.now(); heardAnything = true; }
+            // Only quiet audio updates the floor. Folding speech into it would
+            // let a long sentence raise the gate above the speaker's own voice —
+            // the recorder would then cut off mid-utterance, which is the
+            // failure mode an adaptive gate is most prone to.
+            else trackNoise(level);
             const quietFor = Date.now() - lastVoice;
             // recordAbort is the other half of the echo fix. Muting the TAP stops
             // the wake-word detector hearing our own speech, but a recording that

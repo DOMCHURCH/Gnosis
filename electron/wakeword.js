@@ -94,7 +94,20 @@ export async function probeRuntime() {
  * @param onStatus  called with { ready, models?, reason }
  * @returns { write(pcm), stop() } — write() takes Int16 PCM at 16 kHz mono
  */
-export async function startWakeWord({ onWake, onStatus, models = [], threshold = 0.5 }) {
+/**
+ * Default detection confidence.
+ *
+ * Lowered from 0.5. openWakeWord scores a whispered or quietly-spoken phrase
+ * well below a normally-spoken one, so 0.5 meant the wake word simply did not
+ * work unless you raised your voice — the user has to shout at a thing built to
+ * be talked to. 0.35 catches quiet speech while staying clear of the ~0.1-0.2
+ * band where ordinary conversation starts producing false wakes.
+ *
+ * GNOSIS_WAKE_THRESHOLD overrides it, for a room where either problem is worse.
+ */
+const DEFAULT_THRESHOLD = Number(process.env.GNOSIS_WAKE_THRESHOLD) || 0.35;
+
+export async function startWakeWord({ onWake, onStatus, models = [], threshold = DEFAULT_THRESHOLD }) {
   const py = await findPython();
   if (!py.ok) {
     onStatus?.({ ready: false, reason: py.reason });
