@@ -19,10 +19,26 @@ const { autoUpdater } = electronUpdater;
  * @param getWindow  the window to send toast events to
  */
 export function registerUpdater(getWindow) {
-  // We drive the toast ourselves, so let the download run but never install
-  // behind the user's back.
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = false;
+  /*
+   * THE reason people sat on old builds.
+   *
+   * This was false, with the stated intent "never install behind the user's
+   * back". The intent was right and the setting was the wrong way to express
+   * it, because it does not mean "ask first" — it means DISCARD. The flow was:
+   * launch, download the update silently, show a toast, and if the user closes
+   * the app without clicking Restart, throw the staged build away. Next launch:
+   * same old version, download it again, toast again. Anyone who did not happen
+   * to click that one button was pinned on their original install forever, and
+   * re-downloading ~120MB every launch to delete it again.
+   *
+   * True does not interrupt anything. The app is already closing — no turn is in
+   * flight, nothing is lost — and the user lands on the new version next time
+   * they open it. The property that actually mattered, never yanking the process
+   * out from under a running agent, is preserved by autoDownload + the toast:
+   * the only thing that restarts a LIVE app is still the user clicking Restart.
+   */
+  autoUpdater.autoInstallOnAppQuit = true;
 
   const send = (channel, payload) => {
     const w = getWindow();
@@ -55,7 +71,28 @@ export function registerUpdater(getWindow) {
   // Only a packaged build has an update feed to check against; in dev
   // electron-updater throws on a missing app-update.yml.
   if (!app.isPackaged) return;
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {
-    /* offline, or no releases published yet */
-  });
+
+  const check = () =>
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {
+      /* offline, or no releases published yet */
+    });
+
+  check();
+
+  /*
+   * Re-check while the app is open.
+   *
+   * The check used to run exactly once, at launch. Gnosis is a tray app people
+   * leave running for days, so "once at launch" could mean once a week — a
+   * release could ship on Monday and not be noticed until the machine rebooted.
+   * Six hours is frequent enough that a release lands the same day and rare
+   * enough to be invisible: it is one small HTTPS request, and when nothing is
+   * new it does nothing at all.
+   */
+  const SIX_HOURS = 6 * 60 * 60 * 1000;
+  const timer = setInterval(check, SIX_HOURS);
+  // Do not hold the process open on this alone — a tray app that cannot exit
+  // because of its own update timer is a worse bug than a stale build.
+  timer.unref?.();
+  app.on("before-quit", () => clearInterval(timer));
 }

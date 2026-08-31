@@ -67,6 +67,10 @@ export interface Config {
   appCwd?: string;
   /** Desktop app: wake-word listening on/off. Written by the settings panel. */
   voiceEnabled?: boolean;
+  /** The app version whose first-run disclosure the user accepted. Null/absent
+   * means it has never been shown; a lower major.minor than the running build
+   * means the app has gained capabilities since and it is shown again. */
+  acceptedVersion?: string | null;
   /** Desktop app: which Kokoro voice speaks replies (e.g. "af_heart"). */
   kokoroVoice?: string;
 }

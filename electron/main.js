@@ -25,6 +25,7 @@ import { registerUpdater } from "./updater.js";
 import { registerContextMenus } from "./context-menus.js";
 import { registerWin32Focus } from "./win32-focus.js";
 import { registerVoice } from "./voice.js";
+import { maybeShowWelcome } from "./welcome.js";
 import { resolveRootCwd, defaultProject } from "./rootcwd.js";
 import { registerCamera } from "./camera.js";
 import { registerScreen } from "./screen.js";
@@ -313,6 +314,18 @@ if (!app.requestSingleInstanceLock()) {
     // A failed boot is almost always a missing key. Put the one window that can
     // fix it on screen rather than making the user find it in the tray menu.
     if (bootFailed) openSettings(win);
+    else {
+      // First run, or the first run after a feature release: say what leaves the
+      // machine, who is responsible for what the agent does, and that voice
+      // exists at all. Skipped when the boot already failed — a user staring at
+      // "no API key" does not need a second window in front of it, and they will
+      // see this on the next launch once the key is in.
+      // No voice handler is passed: the window's toggle calls the SAME
+      // settings:set-voice IPC the Settings panel uses, so the two can never
+      // drift apart or disagree about the state.
+      void maybeShowWelcome({ getWindow: () => win })
+        .catch(() => { /* never block startup on the welcome window */ });
+    }
 
     // A gnosis:// link that launched us cold: the renderer has to exist first.
     if (deepLinks.pending) {
