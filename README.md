@@ -19,12 +19,39 @@ watch your agents work as blocky figures moving around a 3D office floor.
 
 </div>
 
-## Desktop App (recommended)
+## Install
 
-Download the installer for a native desktop experience — no terminal setup
-required:
+One command, in PowerShell:
 
-**[Download Gnosis-Setup-1.1.0.exe](https://github.com/DOMCHURCH/Gnosis/releases/download/v1.1.1/Gnosis-Setup-1.1.0.exe)** (Windows, 120MB)
+```powershell
+irm https://raw.githubusercontent.com/DOMCHURCH/Gnosis/master/scripts/install.ps1 | iex
+```
+
+It fetches the latest release, verifies the download, runs the installer, and
+then tells you what else this machine needs for the optional parts.
+
+Or take the installer directly:
+**[Gnosis-Setup.exe](https://github.com/DOMCHURCH/Gnosis/releases/latest)** (Windows, ~120MB)
+
+Or just the CLI, if you have Node.js:
+
+```powershell
+npm install -g @dominquechurch/gnosis
+```
+
+<details>
+<summary>Passing options to the install script</summary>
+
+`iex` cannot forward parameters to a piped script, so use the scriptblock form:
+
+```powershell
+$s = irm https://raw.githubusercontent.com/DOMCHURCH/Gnosis/master/scripts/install.ps1
+& ([scriptblock]::Create($s)) -DownloadOnly   # fetch and verify, don't run it
+& ([scriptblock]::Create($s)) -Cli            # install the npm CLI instead
+```
+</details>
+
+## Desktop App
 
 The desktop app includes:
 
