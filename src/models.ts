@@ -197,7 +197,21 @@ export function isVisionModel(m: ModelEntry): boolean {
  *
  * Ranked on prompt price (that is what an image costs you), then completion price,
  * then id so the choice is stable across calls rather than depending on catalog
- * ordering. A zero prompt price is a free variant and legitimately ranks first.
+ * ordering.
+ *
+ * A FREE VARIANT DOES NOT RANK FIRST, which is the opposite of what "cheapest"
+ * suggests and is deliberate. OpenRouter's `:free` ids are not a discount on
+ * the same service — they are routed to whichever provider is currently
+ * donating capacity, under that provider's own rate limits. In practice they
+ * return upstream 400s often enough that borrowing one turns "this model
+ * cannot see images" into "your turn failed", which is strictly worse than the
+ * problem it was solving. A model costing a fraction of a cent that answers
+ * beats a free one that does not.
+ *
+ * Unknown pricing ranks between the two. Groq's /models publishes no prices and
+ * the offline fallback list has none, so their zeroed pricing is not evidence
+ * of being free — `pricingKnown` is what tells the difference, and without it a
+ * paid model would masquerade as the cheapest thing in the catalog.
  */
 export function cheapestVisionModel(models: ModelEntry[]): ModelEntry | null {
   // `openrouter/auto` advertises every modality because it is a router, not a
@@ -208,6 +222,7 @@ export function cheapestVisionModel(models: ModelEntry[]): ModelEntry | null {
   const vision = models.filter((m) => isVisionModel(m) && !/^openrouter\/auto\b/i.test(m.id));
   if (!vision.length) return null;
   return vision.slice().sort((a, b) =>
+    tier(a) - tier(b) ||
     a.pricing.prompt - b.pricing.prompt ||
     a.pricing.completion - b.pricing.completion ||
     a.id.localeCompare(b.id),
@@ -229,6 +244,26 @@ export async function suggestVisionModel(): Promise<string> {
   } catch {
     return "Switch to a vision model with /model.";
   }
+
+}
+
+/** True for OpenRouter's donated-capacity variants. The `:free` suffix is the
+ *  only reliable marker, since a zero price can also mean "not published". */
+export function isFreeVariant(m: ModelEntry): boolean {
+  if (/:free$/i.test(m.id)) return true;
+  return m.pricingKnown === true && m.pricing.prompt === 0 && m.pricing.completion === 0;
+}
+
+/**
+ * Preference tier, applied BEFORE price.
+ *
+ *   0  priced, and the price is published — choose from these first
+ *   1  price not published — usable, but it cannot be ranked honestly
+ *   2  a free variant — last resort, because it is the least reliable
+ */
+function tier(m: ModelEntry): number {
+  if (isFreeVariant(m)) return 2;
+  return m.pricingKnown === true ? 0 : 1;
 }
 
 export async function fetchModels(force = false): Promise<ModelEntry[]> {

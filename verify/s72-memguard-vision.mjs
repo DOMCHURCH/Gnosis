@@ -135,8 +135,42 @@ unsilence();
   // The property a hardcoded id can't have: the answer tracks the catalog.
   const withCheaper = [...catalog, entry("vendor/vision-cheapest", 0.0000001, ["text", "image"])];
   ok("a newly-listed cheaper model wins immediately", cheapestVisionModel(withCheaper).id === "vendor/vision-cheapest");
-  const free = [...catalog, entry("vendor/vision-free", 0, ["text", "image"])];
-  ok("a free vision model ranks first", cheapestVisionModel(free).id === "vendor/vision-free");
+  /*
+   * A FREE VARIANT RANKS LAST, which reverses what this suite used to assert.
+   *
+   * OpenRouter's `:free` ids are not a discount on the same service — they are
+   * routed to whichever provider is currently donating capacity, under that
+   * provider's rate limits. Observed in the wild: a borrowed
+   * `dots-studio/dots-3-note-preview:free` returned an upstream 400 from
+   * AtlasCloud, so the fallback that exists to rescue a turn was ending it
+   * instead. A model costing a fraction of a cent that answers beats a free one
+   * that does not.
+   */
+  const priced = (id, prompt, modalities) => ({ ...entry(id, prompt, modalities), pricingKnown: true });
+  const withFree = [
+    priced("vendor/vision-paid-cheap", 0.0000004, ["text", "image"]),
+    priced("vendor/vision-free-suffix:free", 0, ["text", "image"]),
+    priced("vendor/vision-zero-price", 0, ["text", "image"]),
+  ];
+  ok("a `:free` variant does NOT win on price",
+    cheapestVisionModel(withFree).id === "vendor/vision-paid-cheap");
+  ok("...and neither does a zero-priced one",
+    cheapestVisionModel(withFree).id !== "vendor/vision-zero-price");
+
+  // Free is a last resort, not a banned option: when nothing paid can see, a
+  // free vision model still beats telling the user there is none.
+  const onlyFree = [priced("vendor/vision-free-only:free", 0, ["text", "image"])];
+  ok("...but a free model is still used when it is the only one that can see",
+    cheapestVisionModel(onlyFree).id === "vendor/vision-free-only:free");
+
+  // Unpublished pricing is not evidence of being free — Groq publishes none —
+  // so it ranks behind a known-priced model rather than winning on a zero.
+  const unknown = [
+    priced("vendor/vision-known", 0.000002, ["text", "image"]),
+    entry("vendor/vision-unpriced", 0, ["text", "image"]), // no pricingKnown
+  ];
+  ok("a model with unpublished pricing does not masquerade as cheapest",
+    cheapestVisionModel(unknown).id === "vendor/vision-known");
 
   // Deterministic: same price must not depend on catalog order.
   const tieA = [entry("b/one", 0.000001, ["image"]), entry("a/two", 0.000001, ["image"])];
