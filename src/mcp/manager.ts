@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { ToolDef } from "../tools/index.js";
 import { setMcpToolDefs } from "../tools/index.js";
+import { aliasKeyArgs, isUnknownKeyError } from "./keys.js";
 import { loadMcpConfig, saveMcpConfig, type McpConfig } from "./config.js";
 import { McpServer, type McpStatus } from "./client.js";
 import { saveScreenshot } from "../screenshots.js";
@@ -112,7 +113,23 @@ class McpManager {
           // message through the same channel view_image uses, so the model sees
           // the picture instead of a "[image image/png]" placeholder.
           run: async (args, _signal, ctx) => {
-            const r = await server.callTool(tool.name, args);
+            let r = await server.callTool(tool.name, args);
+            // Key-name vocabularies differ between desktop-control servers, and
+            // the names a model reaches for are the ones printed on the keyboard.
+            // A live session died on `Unknown key in combo: win` and then spent
+            // the rest of the turn hunting the Start button by pixel. Retry once
+            // with the canonical names — only after the server has actually
+            // rejected the model's own wording, so a server that accepts "win"
+            // never sees this path. See mcp/keys.ts.
+            if (computerUse && r.isError && isUnknownKeyError(r.output)) {
+              const retried = aliasKeyArgs(args);
+              if (retried) {
+                const second = await server.callTool(tool.name, retried);
+                // Keep the retry only if it actually helped; otherwise the first
+                // error is the more honest one to report.
+                if (!second.isError) r = second;
+              }
+            }
             const saved: string[] = [];
             for (const [i, img] of r.images.entries()) {
               // The model sees the bytes directly (same channel view_image uses);
