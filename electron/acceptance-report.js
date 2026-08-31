@@ -30,19 +30,28 @@ import path from "node:path";
 /*
  * The deployed endpoint.
  *
- * While this holds the placeholder the module is INERT — it sends nothing and
- * queues nothing. That is deliberate: shipping a build that posts acceptances to
- * a hostname that does not resolve would produce a queue that never drains and a
- * Terms document promising a transmission that does not happen. Better to do
- * nothing honestly than to half-do it.
+ * Live since 2026-08-31 as the `gnosis-acceptance` service in the Railway
+ * project `gnosis`, alongside — and separate from — the Postgres service that
+ * actually holds the rows. Those being two services rather than one is not a
+ * detail: deploying the app into the database's own service is what broke the
+ * first attempt, because DATABASE_URL then resolved to the app itself.
  *
- * Set this to the Railway URL after deploying, and keep the /accept path.
+ * The placeholder guard below is kept, and kept meaningful. While ENDPOINT
+ * still contains the placeholder the module is INERT — it sends nothing and
+ * queues nothing — because shipping a build that posts acceptances to a
+ * hostname that does not resolve would produce a queue that never drains and a
+ * Terms document promising a transmission that does not happen. Better to do
+ * nothing honestly than to half-do it. Now that a real URL is in place the
+ * guard is dormant, but it must survive: it is what makes a fork, or a future
+ * redeploy that clears this constant, fail safe rather than fail silently.
  *
  * GNOSIS_ACCEPTANCE_URL overrides it. That is for tests and for pointing a local
  * build at a staging deploy — a shipped build has no such variable set and falls
  * through to the constant, which is the only value users ever exercise.
  */
-const ENDPOINT = process.env.GNOSIS_ACCEPTANCE_URL || "https://REPLACE-ME.up.railway.app/accept";
+const ENDPOINT =
+  process.env.GNOSIS_ACCEPTANCE_URL ||
+  "https://gnosis-acceptance-production.up.railway.app/accept";
 const PLACEHOLDER = ENDPOINT.includes("REPLACE-ME");
 
 /** How long to wait before deciding the server is not going to answer. */
