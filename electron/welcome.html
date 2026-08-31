@@ -124,7 +124,7 @@
       </section>
 
       <section>
-        <h2>Voice — off by default</h2>
+        <h2>Voice — on by default</h2>
         <div class="card">
           <div class="voice">
             <div class="body">
@@ -135,12 +135,37 @@
               <span class="knob"></span>
             </button>
           </div>
+          <div id="voiceSetup" style="display:none; margin-top:11px; padding-top:11px; border-top:1px solid var(--line)">
+            <div class="voice">
+              <div class="body">
+                <div class="t" id="setupTitle">Voice needs a one-time download</div>
+                <p id="setupNote">openWakeWord and Kokoro — about 350&nbsp;MB. Free, local, no account.</p>
+              </div>
+              <button class="go" id="setupBtn" type="button" style="padding:7px 14px; font-size:12px">Install</button>
+            </div>
+          </div>
           <p id="voiceNote">
-            The microphone is <strong>off</strong> until you switch it on here or in Settings, and nothing
-            listens before then. When it is on, a floating panel shows you it is live —
+            <strong>The microphone is on.</strong> Nothing has listened before now — voice starts only
+            after this window — and you can switch it off right here, or later in Settings.
+            While it is on, Gnosis listens locally for the wake phrase and <strong>no audio leaves
+            your computer</strong>; only what you say <em>after</em> “hey jarvis” is recorded and sent
+            to Groq to be turned into text. A floating panel shows you whenever it is live:
             <strong>Esc</strong> ends a conversation, <strong>×</strong> turns voice off entirely.
-            Wake-word detection runs locally on your machine; only your recorded speech is sent
-            out, and only for transcription.
+            Do not leave it on where other people could be recorded without their consent.
+          </p>
+        </div>
+      </section>
+      <section>
+        <h2>Terms</h2>
+        <div class="card">
+          <p style="margin-bottom:6px">Continuing accepts the
+            <a href="#" id="openTerms">Terms of Use</a> <span id="termsVer" style="color:var(--dim)"></span>.
+            The summary above is the substance of them, not a replacement for them.</p>
+          <p style="margin-bottom:0; color:var(--dim); font-size:11.5px">
+            Your acceptance is recorded on <strong>this computer only</strong>, at
+            <code id="recPath" style="font-size:11px"></code>, with a checksum of the exact text you
+            were shown. Nothing about it is sent anywhere — recording it on a server would mean
+            collecting data about every install, which is precisely what these terms promise not to do.
           </p>
         </div>
       </section>
@@ -175,6 +200,7 @@
           // be the same lie the diagnostics panel exists to prevent.
           if (s && typeof s.enabled === "boolean") voiceOn = s.enabled;
           paintVoice();
+          void checkVoiceDeps();
           if (s && s.enabled && s.wakeWord === false) {
             $("voiceNote").innerHTML =
               '<strong style="color:var(--amber)">Voice is on, but the wake word is not ready.</strong> ' +
@@ -184,6 +210,47 @@
         } catch (e) {
           voiceOn = false;
           paintVoice();
+        }
+      });
+
+      $("openTerms").addEventListener("click", (e) => { e.preventDefault(); window.gnosis.welcomeOpenTerms(); });
+
+      // Offer the one-time voice download when the Python side is missing.
+      // Voice being "on" is meaningless if openWakeWord and Kokoro are not
+      // actually installed, and a fresh machine never has them — the app can
+      // only ship dist/ and electron/, not a 350MB model or a Python runtime.
+      async function checkVoiceDeps() {
+        if (!voiceOn) { $("voiceSetup").style.display = "none"; return; }
+        try {
+          const r = await window.gnosis.welcomeVoiceReady();
+          $("voiceSetup").style.display = r?.ok ? "none" : "";
+          if (!r?.ok && r?.reason) $("setupNote").textContent = String(r.reason).slice(0, 200);
+        } catch { /* leave it hidden rather than promising a download we cannot do */ }
+      }
+
+      window.gnosis.onVoiceSetupStep?.((s) => {
+        $("setupNote").textContent = `${s.step}: ${s.detail ?? s.status}`;
+      });
+
+      $("setupBtn").addEventListener("click", async () => {
+        const b = $("setupBtn");
+        b.disabled = true;
+        b.textContent = "Installing…";
+        try {
+          const r = await window.gnosis.voiceSetup({ wakeword: true, kokoro: true });
+          if (r?.ok) {
+            $("setupTitle").textContent = "Voice is ready";
+            $("setupNote").textContent = "openWakeWord and Kokoro are installed.";
+            b.style.display = "none";
+          } else {
+            $("setupNote").textContent = String(r?.reason ?? "did not finish").slice(0, 240);
+            b.disabled = false;
+            b.textContent = "Retry";
+          }
+        } catch (e) {
+          $("setupNote").textContent = String(e?.message ?? e).slice(0, 240);
+          b.disabled = false;
+          b.textContent = "Retry";
         }
       });
 
@@ -198,8 +265,11 @@
           if (info?.updated) {
             $("sub").textContent = "Updated to " + info.version + " — a reminder of how this works.";
           }
+          if (info?.terms) $("termsVer").textContent = "(" + info.terms.version + ")";
+          if (info?.recordPath) $("recPath").textContent = info.recordPath;
           voiceOn = !!info?.voiceEnabled;
           paintVoice();
+          void checkVoiceDeps();
         } catch { /* leave the defaults */ }
       })();
     </script>

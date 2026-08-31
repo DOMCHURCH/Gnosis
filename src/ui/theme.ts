@@ -30,4 +30,4 @@ export const ART = [
   "  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝╚══════╝",
 ];
 
-export const TAGLINE = "terminal coding agent · v1.2.0";
+export const TAGLINE = "terminal coding agent · v1.3.0";

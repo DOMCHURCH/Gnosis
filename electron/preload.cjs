@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("gnosis", {
   /** First-run window: what to show, and recording that it was accepted. */
   welcomeInfo: () => ipcRenderer.invoke("welcome:info"),
   welcomeAccept: () => ipcRenderer.send("welcome:accept"),
+  welcomeOpenTerms: () => ipcRenderer.send("welcome:open-terms"),
+  welcomeVoiceReady: () => ipcRenderer.invoke("welcome:voice-ready"),
   /** Install openWakeWord + Kokoro and download their models. Long-running:
    * progress arrives on onVoiceSetupStep, and the promise resolves at the end. */
   voiceSetup: (parts) => ipcRenderer.invoke("voice:setup", parts),

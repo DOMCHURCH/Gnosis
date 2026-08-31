@@ -20,6 +20,11 @@ files:
   - dist/**/*
   - electron/**/*
   - package.json
+  # The document the first-run window displays and checksums. Without it in the
+  # package the app would show no terms at all and record an acceptance of
+  # nothing — see electron/acceptance.js.
+  - TERMS.md
+  - LICENSE
   - "!**/*.map"
   - "!**/*.ts"
 

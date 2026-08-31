@@ -1055,7 +1055,23 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   // opening a microphone on first launch.
   void (async () => {
     const { config } = await readEnv();
-    if (config.voiceEnabled) await start();
+    /*
+     * Voice is ON unless explicitly turned off.
+     *
+     * It used to default to off, on the reasoning that "a coding tool has no
+     * business opening a microphone on first launch". That reasoning was sound
+     * about the ORDER of events, not about the default: the real requirement is
+     * that nothing listens before the user has been told voice exists. The
+     * welcome window now does exactly that — it is shown before this matters, it
+     * states plainly that the microphone will be live and what is sent where,
+     * and it carries an off switch the user can hit without leaving it.
+     *
+     * `!== false` rather than a truthy check, so the three states stay distinct:
+     * never configured (on, the new default), explicitly on, and explicitly off
+     * — the last of which must survive, since it is what the voice panel's ×
+     * writes.
+     */
+    if (config.voiceEnabled !== false) await start();
     else status = { enabled: false, wakeWord: false, transcription: false, reason: "disabled in settings" };
   })();
 

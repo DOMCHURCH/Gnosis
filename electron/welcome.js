@@ -18,8 +18,9 @@
 // running one — an update can change what the app is able to do, which is
 // precisely when the disclosure is worth repeating.
 
-import { BrowserWindow, ipcMain, app } from "electron";
+import { BrowserWindow, ipcMain, app, shell } from "electron";
 import { readFileSync } from "node:fs";
+import { loadTerms, isAccepted, recordAcceptance, acceptancePath } from "./acceptance.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -79,28 +80,72 @@ export async function maybeShowWelcome({ getWindow }) {
   const { loadConfig, saveConfig } = await import("../dist/config.js");
   const config = (await loadConfig()) ?? {};
   const version = gnosisVersion();
-  const accepted = config.acceptedVersion ?? null;
-  if (!significantlyNewer(accepted, version)) return false;
+  const terms = loadTerms();
 
-  const updated = !!accepted;
+  /*
+   * Two gates, and the terms gate is the one that matters.
+   *
+   * The config flag alone was never enough: it records "a window was dismissed
+   * at some point", not what the user actually agreed to. Acceptance is keyed on
+   * the CHECKSUM of the document that was displayed, so editing TERMS.md — on
+   * purpose or by accident — re-prompts, and nobody ends up recorded as having
+   * accepted text they were never shown.
+   */
+  const termsPending = terms ? !(await isAccepted(terms)) : false;
+  const versionPending = significantlyNewer(config.acceptedVersion ?? null, version);
+  if (!termsPending && !versionPending) return false;
+
+  const updated = !!config.acceptedVersion;
 
   ipcMain.removeHandler?.("welcome:info");
   ipcMain.handle("welcome:info", async () => {
     // Re-read rather than closing over the value: the user may have toggled
     // voice from Settings while this window was open.
     const fresh = (await loadConfig()) ?? {};
-    return { version, updated, voiceEnabled: !!fresh.voiceEnabled };
+    return {
+      version,
+      updated,
+      voiceEnabled: fresh.voiceEnabled !== false, // voice is on unless turned off
+      terms: terms ? { version: terms.version, sha256: terms.sha256, text: terms.text } : null,
+      recordPath: acceptancePath(),
+    };
+  });
+
+  ipcMain.removeHandler?.("welcome:voice-ready");
+  ipcMain.handle("welcome:voice-ready", async () => {
+    // Is the Python side actually installed? This is what decides whether the
+    // window offers to fetch it — voice being "on" means nothing if openWakeWord
+    // and Kokoro are not on the machine.
+    try {
+      const { probeRuntime } = await import("./wakeword.js");
+      const r = await probeRuntime();
+      return { ok: !!r?.ok, reason: r?.reason ?? null };
+    } catch (e) {
+      return { ok: false, reason: String(e?.message ?? e) };
+    }
+  });
+
+  ipcMain.removeAllListeners("welcome:open-terms");
+  ipcMain.on("welcome:open-terms", () => {
+    // The full document, in a real window, for anyone who wants to read it all.
+    void shell.openExternal("https://github.com/DOMCHURCH/Gnosis/blob/master/TERMS.md");
   });
 
   ipcMain.removeAllListeners("welcome:accept");
   ipcMain.on("welcome:accept", () => {
-    // Record acceptance BEFORE closing, so a crash on close cannot lose it and
-    // show the same window again next launch.
-    void saveConfig({ acceptedVersion: version })
-      .catch(() => {})
-      .finally(() => {
+    // Write the record BEFORE closing, so a crash on close cannot lose it — an
+    // acceptance that was shown but not recorded is the failure this whole file
+    // exists to prevent.
+    void (async () => {
+      try {
+        await recordAcceptance(terms, version);
+        await saveConfig({ acceptedVersion: version });
+      } catch {
+        /* a record we could not write must not trap the user in this window */
+      } finally {
         if (win && !win.isDestroyed()) win.close();
-      });
+      }
+    })();
   });
 
   const host = getWindow?.();

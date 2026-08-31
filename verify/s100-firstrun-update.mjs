@@ -98,8 +98,15 @@ const ok = (n, c, extra = "") => { console.log(`${c ? "PASS" : "FAIL"} ${n}${ext
   // One code path, so this switch and Settings cannot disagree.
   ok("it uses the same IPC as the Settings switch", /window\.gnosis\.setVoiceEnabled/.test(welcomeHtml));
   ok("...rather than being handed its own handler", !/setVoiceEnabled[,)]/.test(welcomeJs));
-  // The honest default.
-  ok("it states the microphone is off until switched on", /off.{0,40}until you switch it on/is.test(welcomeHtml));
+  // The honest default. Voice is now ON by default, so this asserts the CURRENT
+  // truth — the earlier version of this check pinned "off until you switch it
+  // on", which the default change made false. A disclosure that describes the
+  // wrong default is worse than no disclosure, so the pairing matters: whenever
+  // the default moves, this line has to move with it. s101 covers the same
+  // claim from the terms side.
+  ok("it states the microphone is ON", /The microphone is on/.test(welcomeHtml));
+  ok("...and that nothing listened before the disclosure", /Nothing has listened before now/.test(welcomeHtml));
+  ok("...and that it can be switched off right there", /switch it off right here/.test(welcomeHtml));
 }
 
 // --- 4. the disclosure is true, not just reassuring -------------------------
