@@ -20,6 +20,8 @@
 
 import { BrowserWindow, ipcMain, Notification, screen } from "electron";
 import path from "node:path";
+import os from "node:os";
+import { promises as fsp } from "node:fs";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startWakeWord, findPython, probeRuntime } from "./wakeword.js";
@@ -585,6 +587,63 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     micMuted(false);
   }
 
+/*
+ * Where the seconds went, per turn.
+ *
+ * The pipeline already records every stage boundary, but the timeline was only
+ * reachable through an IPC handler nothing called — so "voice takes about five
+ * seconds" had no way to become "voice spends N of those five seconds in X".
+ * Guessing at that is how you optimise the wrong stage: the Start Menu scan
+ * behind "open <app>" looks like an obvious culprit and measures at 53ms.
+ *
+ * The model call is the one stage with no event of its own, and it does not
+ * need one: it is exactly the gap between the transcript being ready and the
+ * first sentence being queued for speech.
+ *
+ * Appended to ~/.dom/voice-timing.log because a packaged app has no console
+ * anyone can see, and a number you cannot read is not a measurement.
+ */
+function summariseTurn(timeline) {
+  const last = (name) => [...timeline].reverse().find((e) => e.event === name);
+  const at = (name) => last(name)?.at ?? null;
+
+  const recStart = at("record.start");
+  if (!recStart) return null; // no turn in this timeline yet
+
+  // The first sentence queued AFTER the transcript came back — later ones are
+  // the rest of the same reply streaming in, not a second turn.
+  const sttEnd = at("transcribe.end");
+  const firstQueued = timeline.find((e) => e.event === "tts.queued" && sttEnd && e.at >= sttEnd)?.at ?? null;
+
+  const span = (a, b) => (a && b && b >= a ? b - a : null);
+  const stages = {
+    listen: span(recStart, at("utterance.received")),
+    transcribe: span(at("transcribe.start"), sttEnd),
+    model: span(sttEnd, firstQueued),
+    synth: span(at("tts.synth.start"), at("tts.synth.end")),
+    play: span(at("tts.play.start"), at("tts.play.end")),
+  };
+  const total = span(recStart, at("tts.play.end") ?? at("tts.synth.end"));
+  return { total, stages };
+}
+
+async function writeTurnTiming(timeline) {
+  try {
+    const s = summariseTurn(timeline);
+    if (!s || !s.total) return;
+    const parts = Object.entries(s.stages)
+      .filter(([, ms]) => ms !== null)
+      .map(([k, ms]) => `${k} ${(ms / 1000).toFixed(2)}s`)
+      .join(" · ");
+    const line = `${new Date().toISOString()}  total ${(s.total / 1000).toFixed(2)}s  —  ${parts}` + "\n";
+    const dir = path.join(os.homedir(), ".dom");
+    await fsp.mkdir(dir, { recursive: true }).catch(() => {});
+    await fsp.appendFile(path.join(dir, "voice-timing.log"), line, "utf8");
+  } catch {
+    /* timing is diagnostics; never let it affect a voice turn */
+  }
+}
+
   const gate = createReplyGate(
     // Whatever is left at the end of the turn (usually a tail with no full stop).
     (leftover) => {
@@ -593,6 +652,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
         enqueueSpeech(leftover);
       } else if (!speech.busy && !speech.queue.length) {
         // The turn spoke and the queue already drained — nothing left to wait for.
+        void writeTurnTiming(timeline);
         if (session) { armIdle(); listenAgain(); }
         else sleep();
       }
