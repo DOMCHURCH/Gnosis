@@ -17,7 +17,7 @@ import { insertAcceptance, migrate, closePool } from "./db.js";
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = "0.0.0.0"; // Railway routes to the container's external interface.
 
-export function buildServer({ insert = insertAcceptance, logger = true } = {}) {
+export function buildServer({ insert = insertAcceptance, logger = true, isReady = () => true } = {}) {
   const app = Fastify({
     logger,
     // The payload is six short fields. Anything larger is not an acceptance.
@@ -26,7 +26,14 @@ export function buildServer({ insert = insertAcceptance, logger = true } = {}) {
   });
 
   // Railway's healthcheck, and a cheap way to confirm a deploy is live.
-  app.get("/health", async () => ({ ok: true }));
+  //
+  // This reports ok:true even before the schema is in place, and that is
+  // deliberate. The healthcheck decides whether the deploy is allowed to exist
+  // at all; failing it while waiting for Postgres to finish booting kills the
+  // very process that is waiting, which is how the first deploy of this service
+  // crash-looped. Liveness and readiness are different questions, so `ready`
+  // answers the second one without letting it end the process.
+  app.get("/health", async () => ({ ok: true, ready: isReady() }));
 
   app.post("/accept", async (request, reply) => {
     const result = validateAcceptance(request.body);
@@ -67,15 +74,67 @@ const runDirectly = (() => {
 })();
 
 if (runDirectly) {
-  const app = buildServer();
+  // Migration state, owned by the boot sequence and read by /health.
+  let ready = false;
+
+  const app = buildServer({ isReady: () => ready });
+
+  /*
+   * LISTEN FIRST, MIGRATE SECOND. The original order was the other way round and
+   * it could not deploy.
+   *
+   * On Railway the database is a separate service on the private network, and
+   * neither that network nor Postgres itself is reachable the instant this
+   * container starts. Migrating before listening meant: connect, ETIMEDOUT,
+   * exit(1) — before the healthcheck port was ever open. The platform restarted
+   * it, the same race lost again, and after enough rounds the deploy was marked
+   * crashed. The database was fine; it was simply a few seconds behind.
+   *
+   * Opening the port first means the healthcheck passes while the schema is
+   * still being applied. A request that arrives in that window hits a table that
+   * does not exist yet, which the /accept handler already turns into a 503 —
+   * and 503 is precisely the code the client keeps its payload for and retries.
+   * So the degraded window costs an acceptance nothing.
+   */
   try {
-    await migrate();
     await app.listen({ port: PORT, host: HOST });
   } catch (err) {
-    app.log.error(err);
-    await closePool().catch(() => {});
+    // A port we cannot bind is not a waiting game; nothing will fix it.
+    app.log.error({ err }, "could not bind port");
     process.exit(1);
   }
+
+  /*
+   * Apply the schema with bounded exponential backoff.
+   *
+   * Retrying rather than exiting because the overwhelmingly likely cause of a
+   * failure here is "Postgres is not up yet", which resolves itself in seconds.
+   * The cap is ~5 minutes total; past that the failure is structural — a wrong
+   * DATABASE_URL, a deleted database — and continuing to hammer it neither
+   * fixes it nor surfaces it. The process stays alive either way so /health
+   * keeps answering and the logs stay readable.
+   */
+  void (async () => {
+    const MAX_ATTEMPTS = 12;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        await migrate();
+        ready = true;
+        app.log.info({ attempt }, "schema applied; ready to record acceptances");
+        return;
+      } catch (err) {
+        if (attempt === MAX_ATTEMPTS) {
+          app.log.error({ err, attempt },
+            "schema could not be applied; /accept will keep returning 503 and clients will keep retrying");
+          return;
+        }
+        const waitMs = Math.min(30_000, 500 * 2 ** (attempt - 1));
+        app.log.warn({ attempt, waitMs, err: err?.message },
+          "database not reachable yet; retrying");
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+    }
+  })();
 
   for (const sig of ["SIGINT", "SIGTERM"]) {
     process.on(sig, async () => {

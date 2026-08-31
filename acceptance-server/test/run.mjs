@@ -89,6 +89,24 @@ const good = () => ({
   const app = buildServer({ logger: false, insert: async () => ({ id: "1", created: true }) });
 
   const health = await app.inject({ method: "GET", url: "/health" });
+  // The health route must answer TRUE while the schema is still being applied.
+  // This is the bug that stopped the first deploy: migrating before listening
+  // meant the process died of a slow database before the port was ever open,
+  // and the platform never saw a healthy container to keep.
+  {
+    const booting = buildServer({ insert: async () => { throw new Error("no table yet"); },
+                                  logger: false, isReady: () => false });
+    const h = await booting.inject({ method: "GET", url: "/health" });
+    ok("health answers ok while the schema is still pending", h.statusCode === 200);
+    ok("...while reporting it is not ready yet", h.json().ready === false);
+
+    // And an acceptance arriving in that window must be told to come back,
+    // never told it succeeded and never told to give up.
+    const a = await booting.inject({ method: "POST", url: "/accept", payload: good() });
+    ok("...and an acceptance in that window gets a retryable 503", a.statusCode === 503);
+    await booting.close();
+  }
+
   ok("health responds", health.statusCode === 200);
 
   const res = await app.inject({ method: "POST", url: "/accept", payload: good() });
