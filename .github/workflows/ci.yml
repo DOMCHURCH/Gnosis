@@ -28,6 +28,15 @@ jobs:
       # The verify suites import from dist/, so the build has to land first.
       - run: npm run build
 
+      # playwright arrives TRANSITIVELY (via @playwright/mcp), so it always
+      # resolves and s90-voice-overlay.mjs never takes its "not installed"
+      # skip — it goes straight to chromium.launch() and dies with
+      # "AttachConsole failed" on a runner that has no browser binaries. The
+      # import resolving is not the same question as the browser existing, so
+      # the browser has to be fetched explicitly.
+      - name: install Playwright's Chromium (needed by the overlay suite)
+        run: npx playwright install chromium
+
       # The browser UI is checked by its OWN tsconfig: the root one is rootDir
       # "src" and never saw web/src, which is how a call to a function that did
       # not exist reached a phone. Named as a separate step so a UI type error
