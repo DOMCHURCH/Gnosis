@@ -62,6 +62,18 @@ The desktop app includes:
   available model; a custom "hey gnosis" model is future work. The agent speaks
   its reply back only for turns you started by voice — typing in the chat never
   triggers speech
+- Voice is built around the fact that the model round trip is the whole wait.
+  Transcription and speech are under a second each; everything else is one
+  request you are sitting through. So the route to the model is opened on the
+  wake word, while you are still talking, rather than inside your first
+  question — and a tool whose success speaks for itself ("open Spotify") is
+  confirmed the moment the tool returns instead of costing a second round trip
+  to be told what already happened. Per-turn timings are appended to
+  `~/.dom/voice-timing.log` if you want to see where yours go
+- Voice is only as fast as the model you point it at, and the difference is not
+  subtle: the same turns measured 4-7s per model call on one model and 1.5-2.3s
+  on another, almost independently of how much was generated. If voice feels
+  slow, change the model before anything else
 - Local text-to-speech via Kokoro, with Windows SAPI as the fallback. You no
   longer install this by hand: **Settings → Voice → Install voice support** fetches
   the packages and the model weights for you, with progress. The voice
@@ -206,7 +218,7 @@ what the agent was doing instead of scrolling a wall of text and hoping.
   edits are grounded in the real shape of the codebase
 - **Streaming diffs** — a large edit writes progressively into a live diff viewer
   and only lands on disk at commit
-- **101 automated test suites** — offline, isolated, green on Windows CI every push
+- **144 automated test suites** — offline, isolated, green on Windows CI every push
 
 <div align="center">
 
@@ -251,6 +263,12 @@ gnosis -p "prompt"           # one turn, answer to stdout, exit
 one. Point your phone's camera at it and you are driving the same session from
 the couch.
 
+Most models are served by several providers at the same price and very
+different speeds, and the default order is not the fastest one. Gnosis asks
+OpenRouter for the quick one; set `"routing": "price"` in `~/.dom/config.json`
+if you would rather weight the bill than the wait (`"latency"` and
+`"throughput"` are the other options, and `"throughput"` is the default).
+
 Useful in-session: `/model` to switch models, `/serve` to open the web UI,
 `/plan` to propose before editing, `/cost` for spend, `/undo` to revert the last
 agent commit, `/rewind` (or double-Esc) to jump back a turn, `/map` for the repo
@@ -269,7 +287,7 @@ secrets are referenced as `${VAR_NAME}` rather than inlined. Full details in
 
 ## Development
 
-Want to contribute? The codebase is well-tested — 101 suites, all offline and
+Want to contribute? The codebase is well-tested — 144 suites, all offline and
 isolated — and the architecture is documented in
 [CONTRIBUTING.md](CONTRIBUTING.md), along with test conventions and how to add
 a skill.
@@ -280,7 +298,7 @@ cd Gnosis
 npm install
 npm run build
 npm link
-npm run verify      # 101 test suites
+npm run verify      # 144 test suites
 npm run eval        # 10-task eval harness
 ```
 
