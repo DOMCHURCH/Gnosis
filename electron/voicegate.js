@@ -156,3 +156,46 @@ export function createReplyGate(onReply, onSilent, onChunk) {
     },
   };
 }
+/*
+ * "Open Spotify" costs three model-shaped waits, and only two of them do work.
+ *
+ * Measured: 3.76s for the model to decide to call focus_window, 4.20s for the
+ * app to actually start, then 6.76s for a second model call whose entire output
+ * was twenty-four tokens saying it had opened. Per-call overhead is roughly
+ * fixed at four to seven seconds no matter how little is generated, so that
+ * last leg is close to pure latency — the user is waiting on a round trip to be
+ * told something the tool result already said.
+ *
+ * For the handful of tools whose success needs no describing, the confirmation
+ * is spoken the moment the tool returns and the model's own version is dropped.
+ * The turn still finishes in the background: the second call is not cancelled
+ * (the engine owns the loop, and a half-cancelled turn is a worse bug than a
+ * slow one), it simply stops being something anyone waits to hear.
+ *
+ * Deliberately narrow. A tool only belongs here when the spoken line can be
+ * built from the request alone — "did it work" and nothing else. Anything whose
+ * answer lives in the result (reading a file, searching, listing windows) must
+ * keep its round trip, because there the model is not narrating, it is
+ * answering.
+ */
+const ACK_TOOLS = {
+  focus_window: (args, ok) => {
+    if (!ok) return null;
+    const app = String(args?.app ?? "").trim();
+    if (!app) return null;
+    const name = app.charAt(0).toUpperCase() + app.slice(1);
+    if (args?.action === "launch") return `Opening ${name}.`;
+    if (args?.action === "focus") return `Bringing ${name} forward.`;
+    return null; // "list" answers a question; that one the model has to say
+  },
+};
+
+/**
+ * The spoken confirmation for a tool call, or null when this turn's answer has
+ * to come from the model. Kept beside the reply gate because it is the same
+ * decision — what the user hears — and because voice.js cannot be imported
+ * without Electron, which would leave it untested.
+ */
+export function ackLineFor(tool, args, ok) {
+  return ACK_TOOLS[tool]?.(args, ok) ?? null;
+}

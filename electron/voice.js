@@ -26,7 +26,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startWakeWord, findPython, probeRuntime } from "./wakeword.js";
 import { synthesize, probeKokoro, shutdownKokoro, warmKokoro } from "./kokoro.js";
-import { createReplyGate } from "./voicegate.js";
+import { createReplyGate, ackLineFor } from "./voicegate.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -487,6 +487,12 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
    */
   let turnEnded = false;
 
+  /** This turn was confirmed by a tool acknowledgement; the model's own prose
+   * for it is redundant and is not spoken. Reset when the next turn is armed. */
+  let ackSpoken = false;
+  /** tool.end carries no args, so the call that started it is remembered here. */
+  let lastToolArgs = null;
+
   /**
    * A timestamped trace of the voice pipeline.
    *
@@ -715,9 +721,12 @@ async function writeTurnTiming(timeline) {
     // Whatever is left at the end of the turn (usually a tail with no full stop).
     (leftover) => {
       turnEnded = true;
-      if (leftover) {
-        toOverlay("voice:state", { state: "speaking", response: leftover });
-        enqueueSpeech(leftover);
+      // An acknowledged turn has already said its piece; the tail the model
+      // wrote while we were speaking it would only repeat the news, late.
+      const say = ackSpoken ? "" : leftover;
+      if (say) {
+        toOverlay("voice:state", { state: "speaking", response: say });
+        enqueueSpeech(say);
       } else if (!speech.busy && !speech.queue.length) {
         // The turn spoke and the queue already drained — nothing left to wait for.
         turnEnded = false;
@@ -730,11 +739,33 @@ async function writeTurnTiming(timeline) {
     () => (session ? listenAgain() : sleep()),
     // Each finished sentence, spoken while the rest is still being written.
     (chunk) => {
+      if (ackSpoken) return;
       toOverlay("voice:state", { state: "speaking", response: chunk });
       enqueueSpeech(chunk);
     },
   );
-  bridge?.bus?.subscribe((e) => gate.handle(e));
+
+  /**
+   * Speak the confirmation as soon as the tool returns, instead of waiting for
+   * the model to be told what happened and write it out again.
+   *
+   * Runs BEFORE gate.handle so the acknowledgement is queued ahead of any prose
+   * the same event batch carries, and only while the gate is armed — a tool call
+   * from a typed chat turn is not something the app should start talking about.
+   */
+  function ackTool(e) {
+    if (!gate.armed || !e) return;
+    if (e.type === "tool.start") { lastToolArgs = e.args; return; }
+    if (e.type !== "tool.end" || ackSpoken) return;
+    const line = ackLineFor(e.tool, lastToolArgs, e.ok);
+    if (!line) return;
+    ackSpoken = true;
+    vlog("tool.ack", { tool: e.tool, line });
+    toOverlay("voice:state", { state: "speaking", response: line });
+    enqueueSpeech(line);
+  }
+
+  bridge?.bus?.subscribe((e) => { ackTool(e); gate.handle(e); });
 
   // --- permissions, routed into the panel ------------------------------------
   //
@@ -909,6 +940,8 @@ async function writeTurnTiming(timeline) {
       const tabId = agents[0]?.id ?? 0;
       // Arm BEFORE handing the turn over: onInput runs the engine synchronously
       // far enough to emit its first lines, and arming afterwards would miss them.
+      ackSpoken = false;
+      lastToolArgs = null;
       gate.arm(tabId);
       bridge?.onInput?.(tabId, prefix + t.text);
       // The overlay stays up until turn.end — the gate speaks the reply and
