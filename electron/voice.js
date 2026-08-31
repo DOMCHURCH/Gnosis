@@ -441,6 +441,13 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
 
   const speech = { queue: [], busy: false, epoch: 0, clips: new Map(), clipSeq: 0, reopen: null };
 
+  /*
+   * The model has stopped writing, but the reply may still be playing. A turn is
+   * only finished when both are true, so the two halves have to meet somewhere:
+   * the gate raises this, and the speech drain lowers it once the queue is dry.
+   */
+  let turnEnded = false;
+
   /**
    * A timestamped trace of the voice pipeline.
    *
@@ -534,6 +541,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       }
     } finally {
       speech.busy = false;
+      // The end of the turn as the user experiences it: nothing left to say and
+      // nothing left playing. Timing recorded any earlier stops the clock while
+      // audio is still coming out of the speakers.
+      if (turnEnded && !speech.queue.length) { turnEnded = false; void writeTurnTiming(timeline); }
       if (epoch === speech.epoch) scheduleReopen();
     }
   }
@@ -582,6 +593,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     for (const finish of [...speech.clips.values()]) finish("stopped");
     speech.clips.clear();
     speech.busy = false;
+    turnEnded = false;      // a cut-off turn has no honest total to report
     cancelReopen("stopped");
     if (engine && !engine.isDestroyed()) engine.webContents.send("voice:stop-audio");
     micMuted(false);
@@ -616,12 +628,28 @@ function summariseTurn(timeline) {
   const firstQueued = timeline.find((e) => e.event === "tts.queued" && sttEnd && e.at >= sttEnd)?.at ?? null;
 
   const span = (a, b) => (a && b && b >= a ? b - a : null);
+
+  /*
+   * A reply is spoken sentence by sentence, so synth and play each happen
+   * several times per turn. Reporting only the last pair makes whichever stage
+   * costs the most look like it costs a fraction of a second.
+   */
+  const totalOf = (startEvent, endEvent) => {
+    let sum = null, open = null;
+    for (const e of timeline) {
+      if (sttEnd && e.at < sttEnd) continue;   // belongs to an earlier turn
+      if (e.event === startEvent) open = e.at;
+      else if (e.event === endEvent && open !== null) { sum = (sum ?? 0) + (e.at - open); open = null; }
+    }
+    return sum;
+  };
+
   const stages = {
     listen: span(recStart, at("utterance.received")),
     transcribe: span(at("transcribe.start"), sttEnd),
     model: span(sttEnd, firstQueued),
-    synth: span(at("tts.synth.start"), at("tts.synth.end")),
-    play: span(at("tts.play.start"), at("tts.play.end")),
+    synth: totalOf("tts.synth.start", "tts.synth.end"),
+    play: totalOf("tts.play.start", "tts.play.end"),
   };
   const total = span(recStart, at("tts.play.end") ?? at("tts.synth.end"));
   return { total, stages };
@@ -647,11 +675,13 @@ async function writeTurnTiming(timeline) {
   const gate = createReplyGate(
     // Whatever is left at the end of the turn (usually a tail with no full stop).
     (leftover) => {
+      turnEnded = true;
       if (leftover) {
         toOverlay("voice:state", { state: "speaking", response: leftover });
         enqueueSpeech(leftover);
       } else if (!speech.busy && !speech.queue.length) {
         // The turn spoke and the queue already drained — nothing left to wait for.
+        turnEnded = false;
         void writeTurnTiming(timeline);
         if (session) { armIdle(); listenAgain(); }
         else sleep();
