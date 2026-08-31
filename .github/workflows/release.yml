@@ -1,0 +1,63 @@
+name: Release
+
+# Builds the Windows installer in CI rather than on a developer's machine.
+#
+# This exists for one reason: SignPath (and any comparable signing service)
+# will only sign artifacts that came out of a CI pipeline it can audit — a
+# build run on someone's laptop has no provenance a signing service can trust.
+# Everything up to and including packaging happens here so the .exe this
+# workflow produces is the one that gets signed, not a locally-built stand-in.
+#
+# Triggered on a version tag (v1.4.0, v1.4.1, ...) so a release is a deliberate
+# act — tagging — not a side effect of every push to master.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  # Lets a maintainer produce a build without cutting a tag, e.g. to hand a
+  # signing service a sample artifact during onboarding.
+  workflow_dispatch: {}
+
+jobs:
+  build-installer:
+    name: build installer
+    # Same reasoning as ci.yml: electron-builder's NSIS target and the
+    # native modules (node-pty/ConPTY) are Windows-specific, so the installer
+    # has to be built on Windows to be the real thing rather than a cross-build.
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Same gate CI runs on every push — an installer built from code that
+      # doesn't pass verify is worse than no installer.
+      - run: npm run build
+      - run: npm run verify
+
+      # electron-builder attempts Authenticode signing whenever CSC_LINK /
+      # CSC_KEY_PASSWORD (or the certificateFile/Subject win config) are
+      # present, and silently no-ops when they are not — that silent no-op is
+      # what shipped v1.4.0 unsigned while the build log read as if it had
+      # signed. Once a certificate exists, set these as repository secrets and
+      # this step starts producing a signed .exe with no other change needed.
+      - name: build installer
+        run: npm run dist
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+
+      - name: upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gnosis-Setup-${{ github.ref_name }}
+          path: release/Gnosis-Setup-*.exe
+          if-no-files-found: error
