@@ -39,7 +39,15 @@ function run(extraEnv) {
     let out = "", err = "";
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (err += d));
-    child.on("exit", (code) => resolve({ out, err, code }));
+    // "close", NOT "exit". Both fire, and the difference is exactly this
+    // suite's flake: "exit" fires when the process ends, while "close" fires
+    // once its stdio streams have been drained. Resolving on "exit" therefore
+    // reads `out` and `err` at a moment when trailing output may still be in
+    // flight — and every assertion here is on the CONTENT of those buffers
+    // ("rebuilding", "gnosis <version>"). The child had done the right thing;
+    // the test had simply stopped listening a few milliseconds early, which is
+    // why it failed intermittently under load and never in isolation.
+    child.on("close", (code) => resolve({ out, err, code }));
   });
 }
 

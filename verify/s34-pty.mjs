@@ -4,6 +4,7 @@
 // non-localhost Host (destroyed), so the human terminal channel is never reachable
 // unauthenticated. Terminal bytes are a human channel — never on the event bus.
 import net from "node:net";
+import { waitFor } from "./_wait.mjs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,10 +25,26 @@ try {
 
   let buf = "";
   pty.onData((d) => { buf += d; });
-  await sleep(600);                 // let the shell come up
+
+  // Wait for the shell to say ANYTHING before typing at it. A keystroke sent
+  // before the shell is listening is simply dropped, so the old fixed
+  // sleep(600) was not merely optimistic about timing — on a slow runner it
+  // lost the input outright, and the assertion below could then never pass.
+  const alive = await waitFor(() => buf.length > 0 || null, { timeout: 15000 });
+  ok("the shell produces output before we type at it", !!alive);
+
   pty.write("echo pty_marker_42\r"); // Enter — works for bash and powershell
-  await sleep(1400);
-  ok("the pty echoes typed input back", /pty_marker_42/.test(buf));
+
+  // Then poll for the echo rather than guessing at 1400ms. Retried once:
+  // a shell that had only just come up may still have swallowed the first
+  // line, and a duplicate echo cannot affect the assertion.
+  let retried = false;
+  const echoed = await waitFor(() => {
+    if (/pty_marker_42/.test(buf)) return true;
+    if (!retried) { retried = true; pty.write("echo pty_marker_42\r"); }
+    return null;
+  }, { timeout: 15000, interval: 250 });
+  ok("the pty echoes typed input back", !!echoed);
 
   let ok_resize = true;
   try { pty.resize(120, 40); } catch { ok_resize = false; }

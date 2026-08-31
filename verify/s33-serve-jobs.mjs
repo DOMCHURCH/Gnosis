@@ -5,6 +5,7 @@
 // non-localhost Host) hold. Exercises the actual server.ts + jobs.ts, not mocks.
 import http from "node:http";
 import { promises as fs } from "node:fs";
+import { waitFor } from "./_wait.mjs";
 import os from "node:os";
 import path from "node:path";
 
@@ -42,7 +43,16 @@ try {
 
   // A real, long-ish background job that prints immediately then lingers.
   const job = jobs.launch(`node -e "console.log('hello-from-job'); setInterval(()=>{}, 1000)"`, proj, "main", 3);
-  await sleep(400); // let it spawn + print
+
+  // Wait for the job to actually appear, rather than assuming 400ms was enough
+  // for node to boot and flush a line. On a loaded runner it is not, and the
+  // assertions below then describe a job that simply had not started yet.
+  const appeared = await waitFor(async () => {
+    const r = await httpGet(`/api/jobs?token=${T}`);
+    if (r.status !== 200) return null;
+    return JSON.parse(r.body).jobs.find((j) => j.id === job.id) ?? null;
+  });
+  ok("the job starts within the deadline", !!appeared);
 
   const list = await httpGet(`/api/jobs?token=${T}`);
   ok("/api/jobs returns 200 with a valid token", list.status === 200);
@@ -52,8 +62,13 @@ try {
   ok("the job carries a pid and running status", mine.pid > 0 && mine.status === "running");
   ok("job.start reached the bus with the owner tabId", seen.some((e) => e.type === "job.start" && e.jobId === job.id && e.tabId === 3));
 
-  const out = await httpGet(`/api/job?token=${T}&id=${job.id}`);
-  ok("/api/job returns the captured output", out.status === 200 && JSON.parse(out.body).output.includes("hello-from-job"));
+  // Output capture is asynchronous too — the process having started does not
+  // mean its first line has been read yet.
+  const out = await waitFor(async () => {
+    const r = await httpGet(`/api/job?token=${T}&id=${job.id}`);
+    return r.status === 200 && JSON.parse(r.body).output.includes("hello-from-job") ? r : null;
+  });
+  ok("/api/job returns the captured output", !!out);
 
   const unknown = await httpGet(`/api/job?token=${T}&id=99999`);
   ok("/api/job 404s for an unknown job", unknown.status === 404);
@@ -64,9 +79,14 @@ try {
 
   // kill (server does this via a WS job.kill; the manager path is the same call)
   jobs.kill(job.id);
-  await sleep(300);
-  const after = JSON.parse((await httpGet(`/api/jobs?token=${T}`)).body).jobs.find((j) => j.id === job.id);
-  ok("kill moves the job out of running", after && after.status === "killed");
+  // Killing is a signal, not a synchronous state change — the status flips when
+  // the OS reports the process gone, which is not on a fixed schedule.
+  const after = await waitFor(async () => {
+    const r = await httpGet(`/api/jobs?token=${T}`);
+    const j = JSON.parse(r.body).jobs.find((x) => x.id === job.id);
+    return j && j.status === "killed" ? j : null;
+  });
+  ok("kill moves the job out of running", !!after);
   ok("job.end reached the bus", seen.some((e) => e.type === "job.end" && e.jobId === job.id));
 
   await fs.rm(proj, { recursive: true, force: true }).catch(() => {});

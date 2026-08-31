@@ -1,17 +1,8 @@
-import hljs from "highlight.js/lib/common";
+import { hl } from "./highlight";
 import { langFromPath } from "./difftwopane.js";
 import type { StreamEdit } from "./store";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
-
-function hl(text: string, lang?: string): string {
-  try {
-    if (lang && hljs.getLanguage(lang)) return hljs.highlight(text, { language: lang }).value;
-    return hljs.highlightAuto(text).value;
-  } catch {
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-}
 
 function Num(props: { n: number | null }) {
   return <span style={{ flex: "0 0 34px", textAlign: "right", padding: "0 6px", color: "#4A4A58", userSelect: "none", fontSize: 10 }}>{props.n ?? ""}</span>;

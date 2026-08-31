@@ -1,7 +1,15 @@
-// `dom serve`: a localhost-only HTTP + WebSocket server that mirrors the running
+// `dom serve`: a LAN-reachable HTTP + WebSocket server that mirrors the running
 // engines to a browser. It is a VIEW/remote-control over the same engines the Ink
-// TUI drives — never a second agent. Every event on the bus is forwarded to
-// connected clients; client messages route back through the AppBridge.
+// TUI drives — never a second agent.
+//
+// "LAN-reachable", not "localhost-only", which is what this line used to say: it
+// binds 0.0.0.0 (see bindHost below) so a phone on the same WiFi can open the
+// UI. The token is the access control, not the bind address — and a comment
+// that understates the reach of a server is the kind of wrong that stops
+// someone asking the right question about it.
+//
+// Every event on the bus is forwarded to connected clients; client messages
+// route back through the AppBridge.
 //
 // Security (all enforced here, before anything else runs):
 //   - binds 0.0.0.0 so a phone on the same WiFi can reach it (LAN is always on)

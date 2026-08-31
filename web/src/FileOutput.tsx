@@ -1,5 +1,5 @@
+import { hl } from "./highlight";
 import { useEffect, useState } from "react";
-import hljs from "highlight.js/lib/common";
 import type { FileOutput as FileOut } from "./filekind";
 import { parseCsv } from "./filekind.js";
 import { Z } from "./layers";
@@ -10,24 +10,6 @@ const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 const CODE_LINES = 50;
 /** An object with more keys than this starts collapsed. */
 const JSON_KEYS = 10;
-
-function hl(text: string, lang: string): string {
-  try {
-    if (lang && hljs.getLanguage(lang)) return hljs.highlight(text, { language: lang }).value;
-    return hljs.highlightAuto(text).value;
-  } catch {
-    // Show the file, unhighlighted, rather than nothing. Returning "" here meant
-    // a highlighter that threw — on an unusual language, or a pathological line
-    // — silently emptied the pane, so the user saw a file they had opened as
-    // blank with no error to explain it. Escaped because this is injected as
-    // HTML; hljs escapes its own output, and the fallback has to as well.
-    return escapeHtml(text);
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 function bytes(n: number): string {
   if (n < 1024) return n + " B";

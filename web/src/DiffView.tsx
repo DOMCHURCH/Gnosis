@@ -1,22 +1,10 @@
-import hljs from "highlight.js/lib/common";
+import { hl } from "./highlight";
 import { parseUnifiedDiff, langFromPath } from "./difftwopane.js";
 import type { DiffCell } from "./difftwopane";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
 /** Highlight one line to HTML (best-effort); falls back to escaped plain text. */
-function hl(text: string, lang?: string): string {
-  try {
-    if (lang && hljs.getLanguage(lang)) return hljs.highlight(text, { language: lang }).value;
-    return hljs.highlightAuto(text).value;
-  } catch {
-    return escapeHtml(text);
-  }
-}
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 function Cell(props: { cell: DiffCell | null; lang?: string; bg: string; sign: string }) {
   const { cell } = props;
   return (

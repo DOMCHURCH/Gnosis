@@ -51,7 +51,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@types/three": "^0.185.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "diff": "^9.0.0",
@@ -80,6 +79,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.185.4",
     "@upstash/context7-mcp": "^4.0.3",
     "@vitejs/plugin-react": "^6.1.0",
     "chrome-devtools-mcp": "^1.7.0",
