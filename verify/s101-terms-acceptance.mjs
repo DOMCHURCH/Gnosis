@@ -179,7 +179,16 @@ const terms = acc.loadTerms();
 
   const html = read("electron", "welcome.html");
   ok("the window links the full document", /welcomeOpenTerms/.test(html));
-  ok("...and says where acceptance is stored", /recPath/.test(html) && /this computer only/i.test(html));
+  ok("...and says where the local record is kept", /recPath/.test(html));
+  // v1 said acceptance was stored on this computer ONLY. Under v2 a copy also
+  // goes to the server, so that word is now a lie and must stay gone — this
+  // asserts the absence, because a stale reassurance is worse than none.
+  ok("...without the v1 'only' claim, which is no longer true",
+    !/this computer only/i.test(html) && !/computer only/i.test(html));
+  // The server half is disclosed only when a real endpoint is configured, so
+  // the markup must carry it even while it is hidden in this build.
+  ok("...and carries the server disclosure to reveal when configured",
+    /serverNote/.test(html) && /emailRow/.test(html));
 }
 
 // --- 6. voice is on by default, and honestly described ----------------------
