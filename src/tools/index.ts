@@ -195,9 +195,11 @@ export interface ToolDef {
    * zod schema; `source` marks where the tool came from. */
   jsonSchema?: Record<string, unknown>;
   /** This tool drives the real desktop (mouse, keyboard, screen). The permission
-   * gate treats it as dangerous unconditionally: it always prompts, and neither
-   * yolo mode nor a prior "always" can wave it through. Set by the MCP manager
-   * from a server's `computer_use` flag. */
+   * gate treats it as dangerous: it prompts by default, in every mode. Unlike the
+   * other dangers, a deliberate "always" (or yolo) CAN silence it for the rest of
+   * the session — otherwise a voice session driving the desktop prompts on every
+   * mouse move. The approval is keyed on the server, not the tool. Set by the MCP
+   * manager from a server's `computer_use` flag. */
   computerUse?: boolean;
   source?: "builtin" | "mcp";
 }

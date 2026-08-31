@@ -173,10 +173,25 @@ export function firstToken(command: string): string {
   return m ? m[0] : command.trim();
 }
 
-/** Session-approval key: tool name, plus the command's first token for bash. */
+/** Session-approval key: tool name, plus the command's first token for bash.
+ *
+ * Computer-use tools key on their SERVER rather than the individual tool. A
+ * single "click for me" turn fires mouse_move, left_click, screenshot and type
+ * in sequence; keying per tool would make the user answer the same question
+ * four times to get through one instruction, which is the complaint in
+ * VOICE-UI-ISSUES.md #4. The server is the right unit because a computer-use
+ * server is already narrowed by its `allowTools` allowlist — approving it means
+ * "yes, this session may drive the desktop", which is the decision the user
+ * actually made, not "yes, specifically to left_click". */
 export function approvalKey(tool: ToolDef, args: any): string {
   if (tool.name === "bash") return `bash:${firstToken(String(args.command ?? ""))}`;
+  if (tool.computerUse) return `mcp-server:${mcpServerOf(tool.name) ?? tool.name}`;
   return tool.name;
+}
+
+/** The server half of an `mcp__<server>__<tool>` name, or null for a built-in. */
+export function mcpServerOf(toolName: string): string | null {
+  return /^mcp__(.+?)__/.exec(toolName)?.[1] ?? null;
 }
 
 /**
@@ -336,26 +351,39 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
   }
 
   // A call is dangerous if the command matches a dangerous pattern OR it lands
-  // in a dangerous place (home dir / non-project git). Dangerous calls always
-  // prompt and can never be waved through by yolo, approvals, or auto-accept.
-  // Computer use — moving the real mouse, typing on the real keyboard, reading the
-  // whole screen — is dangerous by nature, not by argument: there is no safe subset
-  // to auto-approve and no undo. Marking it here (rather than as merely `mutating`)
-  // is what makes it prompt in yolo mode too, since only `dangerous` survives the
-  // yolo/approvals shortcut below.
+  // in a dangerous place (home dir / non-project git). Dangerous calls prompt,
+  // and most of them can never be waved through by yolo, approvals, or
+  // auto-accept.
+  //
+  // Computer use — moving the real mouse, typing on the real keyboard, reading
+  // the whole screen — is dangerous by nature rather than by argument, so it is
+  // marked dangerous here and prompts by default even in yolo. It is, however,
+  // the one danger that a deliberate "always" may silence for the rest of the
+  // session (see `unsilenceable` below). Making it *architecturally*
+  // un-silenceable, as it was, meant a voice session that drives the desktop
+  // threw an Allow/Deny card at the user for every single mouse move — the
+  // complaint in VOICE-UI-ISSUES.md #4. The safety that matters is still
+  // enforced elsewhere and cannot be approved away: ~/.dom is a hard block, and
+  // scopeTarget() scans every string argument of a computer-use call for a
+  // write-scope violation and hard-rejects it.
+  //
   // Reasons that mean "a human must actually see this", in precedence order. A
   // scope confirmation is deliberately NOT one of them — it only informs — so it
   // is considered last and never softens a genuine danger that also applies.
-  const hardReason =
-    (tool.computerUse ? "computer use — controls the real mouse, keyboard, and screen" : null) ??
-    deletionWarning(ctx.cwd, tool, args) ??
-    dangerReason(ctx.cwd, tool, args) ??
-    null;
+  const computerUseReason = tool.computerUse ? "computer use — controls the real mouse, keyboard, and screen" : null;
+  const otherHardReason = deletionWarning(ctx.cwd, tool, args) ?? dangerReason(ctx.cwd, tool, args) ?? null;
+  const hardReason = computerUseReason ?? otherHardReason;
   const softReason = scope.kind === "confirm" ? scope.reason : null;
   const reason = hardReason ?? softReason ?? undefined;
   const cmd = String(args.command ?? "");
-  const dangerous =
-    !!tool.computerUse || reason !== undefined || (tool.name === "bash" && (isDangerous(cmd) || hasHiddenChars(cmd)));
+  const bashDangerous = tool.name === "bash" && (isDangerous(cmd) || hasHiddenChars(cmd));
+  const dangerous = !!computerUseReason || reason !== undefined || bashDangerous;
+
+  // Dangerous for a reason of its own — a destructive command, a write into the
+  // bare home directory, a deletion with no undo, a scope confirmation the user
+  // is meant to read. None of these may be silenced: they prompt every time, in
+  // every mode. Computer use is absent on purpose; it is the silenceable one.
+  const unsilenceable = otherHardReason !== null || softReason !== null || bashDangerous;
 
   // Read-only tools run free — unless flagged dangerous by context.
   if (!tool.mutating && !dangerous) return { kind: "allow" };
@@ -365,7 +393,7 @@ export function gate(tool: ToolDef, args: any, ctx: GateContext): GateDecision {
     return { kind: "reject", reason: "plan mode is active — mutating tools are disabled." };
   }
 
-  if (!dangerous) {
+  if (!unsilenceable) {
     if (ctx.mode === "yolo") return { kind: "allow" };
     if (ctx.approvals.has(approvalKey(tool, args))) return { kind: "allow" };
   }

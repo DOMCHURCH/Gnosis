@@ -1,11 +1,24 @@
-// Verify (computer-use MCP: the always-prompt guard + image results).
+// Verify (computer-use MCP: the prompt-until-authorized guard + image results).
 //
 // The guard's whole point is the case the ordinary `mutating` flag does NOT
-// cover. A merely-mutating tool is waved straight through in yolo mode, and a
-// prior "always" approval waves it through in ask mode — so marking desktop
-// control `mutating` would have let an irreversible click run unattended. This
-// pins the property that matters: a computer-use tool prompts in EVERY mode, and
-// no approval can pre-authorize it.
+// cover: a merely-mutating tool is waved through unseen, so marking desktop
+// control `mutating` would have let an irreversible click run with the user
+// never having said yes to desktop control at all. What this pins is that
+// consent is REQUIRED and INFORMED — a computer-use tool prompts, flagged
+// dangerous and naming what it controls, until the user explicitly authorizes
+// it.
+//
+// It is deliberately silenceable after that. It used to be architecturally
+// un-silenceable (dangerous calls skipped the approvals shortcut outright),
+// which meant a voice session driving the desktop threw an Allow/Deny card for
+// every individual mouse move — VOICE-UI-ISSUES.md #4. One "always" now covers
+// the server, because one "click that for me" turn fires mouse_move, left_click,
+// screenshot and type in sequence and answering four cards is not consent, it is
+// attrition.
+//
+// The safety that actually matters is NOT what the user can approve away, and
+// section 6 pins it: ~/.dom is a hard block and a write-scope violation is a
+// hard reject, in every mode, approved or not.
 //
 // Also covers the screenshot path: MCP image blocks used to flatten to the
 // literal text "[image image/png]" with the bytes discarded, so a screenshot was
@@ -16,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const imp = (f) => import(pathToFileURL(path.resolve(here, f)).href);
 
-const { gate } = await imp("../dist/permissions.js");
+const { gate, approvalKey } = await imp("../dist/permissions.js");
 const { splitContent } = await imp("../dist/mcp/client.js");
 
 let fails = 0;
@@ -30,21 +43,35 @@ const readOnlyMcpTool = { name: "mcp__context7__get_docs", mutating: false, sour
 
 // --- 1. the property `mutating` alone does not give you ----------------------
 {
-  for (const mode of ["ask", "yolo"]) {
-    const d = gate(desktopTool, {}, ctx(mode));
-    ok(`computer use PROMPTS in ${mode} mode`, d.kind === "prompt");
-    ok(`...and is flagged dangerous in ${mode} mode`, d.kind === "prompt" && d.dangerous === true);
-  }
-  const d = gate(desktopTool, {}, ctx("plan"));
-  ok("plan mode rejects it outright", d.kind === "reject");
+  // Unauthorized, it prompts — and is flagged dangerous, so a headless run
+  // refuses it rather than clicking unattended.
+  const d = gate(desktopTool, {}, ctx("ask"));
+  ok("computer use PROMPTS when nothing has authorized it", d.kind === "prompt");
+  ok("...and is flagged dangerous", d.kind === "prompt" && d.dangerous === true);
+  ok("...so a headless run refuses rather than allows", d.kind === "prompt" && d.nonInteractive !== "allow");
+  ok("plan mode rejects it outright", gate(desktopTool, {}, ctx("plan")).kind === "reject");
 }
 
-// --- 2. no prior approval can pre-authorize a desktop action ----------------
+// --- 2. an explicit authorization silences it; a stray one does not ---------
 {
-  // Approve it once under every key the gate could plausibly use, then re-gate.
-  const keys = ["mcp__computer-use__screenshot", "mcp__computer-use__screenshot:", "screenshot"];
-  const d = gate(desktopTool, {}, ctx("ask", keys));
-  ok('a prior "always" does NOT wave computer use through', d.kind === "prompt" && d.dangerous === true);
+  const key = approvalKey(desktopTool, {});
+  ok("the approval key is the SERVER, not the individual tool", key === "mcp-server:computer-use");
+
+  // The point of keying on the server: approving once gets a whole "click that
+  // for me" turn through, not just the one tool that happened to prompt.
+  const click = { name: "mcp__computer-use__left_click", mutating: true, computerUse: true, source: "mcp" };
+  const type = { name: "mcp__computer-use__type", mutating: true, computerUse: true, source: "mcp" };
+  ok("one always covers the screenshot that asked for it", gate(desktopTool, {}, ctx("ask", [key])).kind === "allow");
+  ok("...and the click that follows it", gate(click, {}, ctx("ask", [key])).kind === "allow");
+  ok("...and the typing after that", gate(type, {}, ctx("ask", [key])).kind === "allow");
+  ok("yolo mode covers it too", gate(desktopTool, {}, ctx("yolo")).kind === "allow");
+
+  // But only a real authorization counts. An approval for a different server, or
+  // one keyed the old per-tool way, must not leak desktop control.
+  ok("an approval for a DIFFERENT server does not authorize this one",
+    gate(desktopTool, {}, ctx("ask", ["mcp-server:playwright"])).kind === "prompt");
+  ok("a stale per-tool key does not authorize it either",
+    gate(desktopTool, {}, ctx("ask", ["mcp__computer-use__screenshot"])).kind === "prompt");
 }
 
 // --- 3. the contrast: ordinary MCP tools keep their old behaviour ------------
@@ -114,6 +141,14 @@ const readOnlyMcpTool = { name: "mcp__context7__get_docs", mutating: false, sour
   // Scoped to computer use: an ordinary MCP tool keeps its old behaviour.
   ok("a non-computer-use MCP tool is unaffected by this rule",
     gate({ name: "mcp__playwright__browser_navigate", mutating: true, source: "mcp" }, { url: home + "/.dom/.env" }, ctx("yolo")).kind === "allow");
+
+  // The line that makes the new "always" safe to offer at all: authorizing
+  // desktop control authorizes CLICKING, never reaching past the gate. A user
+  // who said "always" to the mouse has not said yes to the API key.
+  const authorized = ctx("ask", [approvalKey(fsTool, {})]);
+  ok('an "always" does NOT unlock ~/.dom for a computer-use tool',
+    gate(fsTool, { path: home + "/.dom/.env" }, authorized).kind === "reject");
+  ok("...nor does yolo", gate(script, { script: "type ~/.dom/config.json" }, ctx("yolo")).kind === "reject");
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
