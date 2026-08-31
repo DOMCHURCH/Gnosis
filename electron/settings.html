@@ -285,7 +285,18 @@
           <button id="voice-test" type="button" class="primary">Test wake word</button>
           <span class="state" id="voice-test-result" style="margin: 0"></span>
         </div>
-      </section>
+
+        <!-- The install path. Everything above can only REPORT that the Python
+             side is missing; this is the only control that fixes it. -->
+        <div class="row" style="margin-top: 12px">
+          <button id="voice-install" type="button">Install voice support</button>
+          <span class="state" id="voice-install-state" style="margin: 0"></span>
+        </div>
+        <p class="note" id="voice-install-note">
+          Downloads <strong>openWakeWord</strong> (wake word) and <strong>Kokoro</strong> (speech), both free
+          and fully local — about 330&nbsp;MB of model weights. Needs Python 3.9+ with pip already on the
+          machine; it will not install Python for you.
+        </p></section>
 
       <section>
         <h2>Working directory</h2>
@@ -772,6 +783,42 @@
       });
 
       $("tts-voice").addEventListener("change", (e) => void window.gnosis.setVoiceName(e.target.value));
+
+      // ---- install the Python side -------------------------------------------
+      // Steps stream in while it runs. The button stays disabled throughout:
+      // pip and a 310MB download are not things to have two of at once.
+      window.gnosis.onVoiceSetupStep?.((s) => {
+        const st = $("voice-install-state");
+        if (!st) return;
+        st.className = "state" + (s.status === "failed" ? "" : s.status === "done" ? " set" : "");
+        st.textContent = `${s.step}: ${s.detail ?? s.status}`;
+      });
+
+      $("voice-install").addEventListener("click", async () => {
+        const btn = $("voice-install");
+        const st = $("voice-install-state");
+        btn.disabled = true;
+        btn.textContent = "Installing…";
+        st.className = "state";
+        st.textContent = "starting…";
+        try {
+          const r = await window.gnosis.voiceSetup({ wakeword: true, kokoro: true });
+          st.className = "state" + (r?.ok ? " set" : "");
+          st.textContent = r?.ok
+            ? "installed — voice is ready"
+            : `did not finish: ${r?.reason ?? "unknown error"}`;
+          // Repaint from the real probes, so the table reflects what is now on
+          // disk rather than what was cached before the install.
+          paintDiag(await window.gnosis.voiceProbe());
+          paintDiag(await window.gnosis.voiceDiagnostics());
+        } catch (e) {
+          st.className = "state";
+          st.textContent = `failed: ${String(e?.message ?? e)}`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Install voice support";
+        }
+      });
 
       void window.gnosis.voiceDiagnostics().then(paintDiag);
 

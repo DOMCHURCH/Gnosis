@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld("gnosis", {
   voiceDiagnostics: () => ipcRenderer.invoke("voice:diagnostics"),
   voiceProbe: () => ipcRenderer.invoke("voice:probe-runtime"),
   voiceTest: () => ipcRenderer.invoke("voice:test"),
+  /** Install openWakeWord + Kokoro and download their models. Long-running:
+   * progress arrives on onVoiceSetupStep, and the promise resolves at the end. */
+  voiceSetup: (parts) => ipcRenderer.invoke("voice:setup", parts),
+  onVoiceSetupStep: (cb) => ipcRenderer.on("voice:setup-step", (_e, s) => cb(s)),
   setVoiceName: (v) => ipcRenderer.invoke("settings:set-voice-name", v),
   // Working directory: the folder the app opens into. pickAppCwd opens the native
   // directory chooser; setAppCwd saves a path (empty string clears the setting).
