@@ -193,6 +193,23 @@ async function main() {
   await waitUntilExit();
 }
 
+/*
+ * A stray rejection must not end a live session.
+ *
+ * The .catch below only covers main's own chain. Node terminates the process on
+ * any OTHER unhandled rejection, and the long-lived paths here — the serve
+ * server, MCP connections, background tool work — sit outside that chain. In a
+ * TUI that meant the session, its context and its scrollback disappearing with
+ * a bare stack trace.
+ *
+ * Written to stderr specifically: Ink owns stdout, and anything printed there
+ * fights the renderer for the same cells.
+ */
+process.on("unhandledRejection", (reason) => {
+  process.stderr.write(`dom: unhandled rejection (continuing): ${String(reason)}
+`);
+});
+
 main().catch((e) => {
   console.error(e);
   process.exit(1);

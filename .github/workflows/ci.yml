@@ -25,6 +25,12 @@ jobs:
 
       - run: npm ci
 
+      # The acceptance server is its own package with its own tests, and they
+      # are part of the gate — it holds the record of who accepted the Terms.
+      # Its own deps are needed for the suite to run rather than skip.
+      - name: install acceptance-server deps
+        run: npm --prefix acceptance-server ci
+
       # The verify suites import from dist/, so the build has to land first.
       - run: npm run build
 

@@ -103,6 +103,32 @@ async function startGnosis(cwd) {
   return { server, bridge, engine };
 }
 
+/**
+ * Schemes that may be handed to the operating system.
+ *
+ * An allowlist, not a denylist: the set of protocol handlers registered on a
+ * Windows machine is unknowable from here, so anything not explicitly a web
+ * link or an email is refused. file: is absent deliberately — it is what turns
+ * "open this link" into "run this executable".
+ */
+function isSafeExternal(url) {
+  try {
+    const { protocol } = new URL(String(url));
+    return protocol === "http:" || protocol === "https:" || protocol === "mailto:";
+  } catch {
+    return false; // unparseable is not openable
+  }
+}
+
+/** Same scheme+host+port, used to tell "our own UI" from anywhere else. */
+function sameOrigin(a, b) {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
   return new BrowserWindow({
     ...restoredBounds(),
@@ -158,6 +184,32 @@ function registerWindowChrome(getWin) {
   ipcMain.on("ui:set", (_e, patch) => setUiState(patch));
 }
 
+/*
+ * Keep the app alive when something rejects with nobody listening.
+ *
+ * Node terminates the process on an unhandled rejection. That default is right
+ * for a script and wrong for this: Gnosis is a tray app people leave running
+ * for days (see the six-hour update check in updater.js), and the background
+ * work it does — update checks, the acceptance queue drain, voice, MCP
+ * connections — is exactly the kind of code where one unawaited promise ends
+ * the session. What the user saw was the window vanishing with no message and
+ * no reason to connect it to anything.
+ *
+ * Logged rather than swallowed silently, and deliberately NOT converted into a
+ * dialog: a crash the user cannot act on is noise, and the log is what makes it
+ * diagnosable afterwards. An uncaught EXCEPTION is left to terminate as before
+ * — that indicates state this process can no longer reason about, and limping
+ * on with a corrupted engine is worse than restarting.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("gnosis: unhandled rejection (continuing):", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("gnosis: uncaught exception:", err);
+  // Rethrowing here would recurse. Exit non-zero so a supervisor sees it.
+  app?.exit?.(1);
+});
+
 // One agent per machine. A second launch would boot a second engine against the
 // same ~/.dom session state; focus the live window instead.
 if (!app.requestSingleInstanceLock()) {
@@ -200,9 +252,32 @@ if (!app.requestSingleInstanceLock()) {
     win.once("ready-to-show", () => win.show());
     // Links to the outside world belong in the user's real browser, not in a
     // window that has no address bar to escape from.
+    //
+    // The SCHEME is checked before handing anything to the OS. shell.openExternal
+    // does not just open web pages — on Windows it hands the string to whatever
+    // application claims that protocol, so a scheme nobody vetted is an
+    // arbitrary local launch. This window renders model output and fetched web
+    // content, and the markdown sanitiser deliberately permits `target`
+    // (Markdown.tsx), which is the attribute that produces a window.open. That
+    // is a short enough path from "a model wrote a link" to "the OS ran
+    // something" to be worth an allowlist rather than trust in the sanitiser
+    // alone.
     win.webContents.setWindowOpenHandler(({ url }) => {
-      void shell.openExternal(url);
+      if (isSafeExternal(url)) void shell.openExternal(url);
       return { action: "deny" };
+    });
+
+    // Nothing navigates this window away from the local UI.
+    //
+    // setWindowOpenHandler only governs NEW windows; a plain in-window
+    // navigation is a different code path and was ungoverned. A remote page
+    // loaded here would not be a mere tab — it would run against the preload in
+    // shell-preload.cjs and inherit its IPC surface, which is the whole
+    // application. The server URL itself is the only thing allowed.
+    win.webContents.on("will-navigate", (e, url) => {
+      if (sameOrigin(url, win.webContents.getURL())) return;
+      e.preventDefault();
+      if (isSafeExternal(url)) void shell.openExternal(url);
     });
     for (const ev of ["maximize", "unmaximize"]) {
       win.on(ev, () => win.webContents.send("win:maximized", win.isMaximized()));

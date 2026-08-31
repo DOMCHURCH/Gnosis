@@ -17,6 +17,8 @@ import http from "node:http";
 import net from "node:net";
 import type { Duplex } from "node:stream";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
+import { promisify } from "node:util";
 import { promises as fs, promises as fsp } from "node:fs";
 import path from "node:path";
 
@@ -384,7 +386,55 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
   return false;
 }
 
-async function serveStatic(pathname: string, staticDir: string, res: http.ServerResponse): Promise<void> {
+const gzip = promisify(zlib.gzip);
+
+/** Types worth compressing. Images and octet-streams are already compressed;
+ *  running them through zlib costs CPU and returns nothing. */
+const COMPRESSIBLE = new Set([".html", ".js", ".css", ".json", ".svg", ".map"]);
+
+/**
+ * Send a static body, gzipped when the client asked for it.
+ *
+ * This matters more here than on a typical server. The frontend is inlined into
+ * a SINGLE file by viteSingleFile — one ~1.6MB index.html, three.js and all —
+ * and the whole reason this binds the LAN is so a phone on the same WiFi can
+ * load it. Uncompressed, that full 1.6MB is the cost of opening the UI on a
+ * phone, paid on every cold load over WiFi. It gzips to roughly a quarter.
+ *
+ * Never when the client did not offer to accept it, and never for bodies too
+ * small to be worth the round trip through zlib.
+ */
+async function sendMaybeGzipped(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  body: Buffer,
+  contentType: string,
+  ext: string,
+): Promise<void> {
+  const accepts = String(req.headers["accept-encoding"] ?? "").toLowerCase().includes("gzip");
+  if (!accepts || !COMPRESSIBLE.has(ext) || body.length < 1024) {
+    res.writeHead(200, { "content-type": contentType });
+    res.end(body);
+    return;
+  }
+  try {
+    const packed = await gzip(body);
+    res.writeHead(200, {
+      "content-type": contentType,
+      "content-encoding": "gzip",
+      // Caches and proxies must not hand a gzipped body to a client that never
+      // asked for one.
+      vary: "Accept-Encoding",
+    });
+    res.end(packed);
+  } catch {
+    // Compression is an optimisation; failing at it must not fail the response.
+    res.writeHead(200, { "content-type": contentType });
+    res.end(body);
+  }
+}
+
+async function serveStatic(req: http.IncomingMessage, pathname: string, staticDir: string, res: http.ServerResponse): Promise<void> {
   const rel = pathname === "/" ? "/index.html" : pathname;
   const full = path.join(staticDir, path.normalize(rel).replace(/^(\.\.[/\\])+/, ""));
   // Path-traversal guard: the resolved file must stay inside staticDir.
@@ -393,14 +443,14 @@ async function serveStatic(pathname: string, staticDir: string, res: http.Server
     res.end("forbidden");
     return;
   }
+  const ext = path.extname(full);
   try {
     const body = await fs.readFile(full);
-    res.writeHead(200, { "content-type": MIME[path.extname(full)] ?? "application/octet-stream" });
-    res.end(body);
+    await sendMaybeGzipped(req, res, body, MIME[ext] ?? "application/octet-stream", ext);
   } catch {
     if (rel === "/index.html") {
-      res.writeHead(200, { "content-type": MIME[".html"]! });
-      res.end(PLACEHOLDER_HTML); // no built frontend yet → placeholder
+      // no built frontend yet → placeholder
+      await sendMaybeGzipped(req, res, Buffer.from(PLACEHOLDER_HTML), MIME[".html"]!, ".html");
     } else {
       res.writeHead(404);
       res.end("not found");
@@ -629,7 +679,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       }).catch(() => { res.writeHead(500); res.end("error"); });
       return;
     }
-    void serveStatic(url.pathname, staticDir, res);
+    void serveStatic(req, url.pathname, staticDir, res);
   });
 
   server.on("upgrade", (req, socket) => {

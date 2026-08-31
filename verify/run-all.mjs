@@ -7,7 +7,7 @@
 // Each suite is self-contained, offline (fetch is mocked; no real network), and
 // isolated to a throwaway home — nothing here touches the real ~/.dom.
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,6 +50,42 @@ for (const f of suites) {
   } else if (r.status !== 0) {
     failures.push([f, `exit ${r.status}`]);
     console.log(`  ✗ ${f} FAILED (exit ${r.status})`);
+  }
+}
+
+/*
+ * The acceptance server, which lives in its own package.
+ *
+ * Its suite is not verify/s*.mjs so the glob above never saw it, and neither
+ * workflow ran it either — the component holding the legal record of who
+ * accepted the Terms was the one part of this repo whose tests only ran when
+ * someone remembered to cd into it by hand. It needs no database (the pool is
+ * stubbed throughout), so there is no reason for it to be optional.
+ *
+ * Skipped rather than failed when its dependencies are not installed: a fresh
+ * clone has no acceptance-server/node_modules, and "you have not run npm
+ * install in a subpackage" is not a regression.
+ */
+{
+  const name = "acceptance-server/test/run.mjs";
+  const sub = path.join(dir, "..", "acceptance-server");
+  const entry = path.join(sub, "test", "run.mjs");
+  console.log(`
+──────────── ${name} ────────────`);
+  if (!existsSync(entry)) {
+    console.log("SKIP not present");
+  } else if (!existsSync(path.join(sub, "node_modules"))) {
+    console.log("SKIP dependencies not installed — run: npm --prefix acceptance-server ci");
+  } else {
+    const started = Date.now();
+    const r = spawnSync(process.execPath, [entry], { stdio: "inherit", timeout: SUITE_TIMEOUT_MS, cwd: sub });
+    const ms = Date.now() - started;
+    if (ms >= SLOW_MS) slow.push([name, ms]);
+    if (r.status !== 0) {
+      failures.push([name, `exit ${r.status}`]);
+      console.log(`  ✗ ${name} FAILED (exit ${r.status})`);
+    }
+    suites.push(name);
   }
 }
 

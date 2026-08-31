@@ -16,8 +16,17 @@ function hl(text: string, lang: string): string {
     if (lang && hljs.getLanguage(lang)) return hljs.highlight(text, { language: lang }).value;
     return hljs.highlightAuto(text).value;
   } catch {
-    return "";
+    // Show the file, unhighlighted, rather than nothing. Returning "" here meant
+    // a highlighter that threw — on an unusual language, or a pathological line
+    // — silently emptied the pane, so the user saw a file they had opened as
+    // blank with no error to explain it. Escaped because this is injected as
+    // HTML; hljs escapes its own output, and the fallback has to as well.
+    return escapeHtml(text);
   }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function bytes(n: number): string {
