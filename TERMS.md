@@ -1,6 +1,12 @@
 # Gnosis — Terms of Use
 
-**Version 1 · Effective 2026-08-31**
+**Version 2 · Effective 2026-08-31**
+
+> **What changed since Version 1.** Version 1 said the project collected nothing
+> and ran no servers. That is no longer true, and this version says so plainly:
+> when you accept these Terms, one record of that acceptance is sent to a server
+> we operate. Section 5 sets out exactly what that record contains. Nothing else
+> about your use of the Software is ever sent to us.
 
 Gnosis ("the Software") is free, open-source software published by the Gnosis
 project ("we", "us"). By installing or using it you agree to these terms. If you
@@ -66,11 +72,37 @@ You must be old enough to form a binding contract where you live.
 
 ## 5. Data — what we collect, and what leaves your computer
 
-**We collect nothing.** The Gnosis project operates no servers, no analytics, no
-telemetry and no accounts. We never receive your prompts, files, keystrokes,
-screen contents, recordings or API keys, and we could not read them if we wanted
-to. Your conversations, sessions, keys and generated files stay on your computer,
-in `~/.dom` and `~/Gnosis`.
+**We collect one thing, once: the fact that you accepted these Terms.**
+
+When you press Accept, and at no other time, the Software sends a single record
+to a server operated by the Gnosis project. That record contains exactly:
+
+| Field | What it is |
+| --- | --- |
+| An installation id | 32 random characters, generated on your computer when you first ran the Software. It is **not** derived from your name, username, hostname, hardware serial, MAC address or anything else about you or your machine. Reinstalling produces a different one |
+| The version of these Terms | e.g. `v2` |
+| A checksum of these Terms | So we can show which exact text you were shown |
+| The version of the Software | e.g. `1.4.0` |
+| The date and time | Both as your computer reported it, and as our server received it |
+| An email address | **Only if you choose to type one.** The field is optional, blank by default, and we do not verify it. Leave it blank and no address is stored |
+
+**That is the entire list, and it is sent once per version of these Terms that
+you accept.** There is no second call, no heartbeat, no usage reporting, no
+analytics, no crash reporting and no account. We do not know when you run the
+Software, what you ask it, what it does, or whether you are still using it.
+
+**Why it exists.** A record of acceptance kept only on your computer is a record
+you can edit. This copy is kept where you cannot, so that what was agreed to can
+be established rather than argued about. A copy also stays on your machine, in
+`~/.dom/acceptance.json`, so you can read exactly what was recorded.
+
+**If you never accept, nothing is sent.** Closing the window without accepting
+transmits nothing at all.
+
+**Everything else stays on your computer.** We never receive your prompts, files,
+keystrokes, screen contents, recordings or API keys, and we could not read them
+if we wanted to. Your conversations, sessions, keys and generated files stay on
+your computer, in `~/.dom` and `~/Gnosis`.
 
 **However, the Software is not offline.** To function it sends data to services
 that *you* configure with *your* own API keys:
@@ -80,7 +112,8 @@ that *you* configure with *your* own API keys:
 | **OpenRouter** | Your prompts, and the contents of files the agent reads | Always — the Software cannot work without it |
 | **Groq** | Recordings of your speech, for transcription | Whenever you speak to it after the wake phrase (voice is on by default) |
 | **Brave Search** | Your search terms | Only if you use web search |
-| **GitHub** | A version number, to check for updates | On launch and periodically |
+| **GitHub** | A version number, to check for updates | On launch and every six hours. The Software tells you when a newer version exists; it does not download or install anything by itself |
+| **The Gnosis project** | The acceptance record described above, and nothing else | Once, when you accept these Terms |
 | **Any MCP server you add** | Whatever that server's tools are given | Only if you configure it |
 
 These are independent companies. Your data reaches them under **their** terms and
@@ -150,9 +183,19 @@ found unenforceable, the rest remains in force.
 ## 11. Changes
 
 These Terms may change in later versions of the Software. The version you
-accepted is recorded on your own computer, in `~/.dom/acceptance.json`, together
+accepted is recorded in two places: on your own computer, in
+`~/.dom/acceptance.json`, and on our server as described in §5 — both together
 with a checksum of the exact text you were shown. Material changes are presented
 for acceptance again when you update.
+
+**If you gave us an email address** and want it removed, ask at the address in
+§12 and we will delete it from the record. We will keep the rest of the row —
+the installation id, the version, the checksum and the timestamps — because that
+is the acceptance itself and deleting it would destroy the record these Terms
+exist to create. Nothing in the remaining row identifies you.
+
+**To send nothing at all**, do not accept these Terms, and do not use the
+Software.
 
 ## 12. Contact
 

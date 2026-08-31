@@ -1,6 +1,6 @@
 {
   "name": "@dominquechurch/gnosis",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Gnosis (formerly dom) — a terminal coding agent. OpenRouter-only, runtime model switching, Windows-first.",
   "keywords": [
     "coding-agent",

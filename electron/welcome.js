@@ -20,7 +20,8 @@
 
 import { BrowserWindow, ipcMain, app, shell } from "electron";
 import { readFileSync } from "node:fs";
-import { loadTerms, isAccepted, recordAcceptance, acceptancePath } from "./acceptance.js";
+import { loadTerms, isAccepted, recordAcceptance, readAcceptance, acceptancePath } from "./acceptance.js";
+import { report, buildPayload, isConfigured } from "./acceptance-report.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -108,6 +109,12 @@ export async function maybeShowWelcome({ getWindow }) {
       voiceEnabled: fresh.voiceEnabled !== false, // voice is on unless turned off
       terms: terms ? { version: terms.version, sha256: terms.sha256, text: terms.text } : null,
       recordPath: acceptancePath(),
+      // Whether a real endpoint is configured in this build. The window uses it
+      // to decide what to SAY: promising that acceptance is recorded with the
+      // project while the endpoint is still a placeholder would be a disclosure
+      // of something that does not happen, which is the one thing a disclosure
+      // must never be.
+      reporting: isConfigured(),
     };
   });
 
@@ -132,14 +139,23 @@ export async function maybeShowWelcome({ getWindow }) {
   });
 
   ipcMain.removeAllListeners("welcome:accept");
-  ipcMain.on("welcome:accept", () => {
+  ipcMain.on("welcome:accept", (_evt, payload) => {
     // Write the record BEFORE closing, so a crash on close cannot lose it — an
     // acceptance that was shown but not recorded is the failure this whole file
     // exists to prevent.
     void (async () => {
       try {
-        await recordAcceptance(terms, version);
+        const entry = await recordAcceptance(terms, version);
         await saveConfig({ acceptedVersion: version });
+
+        // Then, and only then, the copy the user cannot edit. Local first is
+        // deliberate: the local record is what gates this window, so it must be
+        // durable before anything touches the network. This call is awaited but
+        // cannot throw and cannot block for long — it queues on failure.
+        const rec = await readAcceptance();
+        if (entry && rec?.machine) {
+          await report(buildPayload({ machine: rec.machine, entry, email: payload?.email }));
+        }
       } catch {
         /* a record we could not write must not trap the user in this window */
       } finally {

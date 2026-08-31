@@ -32,10 +32,9 @@ export interface ShellBridge {
   onDeepLink(cb: (d: { action: string; name?: string; path?: string }) => void): () => void;
   onNotificationActivate(cb: (p: { tabId?: number; kind?: string }) => void): () => void;
 
-  onUpdateReady(cb: (i: { version: string | null }) => void): () => void;
-  onUpdateAvailable(cb: (i: { version: string | null }) => void): () => void;
-  restartToUpdate(): void;
-  checkForUpdate(): Promise<{ ok: boolean; version?: string | null; error?: string }>;
+  onUpdateAvailable(cb: (i: { version: string | null; url?: string }) => void): () => void;
+  openReleasesPage(): void;
+  checkForUpdate(): Promise<{ ok: boolean; version?: string | null; url?: string; error?: string }>;
 
   voiceStatus(): Promise<{ enabled: boolean; wakeWord: boolean; transcription: boolean; reason: string }>;
   speak(text: string): Promise<{ ok: boolean; error?: string }>;

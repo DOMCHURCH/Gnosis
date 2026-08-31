@@ -26,6 +26,7 @@ import { registerContextMenus } from "./context-menus.js";
 import { registerWin32Focus } from "./win32-focus.js";
 import { registerVoice } from "./voice.js";
 import { maybeShowWelcome } from "./welcome.js";
+import { drainQueue } from "./acceptance-report.js";
 import { resolveRootCwd, defaultProject } from "./rootcwd.js";
 import { registerCamera } from "./camera.js";
 import { registerScreen } from "./screen.js";
@@ -326,6 +327,12 @@ if (!app.requestSingleInstanceLock()) {
       void maybeShowWelcome({ getWindow: () => win })
         .catch(() => { /* never block startup on the welcome window */ });
     }
+
+    // Retry any acceptance that could not reach the server when it was made.
+    // Fire-and-forget, after the window is already up: draining a queue is never
+    // a reason for the user to wait on a network round trip. Without this, an
+    // acceptance made offline is silently never recorded.
+    void drainQueue().catch(() => { /* still offline; it stays queued */ });
 
     // A gnosis:// link that launched us cold: the renderer has to exist first.
     if (deepLinks.pending) {

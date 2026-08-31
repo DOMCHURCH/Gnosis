@@ -42,10 +42,12 @@ contextBridge.exposeInMainWorld("gnosisShell", {
   onDeepLink: (cb) => on("deeplink", cb),
   onNotificationActivate: (cb) => on("notification-activate", cb),
 
-  // --- auto-update ---
-  onUpdateReady: (cb) => on("update:ready", cb),
+  // --- updates (check-and-tell only; see electron/updater.js for why) ---
   onUpdateAvailable: (cb) => on("update:available", cb),
-  restartToUpdate: () => ipcRenderer.send("update:restart"),
+  // Nothing is downloaded or staged any more, so there is no "ready" event and
+  // nothing to restart into. This opens the releases page and the user installs
+  // deliberately.
+  openReleasesPage: () => ipcRenderer.send("update:open-releases"),
   checkForUpdate: () => ipcRenderer.invoke("update:check"),
 
   // --- voice (desktop only; the served page in a browser has none of this) ---

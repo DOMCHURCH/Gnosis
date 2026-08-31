@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld("gnosis", {
   voiceTest: () => ipcRenderer.invoke("voice:test"),
   /** First-run window: what to show, and recording that it was accepted. */
   welcomeInfo: () => ipcRenderer.invoke("welcome:info"),
-  welcomeAccept: () => ipcRenderer.send("welcome:accept"),
+  // payload carries the optional email; null when the field was left blank.
+  welcomeAccept: (payload) => ipcRenderer.send("welcome:accept", payload ?? null),
   welcomeOpenTerms: () => ipcRenderer.send("welcome:open-terms"),
   welcomeVoiceReady: () => ipcRenderer.invoke("welcome:voice-ready"),
   /** Install openWakeWord + Kokoro and download their models. Long-running:

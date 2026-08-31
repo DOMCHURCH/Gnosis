@@ -161,12 +161,35 @@
           <p style="margin-bottom:6px">Continuing accepts the
             <a href="#" id="openTerms">Terms of Use</a> <span id="termsVer" style="color:var(--dim)"></span>.
             The summary above is the substance of them, not a replacement for them.</p>
-          <p style="margin-bottom:0; color:var(--dim); font-size:11.5px">
-            Your acceptance is recorded on <strong>this computer only</strong>, at
+          <p style="margin-bottom:6px; color:var(--dim); font-size:11.5px">
+            Your acceptance is recorded on this computer, at
             <code id="recPath" style="font-size:11px"></code>, with a checksum of the exact text you
-            were shown. Nothing about it is sent anywhere — recording it on a server would mean
-            collecting data about every install, which is precisely what these terms promise not to do.
+            were shown.
           </p>
+
+          <!--
+            Shown only when a real endpoint is configured in this build. Saying
+            "a copy is sent to us" in a build that sends nothing would be a
+            disclosure of something that does not happen, and a disclosure that
+            is not true is worse than none.
+          -->
+          <p id="serverNote" hidden style="margin-bottom:6px; color:var(--dim); font-size:11.5px">
+            A copy is also sent to the Gnosis project — the installation id, this document's
+            version and checksum, the app version and the time. <strong>That is sent once, when
+            you press the button below, and never again.</strong> No prompts, no files, no usage
+            data, ever. It exists so what was agreed to can be shown rather than argued about.
+          </p>
+
+          <div id="emailRow" hidden style="margin-bottom:0">
+            <label for="email" style="display:block; color:var(--dim); font-size:11.5px; margin-bottom:4px">
+              Email — <strong>optional</strong>, leave blank if you prefer. Only used to tie this
+              acceptance to you if it is ever disputed. Not verified, never emailed, never shared.
+            </label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@example.com"
+              style="width:100%; box-sizing:border-box; padding:7px 10px; font-size:12px;
+                     background:#0d0d12; color:#C9D1D9; border:1px solid rgba(255,255,255,0.12);
+                     border-radius:8px; font-family:inherit" />
+          </div>
         </div>
       </section>
     </main>
@@ -254,7 +277,12 @@
         }
       });
 
-      $("accept").addEventListener("click", () => window.gnosis.welcomeAccept());
+      $("accept").addEventListener("click", () => {
+        // Blank stays blank. An empty string would be recorded as an address the
+        // user volunteered, which they did not.
+        const email = $("email").value.trim();
+        window.gnosis.welcomeAccept({ email: email || null });
+      });
 
       // Reflect reality on open: the window is also shown after an update, when
       // voice may already be on.
@@ -267,6 +295,11 @@
           }
           if (info?.terms) $("termsVer").textContent = "(" + info.terms.version + ")";
           if (info?.recordPath) $("recPath").textContent = info.recordPath;
+          // Only disclose the server copy in a build that actually has one.
+          if (info?.reporting) {
+            $("serverNote").hidden = false;
+            $("emailRow").hidden = false;
+          }
           voiceOn = !!info?.voiceEnabled;
           paintVoice();
           void checkVoiceDeps();

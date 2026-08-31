@@ -1,68 +1,99 @@
-// Auto-update from GitHub releases.
+// Update checking from GitHub releases. Checking only — nothing is downloaded
+// and nothing is installed.
 //
-// Downloads happen silently in the background; nothing restarts without the
-// user saying so. When a build is staged the renderer shows a toast, and only a
-// click on its Restart button calls quitAndInstall(). An agent in the middle of
-// a turn must never be interrupted by an update.
+// WHY THIS DOES NOT AUTO-UPDATE, WHEN IT USED TO
 //
-// NOTE ON VERIFICATION: this can only find an update if the repo actually has a
-// published release whose version is above package.json's. Until one exists,
-// "checked, nothing newer" is the whole of the observable behaviour — the
-// download/notify path is wired but cannot be exercised.
+// The installer is not code-signed. Bitdefender classified both
+// Gnosis-Setup-1.2.0.exe and a bundled index.js as Atc4.Detection — a generic
+// behavioural heuristic, not a named signature — and quarantined them. What that
+// looked like on the receiving end was not a warning: it was a deleted payload,
+// a Start Menu shortcut pointing at nothing, and a source file the on-access
+// scanner then refused to let anything recreate. An unsigned installer that
+// unpacks itself into %TEMP% and runs code from there is, to a heuristic engine,
+// indistinguishable from a dropper. It will keep being flagged.
+//
+// A background download makes that failure arrive unannounced. The user is not
+// installing anything, has no reason to connect the antivirus alarm to Gnosis,
+// and is left with a broken install and no obvious way back. A user who ignores
+// an update reminder is merely on an old build. A user whose antivirus
+// interrupts a silent install is on a broken one. The second is much worse, so
+// this trades silent updates for reliability until the installer is signed.
+//
+// autoDownload is false rather than just autoInstallOnAppQuit, and the
+// distinction matters: the quarantined file was the .exe ITSELF, so merely
+// having it on disk is enough to trigger the detection. Downloading it and
+// declining to run it would still produce the pop-up and the alarm.
+//
+// WHEN THIS CAN BE REVERTED: once the installer is code-signed by a verified
+// publisher. That is the actual fix; this is what keeps people working until it
+// lands. Reverting before then reintroduces the exact failure described above.
 
-import { app, ipcMain } from "electron";
+import { app, ipcMain, shell, Notification } from "electron";
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
+
+const RELEASES_URL = "https://github.com/DOMCHURCH/Gnosis/releases/latest";
 
 /**
  * @param getWindow  the window to send toast events to
  */
 export function registerUpdater(getWindow) {
-  autoUpdater.autoDownload = true;
-  /*
-   * THE reason people sat on old builds.
-   *
-   * This was false, with the stated intent "never install behind the user's
-   * back". The intent was right and the setting was the wrong way to express
-   * it, because it does not mean "ask first" — it means DISCARD. The flow was:
-   * launch, download the update silently, show a toast, and if the user closes
-   * the app without clicking Restart, throw the staged build away. Next launch:
-   * same old version, download it again, toast again. Anyone who did not happen
-   * to click that one button was pinned on their original install forever, and
-   * re-downloading ~120MB every launch to delete it again.
-   *
-   * True does not interrupt anything. The app is already closing — no turn is in
-   * flight, nothing is lost — and the user lands on the new version next time
-   * they open it. The property that actually mattered, never yanking the process
-   * out from under a running agent, is preserved by autoDownload + the toast:
-   * the only thing that restarts a LIVE app is still the user clicking Restart.
-   */
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Check, tell, and stop. See the note above before changing either of these.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   const send = (channel, payload) => {
     const w = getWindow();
     if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
   };
 
-  autoUpdater.on("update-available", (info) => send("update:available", { version: info?.version ?? null }));
-  autoUpdater.on("update-downloaded", (info) => send("update:ready", { version: info?.version ?? null }));
+  const openReleases = () => {
+    void shell.openExternal(RELEASES_URL);
+  };
+
+  // Remembered so the six-hourly re-check does not re-notify about a version the
+  // user has already been told about. A reminder that reappears every six hours
+  // is not a reminder, it is nagging, and nagging gets dismissed unread.
+  let notifiedVersion = null;
+
+  autoUpdater.on("update-available", (info) => {
+    const version = info?.version ?? null;
+    send("update:available", { version, url: RELEASES_URL });
+
+    if (version && version === notifiedVersion) return;
+    notifiedVersion = version;
+
+    // A native notification as well as the in-app toast, because Gnosis lives in
+    // the tray: the window the toast would appear in may not be open, and often
+    // is not for days at a time.
+    if (Notification.isSupported()) {
+      const n = new Notification({
+        title: `Gnosis ${version ? `v${version}` : "update"} is available`,
+        body: "Your version is out of date. Click to download the new installer.",
+        silent: false,
+      });
+      n.on("click", openReleases);
+      n.show();
+    }
+  });
+
   autoUpdater.on("error", (err) => {
-    // A failed update check is not worth a dialog. It is normal offline, and
-    // normal before the first release is ever published.
+    // A failed update check is not worth a dialog. It is normal offline.
     send("update:error", { message: String(err?.message ?? err) });
   });
 
-  ipcMain.on("update:restart", () => {
-    // isSilent=false so the NSIS installer shows its progress; isForceRunAfter
-    // so the user lands back in Gnosis rather than nowhere.
-    autoUpdater.quitAndInstall(false, true);
-  });
+  // Replaces the old update:restart. There is nothing staged to restart into —
+  // the user downloads and installs deliberately, at a moment of their choosing,
+  // when an antivirus prompt is comprehensible rather than mysterious.
+  ipcMain.removeAllListeners("update:open-releases");
+  ipcMain.on("update:open-releases", openReleases);
 
+  ipcMain.removeHandler?.("update:check");
   ipcMain.handle("update:check", async () => {
     try {
       const r = await autoUpdater.checkForUpdates();
-      return { ok: true, version: r?.updateInfo?.version ?? null };
+      return { ok: true, version: r?.updateInfo?.version ?? null, url: RELEASES_URL };
     } catch (e) {
       return { ok: false, error: String(e?.message ?? e) };
     }
@@ -73,7 +104,10 @@ export function registerUpdater(getWindow) {
   if (!app.isPackaged) return;
 
   const check = () =>
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {
+    // checkForUpdates, not checkForUpdatesAndNotify: the latter is a thin wrapper
+    // that downloads and posts its own notification, which is the behaviour this
+    // file exists to prevent.
+    autoUpdater.checkForUpdates().catch(() => {
       /* offline, or no releases published yet */
     });
 
@@ -82,12 +116,11 @@ export function registerUpdater(getWindow) {
   /*
    * Re-check while the app is open.
    *
-   * The check used to run exactly once, at launch. Gnosis is a tray app people
-   * leave running for days, so "once at launch" could mean once a week — a
-   * release could ship on Monday and not be noticed until the machine rebooted.
-   * Six hours is frequent enough that a release lands the same day and rare
-   * enough to be invisible: it is one small HTTPS request, and when nothing is
-   * new it does nothing at all.
+   * Gnosis is a tray app people leave running for days, so "once at launch"
+   * could mean once a week — a release could ship on Monday and not be noticed
+   * until the machine rebooted. Six hours is frequent enough that a release
+   * lands the same day and rare enough to be invisible: it is one small HTTPS
+   * request, and when nothing is new it does nothing at all.
    */
   const SIX_HOURS = 6 * 60 * 60 * 1000;
   const timer = setInterval(check, SIX_HOURS);

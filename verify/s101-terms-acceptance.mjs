@@ -102,12 +102,40 @@ const terms = acc.loadTerms();
 // --- 4. the document tells the truth ----------------------------------------
 {
   const t = read("TERMS.md");
-  // Both halves of the data claim.
-  ok("it says we collect nothing", /We collect nothing/.test(t));
+
+  // v2 collects one thing. The document has to say so, say exactly what, and
+  // say what it does NOT do — "we collect one thing" is only honest if the
+  // boundary around it is stated too.
+  ok("it is version 2", /\*\*Version 2 ·/.test(t));
+  ok("it says what is collected", /We collect one thing, once/i.test(t));
+  ok("...and that it is only on acceptance", /sent once per version of these Terms/i.test(t));
+  ok("...and that nothing is sent if you decline", /If you never accept, nothing is sent/i.test(t));
+  ok("...and that there is no ongoing reporting",
+    /no heartbeat, no usage reporting, no\s*\n?analytics/i.test(t));
+
+  // The fields, itemised. A disclosure that says "some data" is not a
+  // disclosure, and each of these is a promise the code has to keep.
+  ok("...itemising the installation id", /An installation id/i.test(t));
+  ok("...saying the id is not derived from the user",
+    /not\*\* derived from your name, username, hostname, hardware serial/i.test(t));
+  ok("...itemising the terms checksum", /A checksum of these Terms/i.test(t));
+  ok("...and that the email is optional and unverified",
+    /Only if you choose to type one/i.test(t) && /we do not verify it/i.test(t));
+
+  // v1 promised the opposite. Leaving that sentence anywhere in the document
+  // would make it contradict itself.
+  ok("the old 'we collect nothing' claim is gone", !/\*\*We collect nothing\.\*\*/.test(t));
+  ok("...except where it explains what changed", /That is no longer true/i.test(t));
+
   ok("...AND that the app is not offline", /the Software is not offline/i.test(t));
   for (const svc of ["OpenRouter", "Groq", "Brave", "GitHub"]) {
     ok(`...naming ${svc}`, new RegExp(svc).test(t));
   }
+  ok("...and naming the project's own server as a recipient",
+    /\*\*The Gnosis project\*\* \| The acceptance record/.test(t));
+
+  // Deletion has to be answerable for the one field that could identify anyone.
+  ok("it says how to get a volunteered email deleted", /want it removed/i.test(t));
   // Verified against the code rather than asserted: if a telemetry endpoint is
   // ever added, this claim becomes false and this test should fail.
   const code = ["src", "electron"].flatMap((dir) =>

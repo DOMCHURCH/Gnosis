@@ -3,12 +3,23 @@
 // Three problems, one theme: things the app did silently that it should have
 // done visibly, or should have done and did not.
 //
-// 1. PEOPLE SAT ON OLD BUILDS. `autoInstallOnAppQuit = false` did not mean "ask
-//    first", it meant DISCARD. Gnosis downloaded the update, showed a toast, and
-//    if the user closed the app without clicking Restart it threw the staged
-//    build away — then re-downloaded ~120MB on the next launch to delete it
-//    again. Anyone who did not happen to click that button was pinned on their
-//    original install forever.
+// 1. PEOPLE SAT ON OLD BUILDS, and were not told. The original bug was that
+//    `autoInstallOnAppQuit = false` did not mean "ask first", it meant DISCARD:
+//    Gnosis downloaded the update, showed a toast, and if the user closed the
+//    app without clicking Restart it threw the staged build away, then
+//    re-downloaded ~120MB next launch to delete it again.
+//
+//    That was fixed by installing on quit — and then UNFIXED deliberately, in
+//    favour of not downloading at all. The installer is unsigned, and Bitdefender
+//    quarantined both Gnosis-Setup-1.2.0.exe and a bundled index.js as
+//    Atc4.Detection. What a silent background install produces in that case is
+//    not a stale app but a broken one: a deleted payload, a shortcut pointing at
+//    nothing, and no reason for the user to connect the antivirus alarm to
+//    Gnosis. So the answer to "people sit on old builds" is now to TELL them, in
+//    the app and in a native notification, and let them install deliberately.
+//
+//    What is pinned here is therefore the surviving requirement — nobody sits on
+//    an old build UNAWARE — not the mechanism, which s102 owns.
 //
 // 2. VOICE WAS UNDISCOVERABLE. Off by default, invisible until you happen to
 //    know the wake phrase. A microphone feature the user has never been told
@@ -32,13 +43,18 @@ const ok = (n, c, extra = "") => { console.log(`${c ? "PASS" : "FAIL"} ${n}${ext
 
 // --- 1. updates actually land ------------------------------------------------
 {
-  ok("a downloaded update installs on quit", /autoUpdater\.autoInstallOnAppQuit = true/.test(updater));
-  ok("...and the discard-on-quit behaviour is gone", !/autoInstallOnAppQuit = false/.test(updater));
-  // The property that mattered is preserved: nothing yanks a LIVE app out from
-  // under a running agent. Only the user's Restart click does that.
-  ok("a live app still only restarts on the user's click", /ipcMain\.on\("update:restart"/.test(updater));
-  ok("...via quitAndInstall, not an automatic relaunch", /autoUpdater\.quitAndInstall/.test(updater));
-  ok("downloads still happen in the background", /autoUpdater\.autoDownload = true/.test(updater));
+  // Nobody sits on an old build unaware. The app checks, and when something
+  // newer exists it says so in two places — the window may not be open for days
+  // on a tray app, so the native notification is the one that actually lands.
+  ok("an out-of-date build is detected", /autoUpdater\.on\("update-available"/.test(updater));
+  ok("...and the user is told in the app", /send\("update:available"/.test(updater));
+  ok("...and told by the OS as well", /new Notification\(/.test(updater));
+  ok("...and pointed at where to get it", /releases\/latest/.test(updater));
+
+  // Nothing yanks a live app out from under a running agent — now guaranteed by
+  // there being nothing staged to install at all.
+  ok("nothing is downloaded behind the user's back", /autoUpdater\.autoDownload = false/.test(updater));
+  ok("...and nothing installs itself on quit", /autoUpdater\.autoInstallOnAppQuit = false/.test(updater));
 
   // A tray app left running for days used to check exactly once, at launch.
   ok("it re-checks while the app is open", /setInterval\(check/.test(updater));

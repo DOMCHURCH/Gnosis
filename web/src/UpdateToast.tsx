@@ -1,9 +1,14 @@
-// "A new version is staged" toast.
+// "You are out of date" toast.
 //
-// Deliberately passive. electron-updater downloads in the background, and this
-// only appears once the bytes are on disk and an install is one restart away.
-// Nothing restarts on its own: an agent mid-turn losing its process to an
-// installer would be the worst possible time for an update.
+// Nothing is downloaded and nothing is staged — see electron/updater.js for why
+// (an unsigned installer unpacking into %TEMP% gets quarantined, and a silent
+// background install turns that into a broken install the user cannot explain).
+// So this reports that a newer version exists and sends the user to the releases
+// page to install it deliberately.
+//
+// Still deliberately passive: nothing restarts on its own, because an agent
+// mid-turn losing its process to an installer would be the worst possible time
+// for an update.
 
 import { useEffect, useState } from "react";
 import { Z } from "./layers";
@@ -15,7 +20,7 @@ export function UpdateToast(props: { shell: ShellBridge }) {
   const [version, setVersion] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => props.shell.onUpdateReady((i) => setVersion(i?.version ?? "")), [props.shell]);
+  useEffect(() => props.shell.onUpdateAvailable((i) => setVersion(i?.version ?? "")), [props.shell]);
 
   if (version === null || dismissed) return null;
 
@@ -42,18 +47,18 @@ export function UpdateToast(props: { shell: ShellBridge }) {
       }}
     >
       <span>
-        Gnosis {version ? `v${version}` : "update"} is ready — restart to update
+        Gnosis {version ? `v${version}` : "update"} is out — your version is out of date
       </span>
       <button
         type="button"
-        onClick={() => props.shell.restartToUpdate()}
+        onClick={() => props.shell.openReleasesPage()}
         style={{
           fontFamily: MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase",
           background: "#12121c", color: "#22D3EE", border: "1px solid rgba(34,211,238,0.45)",
           borderRadius: 999, padding: "6px 12px", cursor: "pointer",
         }}
       >
-        Restart
+        Download
       </button>
       <button
         type="button"
