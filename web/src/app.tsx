@@ -386,6 +386,23 @@ ${text}` });
   // band with FLOOR/KANBAN/SERVE instead of floating over the page's bottom-left.
   const [terminalOpen, setTerminalOpen] = useState(false);
 
+  // Dismiss the SERVE dropdown on any click outside it. Without this the only
+  // ways out were Escape, re-clicking the chip, or picking an entry — so a
+  // click anywhere else left a menu sitting over the page looking stuck. Bound
+  // only while the menu is open, and on `pointerdown` so it settles before the
+  // click lands on whatever is underneath.
+  useEffect(() => {
+    if (!serveMenu) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      // A click on the switcher itself is the chip's own toggle to handle.
+      if (t?.closest?.('[data-testid="view-toggle"]')) return;
+      setServeMenu(false);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [serveMenu]);
+
   // The shell's listeners are bound once and live for the window's lifetime, so
   // they read the active agent through a ref rather than closing over a value
   // that was current only at mount.
@@ -559,13 +576,34 @@ ${text}` });
   ) : null;
   const qrPopover = qr ? <QrPopover title={qr.title} codes={qr.codes} onClose={() => setQr(null)} /> : null;
 
+  /**
+   * Chrome that belongs to the APP, not to a view.
+   *
+   * The terminal used to be rendered inside the floor branch only, so the
+   * TERMINAL chip — which the note on viewToggle says is "on every view at all
+   * times" — was a dead toggle on kanban: it flipped `terminalOpen`, and
+   * nothing appeared. The chip and the thing it opens have to live at the same
+   * altitude, or the switcher is advertising a destination that does not exist.
+   *
+   * Both are fixed-position overlays keyed off state that already survives the
+   * view switch, so hoisting them here costs nothing and means the terminal now
+   * stays open ACROSS a view change instead of being unmounted (and its pty
+   * session dropped) every time the user looks at the board.
+   */
+  const appChrome = (
+    <>
+      {viewToggle}
+      {qrPopover}
+      {!isMobile && <TerminalDock tabId={activeId} open={terminalOpen} onClose={() => setTerminalOpen(false)} />}
+    </>
+  );
+
   if (view === "kanban") {
     return (
       <>
         {topBar}
         {shell && <UpdateToast shell={shell} />}
-        {viewToggle}
-        {qrPopover}
+        {appChrome}
         <KanbanBoard state={state} overrides={kanbanOverrides} onMove={moveKanban} onOpen={openFromKanban} />
         {state.overlay && (
           <OverlayModal key={state.overlay.id} overlay={state.overlay} onSelect={(value) => send({ type: "overlay.select", id: state.overlay!.id, value })} onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })} />
@@ -582,8 +620,7 @@ ${text}` });
           note on viewToggle. It is no longer handed to SessionsFloor to render
           inside its column, because a copy that lives inside a view disappears
           with that view. */}
-      {viewToggle}
-      {qrPopover}
+      {appChrome}
       <SessionsFloor
         viewTabs={null}
         model={model}
@@ -697,7 +734,6 @@ ${text}` });
           onCancel={() => send({ type: "overlay.cancel", id: state.overlay!.id })}
         />
       )}
-      {!isMobile && <TerminalDock tabId={activeId} open={terminalOpen} onClose={() => setTerminalOpen(false)} />}
     </>
   );
 }

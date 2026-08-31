@@ -32,20 +32,37 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 
 // --- one switcher, not two ------------------------------------------------------
 ok("there is no docked/floating pair any more", !/makeViewToggle/.test(app));
-ok("...just one instance", (app.match(/data-testid="view-toggle"/g) ?? []).length === 1);
+// Count only the RENDER, not references to it. The outside-click dismiss on the
+// SERVE menu matches on `[data-testid="view-toggle"]` as a selector, which is a
+// mention of the switcher rather than a second copy of it.
+ok("...just one instance", (app.match(/(?<!\[)data-testid="view-toggle"/g) ?? []).length === 1);
 // A copy that lives inside a view disappears with that view. It must be a
 // sibling of the view, not a child of it.
 ok("it is not handed to SessionsFloor to render", /viewTabs=\{null\}/.test(app));
 // ...and it is rendered on BOTH branches, or one view is still stranded. There
 // are exactly two returns that render a view — the kanban early-return and the
 // floor fallthrough — so two render sites means both are covered.
+//
+// The switcher, the QR popover and the terminal dock are now one `appChrome`
+// fragment rendered per branch, rather than each being repeated per branch. That
+// is what fixed the terminal: it used to be listed only in the floor branch, so
+// the TERMINAL chip was a live toggle on kanban with nothing behind it.
 {
-  const sites = (app.match(/\{viewToggle\}/g) ?? []).length;
+  const sites = (app.match(/\{appChrome\}/g) ?? []).length;
   ok("rendered on both view branches", sites === 2);
   if (sites !== 2) console.log(`     found ${sites} render sites; expected one per view`);
   // Guard the assumption above: if a third view is ever added, this fails and
-  // whoever adds it has to render the switcher there too.
+  // whoever adds it has to render the chrome there too.
   ok("...and there are still only two views", /useState<"floor" \| "kanban">\("floor"\)/.test(app));
+
+  // The chrome fragment is what carries all three, so they cannot drift apart
+  // again — the bug was precisely that the chip and the dock lived at different
+  // altitudes.
+  const chrome = /const appChrome = \(([\s\S]*?)\n  \);/.exec(app)?.[1] ?? "";
+  ok("the chrome carries the switcher", /\{viewToggle\}/.test(chrome));
+  ok("...the QR popover", /\{qrPopover\}/.test(chrome));
+  ok("...and the terminal dock", /<TerminalDock/.test(chrome));
+  ok("the dock is rendered nowhere else", (app.match(/<TerminalDock/g) ?? []).length === 1);
 }
 
 // --- nothing may cover it -------------------------------------------------------
@@ -75,6 +92,10 @@ for (const chip of ["FLOOR", "KANBAN", "◆ SERVE", "▸_ TERMINAL"]) {
 // TERMINAL used to be gated on `view === "floor"`, so from kanban you could
 // neither open the terminal nor — once in it — close it.
 ok("TERMINAL is not gated on the current view", !/view === "floor" && !isMobile && chip\("▸_ TERMINAL"/.test(app));
+// And the SERVE menu can be dismissed by clicking away from it — it used to be
+// escapable only by Escape, re-clicking the chip, or picking an entry, so a
+// click anywhere else left it sitting over the page looking stuck.
+ok("the SERVE menu closes on an outside click", /pointerdown[\s\S]{0,220}setServeMenu\(false\)|setServeMenu\(false\)[\s\S]{0,220}pointerdown/.test(app));
 
 // --- the terminal cannot bury the page ------------------------------------------
 // A flat 700px cap is only a cap on a tall window.

@@ -250,11 +250,23 @@ export function SessionsFloor(props: SessionsProps) {
   // --- MOBILE (< 640px): a one-handed layout — bottom nav over full-screen tabs,
   // bottom sheets for agent detail and permission prompts. Everything above already
   // ran its hooks, so this early return is safe.
+  //
+  // This branch is a SEPARATE JSX tree from the desktop one below, which is what
+  // made it drift: clay.css hooks entirely on `data-testid` attributes, and this
+  // tree carried none of them, so every surface here kept the pre-redesign look
+  // — square 2px borders, no lift, no radius scale — while desktop moved on
+  // (VOICE-UI-ISSUES.md #6). The testids below are not decoration; they are the
+  // join between this tree and the design system. Anything given a bordered
+  // surface here needs the same testid its desktop counterpart uses, or it
+  // silently opts out of the styling again.
   if (mobile) {
     const pendingPerm = props.chat.find((m) => m.isApproval && !m.resolved);
     const nav: [typeof mobileTab, string, string][] = [["chat", "▤", "CHAT"], ["floor", "◫", "FLOOR"], ["files", "≡", "FILES"], ["webhooks", "⚑", "WEBHOOKS"]];
     return (
-      <div style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, display: "flex", flexDirection: "column" }}>
+      <div data-testid="page-root" style={{ minHeight: "100vh", background: "#0D0D12", color: "#C9C9D6", fontFamily: MONO, display: "flex", flexDirection: "column",
+        // Clear the fixed FLOOR/KANBAN/SERVE switcher, which renders on mobile
+        // too — without this it sat on top of the first thing in the tab.
+        paddingTop: GUTTER.top }}>
         <style>{"@keyframes domSheet{from{transform:translateY(100%)}to{transform:translateY(0)}} .dom-sheet{animation:domSheet .2s ease-out}"}</style>
         <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", paddingBottom: 56 }}>
           {mobileTab === "chat" && (
@@ -274,11 +286,11 @@ export function SessionsFloor(props: SessionsProps) {
           )}
           {mobileTab === "floor" && (
             <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ background: "#171721", border: "2px solid #2C2C3E", borderLeft: `6px solid ${model.sessionAccent}`, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div data-testid="session-title" style={{ background: "#171721", border: "2px solid #2C2C3E", borderLeft: `6px solid ${model.sessionAccent}`, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model.sessionTitle}</span>
                 <span style={{ marginLeft: "auto", fontSize: 9, letterSpacing: 2, color: model.sessionStateColor, whiteSpace: "nowrap" }}>{model.sessionState}</span>
               </div>
-              <div style={{ position: "relative", background: "#171721", border: "2px solid #2C2C3E", padding: 8 }}>
+              <div data-testid="floor-container" style={{ position: "relative", background: "#171721", border: "2px solid #2C2C3E", padding: 8 }}>
                 {/* Context-usage bar across the very top of the floor container. */}
                 {model.tokenBar.known && (
                   <div title={`${model.tokenBar.label} of the session context limit`} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 2, background: "#121219" }}>
@@ -289,6 +301,12 @@ export function SessionsFloor(props: SessionsProps) {
                   <ThreeFloor L={L} plan={props.plan} onSelectFig={props.onSelectFig} onDeskClick={props.onDeskClick} onAgentContext={props.onAgentContext} onZoneContext={props.onZoneContext} />
                 </div>
                 <FloorMinimap L={L} scrollRef={mobileScrollRef} epoch={floorEpoch} mobile />
+                {/* The same sentence desktop gets. A newcomer on a phone needs
+                    it more, not less: there is no inspector column alongside to
+                    infer from, so an isometric room of desks is all they have. */}
+                <p data-testid="floor-subtitle" style={{ margin: "10px 0 0", fontSize: 11, lineHeight: 1.6, color: "#7A7A8B", letterSpacing: 0.2 }}>
+                  Each desk is an agent. Tap one to see what it&rsquo;s doing.
+                </p>
               </div>
             </div>
           )}
@@ -297,11 +315,11 @@ export function SessionsFloor(props: SessionsProps) {
         </div>
 
         {/* bottom navigation */}
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: Z.dock, display: "flex", background: "#171721", borderTop: "2px solid #2C2C3E" }}>
+        <div data-testid="mobile-nav" style={{ position: "fixed", left: 0, right: 0, bottom: 0, height: 56, zIndex: Z.dock, display: "flex", background: "#171721", borderTop: "2px solid #2C2C3E" }}>
           {nav.map(([id, icon, label]) => {
             const active = mobileTab === id;
             return (
-              <button key={id} type="button" onClick={() => setMobileTab(id)} style={{ flex: 1, minHeight: 44, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, background: "transparent", border: 0, cursor: "pointer", color: active ? "#22D3EE" : "#6B6B7B", fontFamily: MONO }}>
+              <button key={id} type="button" aria-current={active ? "page" : undefined} onClick={() => setMobileTab(id)} style={{ flex: 1, minHeight: 44, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, background: "transparent", border: 0, cursor: "pointer", color: active ? "#22D3EE" : "#6B6B7B", fontFamily: MONO }}>
                 <span style={{ fontSize: 16 }}>{icon}</span>
                 <span style={{ fontSize: 8, letterSpacing: 1 }}>{label}</span>
               </button>
@@ -330,9 +348,9 @@ export function SessionsFloor(props: SessionsProps) {
               </div>
               <div style={{ padding: "0 14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>CURRENT TASK</div>
-                <div style={{ fontSize: 12, lineHeight: 1.6, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 10 }}>{sel.action}</div>
+                <div data-testid="clay-card" style={{ fontSize: 12, lineHeight: 1.6, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 10 }}>{sel.action}</div>
                 <div style={{ fontSize: 9, letterSpacing: 2, color: "#6B6B7B" }}>RECENT OUTPUT</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, background: "#0B0B10", border: "2px solid #2C2C3E", padding: 10 }}>
+                <div data-testid="clay-well" style={{ display: "flex", flexDirection: "column", gap: 4, background: "#0B0B10", border: "2px solid #2C2C3E", padding: 10 }}>
                   {(sel.output.length ? sel.output : ["no output yet"]).map((o, i) => (<div key={i} style={{ fontSize: 11, lineHeight: 1.5, color: "#6B6B7B", whiteSpace: "pre-wrap" }}>{o}</div>))}
                 </div>
               </div>
@@ -343,9 +361,9 @@ export function SessionsFloor(props: SessionsProps) {
         {/* permission prompt as a bottom sheet (not a modal) */}
         {pendingPerm && (
           <div style={{ position: "fixed", inset: 0, zIndex: Z.permission, background: "rgba(5,5,8,0.7)", display: "flex", alignItems: "flex-end" }}>
-            <div className="dom-sheet" style={{ width: "100%", background: "#0D0D12", borderTop: "2px solid #FBBF24", display: "flex", flexDirection: "column", padding: 14, gap: 12 }}>
+            <div className="dom-sheet" data-kind="permission" style={{ width: "100%", background: "#0D0D12", borderTop: "2px solid #FBBF24", display: "flex", flexDirection: "column", padding: 14, gap: 12 }}>
               <div style={{ fontSize: 10, letterSpacing: 2, color: "#FBBF24" }}>APPROVAL NEEDED</div>
-              <div style={{ fontSize: 12, lineHeight: 1.5, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 10, maxHeight: "40vh", overflow: "auto", whiteSpace: "pre-wrap" }}>
+              <div data-testid="clay-card" style={{ fontSize: 12, lineHeight: 1.5, color: "#C9C9D6", background: "#171721", border: "2px solid #2C2C3E", padding: 10, maxHeight: "40vh", overflow: "auto", whiteSpace: "pre-wrap" }}>
                 {pendingPerm.segments.map((s) => s.text).join("\n")}
               </div>
               <div style={{ display: "flex", gap: 10 }}>

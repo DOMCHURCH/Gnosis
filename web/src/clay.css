@@ -556,3 +556,82 @@ textarea:focus {
 .gnosis-shell [data-testid="page-root"] {
   padding-top: 100px !important;
 }
+
+/* ------------------------------------------------------------------- mobile
+ *
+ * The phone layout (< 640px) is a SEPARATE JSX tree in SessionsFloor.tsx, not a
+ * reflow of the desktop one. Because everything in this sheet keys on
+ * `data-testid`, and that tree carried none of them, phones kept rendering the
+ * pre-redesign look — square 2px borders, no radius scale, no lift — while the
+ * desktop moved on. It was not old CSS winning at small widths and not a
+ * separate stylesheet; it was markup that never opted in.
+ *
+ * The mobile tree now emits the same testids for the surfaces it shares with
+ * desktop (session-title, floor-container, three-floor, page-root), so those are
+ * already covered by the rules above. What is left are the surfaces that exist
+ * ONLY on mobile — the bottom sheets and the tab bar — plus two generic hooks
+ * for the nested cards inside them.
+ *
+ * Generic on purpose: a bottom sheet holds an arbitrary number of nested
+ * bordered blocks, and inventing a unique testid per block is how the desktop
+ * tree ended up with 21 unstyled surfaces in the first place. */
+[data-testid="clay-card"] {
+  border-radius: var(--clay-r-card) !important;
+  border: 1px solid var(--clay-line) !important;
+  background-color: var(--clay-surface-solid) !important;
+  box-shadow: var(--clay-lift-sm);
+}
+/* A recessed well — output logs, code, anything that reads as "inside". */
+[data-testid="clay-well"] {
+  border-radius: var(--clay-r-card) !important;
+  border: 1px solid var(--clay-line) !important;
+  background-color: var(--clay-surface-inset) !important;
+  box-shadow: var(--clay-press);
+}
+
+/* The bottom sheets. They are the floating tier — they sit over the page with a
+ * dimmed backdrop — so unlike the content surfaces they get the glass treatment,
+ * and they round only their top corners because the bottom is off-screen. */
+.dom-sheet {
+  border-radius: var(--clay-r-panel) var(--clay-r-panel) 0 0 !important;
+  border: 1px solid var(--clay-line) !important;
+  border-bottom: 0 !important;
+  background: var(--clay-glass-bg) !important;
+  backdrop-filter: var(--clay-glass);
+  -webkit-backdrop-filter: var(--clay-glass);
+  box-shadow: var(--clay-lift);
+}
+/* The permission sheet keeps its amber top edge — that colour IS the signal. */
+.dom-sheet[data-kind="permission"] {
+  border-top: 2px solid #fbbf24 !important;
+}
+
+/* The tab bar. Floating chrome pinned to the bottom edge, so it lifts off the
+ * page the same way the terminal dock does rather than sitting flat against it. */
+[data-testid="mobile-nav"] {
+  border-radius: var(--clay-r-panel) var(--clay-r-panel) 0 0 !important;
+  border: 1px solid var(--clay-line) !important;
+  border-bottom: 0 !important;
+  background: var(--clay-glass-bg) !important;
+  backdrop-filter: var(--clay-glass);
+  -webkit-backdrop-filter: var(--clay-glass);
+  box-shadow: var(--clay-lift);
+}
+[data-testid="mobile-nav"] button {
+  border-radius: var(--clay-r-ctl);
+  transition: background-color var(--clay-ease), color var(--clay-ease);
+}
+[data-testid="mobile-nav"] button[aria-current="page"] {
+  background: var(--clay-cyan-wash);
+}
+
+/* The sidebar is hard-pinned to 264px inline so it holds its width in the
+ * desktop row. On a phone it is the whole FILES tab, and a fixed 264px column
+ * inside a full-width tab leaves a dead strip beside it. */
+@media (max-width: 639px) {
+  [data-testid="left-panel"] {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+}
