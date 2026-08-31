@@ -73,6 +73,43 @@ const runDirectly = (() => {
   }
 })();
 
+/*
+ * Turn a connection failure into something a human can act on.
+ *
+ * node's happy-eyeballs dialling throws an AggregateError whose `.message` is
+ * the EMPTY STRING — every useful detail lives on `.errors[]`. Logging
+ * `err.message` therefore produced `err=""` in the retry loop, which is worse
+ * than logging nothing: it looks like the error was captured when it was not.
+ * The distinctions that matter here are all in those sub-errors:
+ *
+ *   ECONNREFUSED - the host resolved and answered. Postgres is not up YET.
+ *   ETIMEDOUT    - the address is routable but nothing replied. Usually the
+ *                  private network is not attached to this service.
+ *   ENOTFOUND /
+ *   EAI_AGAIN    - the hostname does not resolve. DATABASE_URL points at a
+ *                  service name that does not exist from here.
+ *
+ * The first is worth waiting out. The other two are misconfiguration and no
+ * amount of retrying will fix them, so they must be visible immediately.
+ */
+function describeConnectError(err) {
+  const parts = Array.isArray(err?.errors) && err.errors.length ? err.errors : [err];
+  const seen = parts.map((e) => {
+    const where = e?.address ? `${e.address}:${e.port ?? "?"}` : "";
+    return [e?.code ?? e?.name ?? "unknown", where].filter(Boolean).join(" ");
+  });
+  const codes = new Set(parts.map((e) => e?.code));
+  const hint =
+    codes.has("ENOTFOUND") || codes.has("EAI_AGAIN")
+      ? "hostname does not resolve — check DATABASE_URL is set and references the Postgres service"
+      : codes.has("ETIMEDOUT")
+        ? "routable but silent — check the private network is attached to this service"
+        : codes.has("ECONNREFUSED")
+          ? "refused — Postgres is reachable but not accepting connections yet"
+          : err?.message || "no detail available";
+  return { attempts: seen, hint };
+}
+
 if (runDirectly) {
   // Migration state, owned by the boot sequence and read by /health.
   let ready = false;
@@ -124,12 +161,12 @@ if (runDirectly) {
         return;
       } catch (err) {
         if (attempt === MAX_ATTEMPTS) {
-          app.log.error({ err, attempt },
+          app.log.error({ err, attempt, why: describeConnectError(err) },
             "schema could not be applied; /accept will keep returning 503 and clients will keep retrying");
           return;
         }
         const waitMs = Math.min(30_000, 500 * 2 ** (attempt - 1));
-        app.log.warn({ attempt, waitMs, err: err?.message },
+        app.log.warn({ attempt, waitMs, why: describeConnectError(err) },
           "database not reachable yet; retrying");
         await new Promise((r) => setTimeout(r, waitMs));
       }
