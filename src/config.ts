@@ -73,6 +73,18 @@ export interface Config {
   acceptedVersion?: string | null;
   /** Desktop app: which Kokoro voice speaks replies (e.g. "af_heart"). */
   kokoroVoice?: string;
+  /** Which OpenRouter provider to prefer when several serve the same model.
+   *
+   * Most models are offered by several providers at the same price and wildly
+   * different speeds, and OpenRouter's default order is not the fastest one.
+   * That shows up worst in voice, where the whole turn is one round trip the
+   * user is sitting through: measured at 10-15 tokens/sec, a two-sentence
+   * answer takes seconds to say nothing complicated.
+   *
+   * "throughput" (default) sorts by tokens/sec, "latency" by time to first
+   * token, "price" by cost. Speed can cost more per token, so a run that cares
+   * more about the bill than the wait should set "price". */
+  routing?: "throughput" | "latency" | "price";
 }
 
 export interface CostState {

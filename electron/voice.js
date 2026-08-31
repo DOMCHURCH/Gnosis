@@ -380,6 +380,9 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     // ~2.5s and the user was paying it inside their first answer; started here it
     // overlaps with them speaking and the question being transcribed.
     void warmKokoro().then((w) => vlog("tts.warm", w)).catch(() => {});
+    // Same trick, the other half of the turn: the model round trip is the stage
+    // that actually costs seconds, and its cold start is the worst of them.
+    void warmModel().then((w) => vlog("model.warm", w)).catch(() => {});
     armIdle();
     vlog("record.start", { via: "wake" });
     if (engine && !engine.isDestroyed()) engine.webContents.send("voice:record");
@@ -412,6 +415,42 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   }
 
   /** The active agent's model id, for the overlay's corner. */
+  /**
+   * Open the connection to the model before the user has finished the sentence.
+   *
+   * The first turn after launch measured 14.3s against 3.5s for the same-sized
+   * prompt one turn later: TLS, OpenRouter's provider selection and the model's
+   * own cold start were all being paid inside the user's first question. None of
+   * that depends on what was said, so it does not have to happen after it.
+   *
+   * Fired from wake(), where it overlaps the four-to-six seconds of listening
+   * and the transcription that follows — by the time there is a real turn to
+   * send, the route is open. Deliberately unawaited and silent: a warm-up that
+   * fails costs the first turn its head start and nothing else, and a warm-up
+   * that delayed the turn it was meant to speed up would be worse than none.
+   */
+  async function warmModel() {
+    const model = currentModel();
+    if (!model) return { ok: false, why: "no agent" };
+    const { env } = await readEnv();
+    const key = process.env.OPENROUTER_API_KEY || env.OPENROUTER_API_KEY;
+    if (!key) return { ok: false, why: "no key" };
+    const t0 = Date.now();
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        // One token, no tools, no streaming: the cheapest thing that still makes
+        // the provider allocate the model rather than merely answering a ping.
+        body: JSON.stringify({ model, messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      return { ok: res.ok, status: res.status, ms: Date.now() - t0 };
+    } catch (e) {
+      return { ok: false, why: String(e?.message ?? e), ms: Date.now() - t0 };
+    }
+  }
+
   function currentModel() {
     try {
       return bridge?.getAgents?.()[0]?.model ?? "";

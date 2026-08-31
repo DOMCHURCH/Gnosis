@@ -276,6 +276,8 @@ export interface EngineDeps {
   autoCommit?: boolean;
   /** Dollar ceiling per session (the base allotment). Default 2. */
   maxSessionUsd?: number;
+  /** OpenRouter provider preference (config `routing`). */
+  routing?: "throughput" | "latency" | "price";
   /** Extra workspace roots beyond cwd; grep/glob without a path span all of them. */
   workspaceRoots?: string[];
 }
@@ -393,6 +395,7 @@ export class Engine {
     this.fallbackModel = deps.fallbackModel;
     this.autoCommit = deps.autoCommit ?? true;
     this.budgetUsd = deps.maxSessionUsd ?? 2;
+    this.routingPref = deps.routing ?? "throughput";
     this.budgetCeiling = this.budgetUsd;
     this.messages = deps.session.messages;
     this.modelId = deps.session.model;
@@ -442,6 +445,17 @@ export class Engine {
   supportsCache(): boolean {
     return (this.currentModel()?.pricing.cacheWrite ?? 0) > 0;
   }
+  /**
+   * Which provider OpenRouter should prefer for the active model.
+   *
+   * Read once and held: it is consulted on every round of every turn, and the
+   * answer cannot change without a restart. Defaults to throughput because the
+   * default order is not the fastest and the difference is measured in seconds
+   * of a user waiting — set config `routing` to "price" to weight the bill
+   * instead.
+   */
+  private routingPref: "throughput" | "latency" | "price" = "throughput";
+
   /** True when the active model accepts image input (view_image / @image work). */
   supportsImageInput(): boolean {
     return this.currentModel()?.input_modalities?.includes("image") ?? false;
@@ -822,6 +836,7 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
               // Recomputed each iteration so a mid-turn fallback to a non-caching
               // model correctly stops sending cache_control.
               cache: this.supportsCache(),
+              routing: this.routingPref,
             },
             // Each completed line commits to the transcript as it finalizes; the
             // still-forming line is shown transiently via onPending. Only text

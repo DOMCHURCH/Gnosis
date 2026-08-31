@@ -213,6 +213,10 @@ export async function streamCompletion(
     signal: AbortSignal;
     /** Apply cache_control breakpoints (only for cache-capable models). */
     cache?: boolean;
+    /** OpenRouter provider preference: which of the providers serving this model
+     * to prefer. Ignored on the direct (non-OpenRouter) routes, which have only
+     * the one provider by definition. */
+    routing?: "throughput" | "latency" | "price";
     /** Backoff tuning (defaults: 4 retries, 500ms base). Overridable for tests. */
     retry?: { maxRetries?: number; baseDelayMs?: number };
   },
@@ -240,6 +244,7 @@ export async function streamCompletion(
   };
   if (route.isOpenRouter) {
     body.usage = { include: true }; // OpenRouter reports dollar cost in the final chunk
+    if (opts.routing) body.provider = { sort: opts.routing };
     Object.assign(headers, ATTRIBUTION);
   } else {
     body.stream_options = { include_usage: true }; // OpenAI/Groq token usage in the final chunk
