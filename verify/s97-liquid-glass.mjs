@@ -52,10 +52,23 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 // A fill this low used to be 0.055, which is close enough to nothing that the
 // rim light had no surface to sit on. The band is two-sided on purpose: too high
 // and it is a painted panel again.
+// The fill is now the last layer of a two-layer background (the contrast scrim
+// sits above it in the same declaration, rather than in a ::after — see the note
+// in the stylesheet about stacking contexts breaking click hit-testing).
 ok("the glass body is a low-opacity wash, not a dark panel", (() => {
-  const m = overlay.match(/\.glass \{[\s\S]*?background: rgba\(255, 255, 255, ([\d.]+)\);/);
+  const block = /\.glass \{[\s\S]*?\n      \}/.exec(overlay)?.[0] ?? "";
+  const m = /rgba\(255, 255, 255, ([\d.]+)\);/.exec(block);
   return !!m && Number(m[1]) >= 0.07 && Number(m[1]) <= 0.16;
 })());
+// And the scrim is genuinely still there, just relocated.
+ok("...with the contrast scrim folded into the same background", (() => {
+  const block = /\.glass \{[\s\S]*?\n      \}/.exec(overlay)?.[0] ?? "";
+  const m = /linear-gradient\(rgba\(8, 10, 18, ([\d.]+)\)/.exec(block);
+  return !!m && Number(m[1]) >= 0.3;
+})());
+// The pseudo-element it replaced must not come back: it is what forced a
+// z-index onto the content and broke the buttons.
+ok("...and not as a ::after over the content", !/\.glass::after/.test(overlay));
 ok("...with a 1px lit edge along the inside of the lip",
   /box-shadow: inset 0 0 0 1px rgba\(255, 255, 255, 0\.[12]\d?\)/.test(overlay));
 // The old dark tint, and the old colour-wrapped rim, must both be gone —

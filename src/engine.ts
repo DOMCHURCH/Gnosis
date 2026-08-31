@@ -48,6 +48,7 @@ import {
 } from "./permissions.js";
 import { shouldCompact, compact } from "./compaction.js";
 import { MarkdownStripper, type StreamLine } from "./strip.js";
+import { RepetitionGuard, collapseRepeats } from "./repetition.js";
 import { createSession, loadConfig, saveSession, type CostState, type Mode, type SessionData, type TodoItem } from "./config.js";
 import type { LoadedSkill } from "./skills.js";
 import type { EventBus, AppBridge } from "./events.js";
@@ -639,6 +640,28 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
     }
   }
 
+  /**
+   * End a turn the repetition guard stopped.
+   *
+   * `text` is the model's own output when the stream completed, or null when the
+   * abort landed first and there is nothing but what already streamed. Either
+   * way only a COLLAPSED copy reaches history: several hundred identical lines
+   * are the strongest possible prior that the next line should be the same
+   * again, so storing them verbatim makes the next turn likelier to repeat, not
+   * less — the guard would then fire every turn on a conversation it had itself
+   * poisoned.
+   */
+  private reportRepetition(cb: Callbacks, guard: RepetitionGuard, stripper: MarkdownStripper, text: string | null): void {
+    const v = guard.result;
+    const partial = stripper.flush();
+    if (partial) cb.onLine(partial);
+    cb.onPending("");
+    cb.onSystem(`✗ stopped ${this.modelId}: it repeated itself (${v.reason}) — "${v.line}"`);
+    this.capped ??= "repetition";
+    const collapsed = collapseRepeats(text ?? "");
+    if (collapsed.trim()) this.messages.push({ role: "assistant", text: collapsed });
+  }
+
   // --- the loop ------------------------------------------------------------
 
   /** Wrap the TUI callbacks so the same activity also fans out to the event bus
@@ -775,6 +798,18 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
         // channel and are never touched. The stored message keeps the model's
         // original text so history the model sees stays faithful.
         const stripper = new MarkdownStripper();
+        // Degenerate-repetition circuit breaker. A model can fall into a
+        // repetition attractor and stream one sentence until max_tokens — seen
+        // in the wild as "I'll click the search box." ~150 times in a single
+        // message. No existing limit catches that: the iteration cap counts tool
+        // rounds and this is one round, and a short repeated line is cheap per
+        // copy. Aborting the REQUEST rather than the turn, so the engine keeps
+        // control and can hand back cleanly instead of surfacing as a user abort.
+        const repetition = new RepetitionGuard();
+        const reqAbort = new AbortController();
+        const relayAbort = () => reqAbort.abort();
+        this.abortController.signal.addEventListener("abort", relayAbort, { once: true });
+
         let result;
         try {
           result = await streamCompletion(
@@ -783,7 +818,7 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
               model: this.modelId,
               messages: wire,
               tools: toolDefinitions(this.availableToolNames()),
-              signal: this.abortController.signal,
+              signal: reqAbort.signal,
               // Recomputed each iteration so a mid-turn fallback to a non-caching
               // model correctly stops sending cache_control.
               cache: this.supportsCache(),
@@ -793,11 +828,27 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
             // flows through here — tool-call args are on a separate channel.
             (delta) => {
               const { lines, pending } = stripper.push(delta);
-              for (const line of lines) cb.onLine(line);
+              for (const line of lines) {
+                cb.onLine(line);
+                // Only prose is watched. A "rule" line carries no text of its
+                // own, and a code fence legitimately repeats structure.
+                if (line.kind === "text" && repetition.push(line.text) && !reqAbort.signal.aborted) {
+                  reqAbort.abort();
+                }
+              }
               cb.onPending(pending);
             },
           );
         } catch (e) {
+          this.abortController.signal.removeEventListener("abort", relayAbort);
+          // The guard fired. This is OUR abort, not the user's, so it must not be
+          // reported as one, and the turn ends here rather than feeding the
+          // degenerate text back for another round. Checked before the user-abort
+          // branch below, since both look identical to the request.
+          if (repetition.tripped && !this.abortController.signal.aborted) {
+            this.reportRepetition(cb, repetition, stripper, null);
+            break;
+          }
           if (this.abortController.signal.aborted) {
             // Committed lines stay (the user saw them); the unfinished partial is
             // dropped by clearing the live region. Mark the turn aborted.
@@ -844,6 +895,14 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
           } else {
             cb.onSystem(`✗ ${(e as Error).message}`);
           }
+          break;
+        }
+        this.abortController.signal.removeEventListener("abort", relayAbort);
+
+        // The abort races the final chunk, so a degenerate stream can also arrive
+        // here having "completed" normally. Same handling either way.
+        if (repetition.tripped) {
+          this.reportRepetition(cb, repetition, stripper, result.text);
           break;
         }
 

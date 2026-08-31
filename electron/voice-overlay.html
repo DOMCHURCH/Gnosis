@@ -46,7 +46,23 @@
         -webkit-app-region: drag;
         user-select: none;
       }
-      button, .card, .tab, #transcript, #response, a { -webkit-app-region: no-drag; }
+      /*
+       * The whole body is a drag region, so anything you are meant to CLICK has
+       * to opt out explicitly. `button` covers the controls, but the containers
+       * around them are listed too: on Windows the drag region is hit-tested by
+       * the OS against a rectangle list Chromium hands it, and a no-drag child
+       * inside a drag parent is reliable only when the parent is not also
+       * establishing its own stacking/compositing context over it. Marking the
+       * wrapper as well removes that dependency entirely.
+       */
+      button, .card, .tab, #transcript, #response, a,
+      #collapsed, #expanded, .pillActions, .tabs, .acts, .pane {
+        -webkit-app-region: no-drag;
+      }
+      /* The pill still has to be draggable somewhere, or the panel cannot be
+       * moved at all. The text block is that handle — it is the one area with no
+       * controls in it. */
+      .pillText, .orb, #pillWave { -webkit-app-region: drag; }
       button { font: inherit; color: inherit; cursor: pointer; }
 
       /*
@@ -79,8 +95,9 @@
        *             not a gradient wrapping the whole shape.
        *   .glass  — the body. Blur + saturate + a low-opacity white fill, so
        *             what is behind reads as vivid-through-frost, not washed out.
-       *   ::before/::after — the specular highlight, and a soft scrim that keeps
-       *             text legible over a backdrop we do not control.
+       *   ::before — the specular highlight. The contrast scrim is folded into
+       *             .glass's own background rather than a ::after, for
+       *             hit-testing reasons explained there.
        */
       .frame {
         height: 100%;
@@ -104,9 +121,27 @@
         height: 100%;
         box-sizing: border-box;
         border-radius: var(--radius);
-        /* Low-opacity fill: enough to catch the rim light and hold the surface
-         * together, not enough to become a painted panel. */
-        background: rgba(255, 255, 255, 0.10);
+        /* Two layers in ONE background, and that matters structurally.
+         *
+         * The dark scrim used to be a ::after pseudo-element. A pseudo-element
+         * is painted after in-flow children, so the content needed `z-index: 1`
+         * to sit above it — and that z-index established a stacking context
+         * around every button in the panel. On Windows a `-webkit-app-region:
+         * no-drag` child inside a `drag` parent is hit-tested against a
+         * rectangle list the compositor hands the OS, and an extra stacking
+         * context in between is exactly the kind of thing that makes those
+         * rectangles come out wrong: the buttons rendered, and clicks went to
+         * the drag region instead.
+         *
+         * An element's own background paints BELOW its children by definition,
+         * so putting the scrim here needs no z-index, no pseudo-element, and no
+         * stacking context. Same pixels, no hit-testing hazard.
+         *
+         * Order is top-down: the scrim gradient first, the white fill under it.
+         */
+        background:
+          linear-gradient(rgba(8, 10, 18, 0.45), rgba(8, 10, 18, 0.45)),
+          rgba(255, 255, 255, 0.10);
         /* The 1px inner edge — light catching the lip of the glass from inside.
          * inset, so it survives the .frame gradient sitting outside it. */
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.20);
@@ -142,27 +177,9 @@
         background: radial-gradient(140px 70px at 18% -20%, rgba(255, 255, 255, 0.30), transparent 70%);
         mix-blend-mode: screen;
       }
-      /*
-       * The contrast floor. Everything above is transparent by design, and the
-       * backdrop is whatever the user happens to have on screen — which can be a
-       * white document, where --text (#e6e9f0) on 10% white would be unreadable
-       * and nowhere near WCAG AA.
-       *
-       * So: a soft dark scrim under the content, strongest where the text
-       * actually sits (left, where the state label and transcript live) and
-       * fading out across the rest so the glass still reads as transparent. This
-       * is what lets the fill above stay honestly low-opacity instead of being
-       * quietly raised until text happened to be legible.
-       */
-      .glass::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: rgba(8, 10, 18, 0.45);
-      }
-      /* Content sits above both pseudo-layers. */
-      #collapsed, #expanded { position: relative; z-index: 1; }
+      /* No z-index here on purpose — see the note on .glass's background. The
+       * only remaining pseudo-layer is ::before (the specular highlight), which
+       * is painted BEFORE in-flow children and so is already underneath them. */
       body.expanded { --radius: 22px; }
 
       /* ------------------------------------------------------------ collapsed

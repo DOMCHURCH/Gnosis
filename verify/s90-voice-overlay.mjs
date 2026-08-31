@@ -68,9 +68,13 @@ async function open(w, h, { expand = false, backdrop = "#ffffff" } = {}) {
   const r = await page.evaluate(() => {
     const parse = (s) => (s.match(/[\d.]+/g) ?? []).map(Number);
     const glass = getComputedStyle(document.querySelector(".glass"));
-    const scrim = getComputedStyle(document.querySelector(".glass"), "::after");
     const fill = parse(glass.backgroundColor);      // rgba(255,255,255,F)
-    const sc = parse(scrim.backgroundColor);        // rgba(8,10,18,A)
+    // The contrast scrim is a background LAYER on .glass, not a ::after — a
+    // pseudo-element paints above in-flow children and needed a z-index to sit
+    // under them, and that stacking context broke click hit-testing on Windows.
+    // Read the first rgba() in the background-image gradient.
+    const grad = glass.backgroundImage || "";
+    const sc = parse((/rgba?\([^)]*\)/.exec(grad) ?? ["rgba(0,0,0,0)"])[0]);
     const bright = Number(/brightness\(([\d.]+)\)/.exec(glass.backdropFilter)?.[1] ?? 1);
 
     const over = (fg, a, bg) => fg.map((c, i) => c * a + bg[i] * (1 - a));
@@ -79,7 +83,8 @@ async function open(w, h, { expand = false, backdrop = "#ffffff" } = {}) {
     const ratio = (a, b) => { const l1 = L(a), l2 = L(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
 
     // Worst case: a pure-white desktop behind the glass, on bare glass (no card
-    // or scrim of its own to help).
+    // of its own to help). Composite order matches paint order — the backdrop is
+    // clamped, then the background-color fill, then the gradient layer above it.
     let s = [1, 1, 1].map((c) => c * bright);
     s = over(fill.slice(0, 3).map((c) => c / 255), fill[3] ?? 1, s);
     s = over(sc.slice(0, 3).map((c) => c / 255), sc[3] ?? 1, s);
@@ -208,6 +213,75 @@ for (const [w, h] of [[720, 320], [520, 320], [720, 240], [420, 300], [360, 200]
   ok("the × does not expand the panel on its way out",
     (await page3.evaluate(() => window.__resized)) === undefined);
   await page.close(); await page2.close(); await page3.close();
+}
+
+// --- 5b. the controls are actually clickable ---------------------------------
+//
+// Reported from a live session: "I can't click any of the buttons." The whole
+// body is `-webkit-app-region: drag`, so on Windows the OS hit-tests clicks
+// against a rectangle list the compositor produces, and anything that is not
+// explicitly `no-drag` swallows the click before the page ever sees it. The
+// contrast scrim had been a ::after, which forced `z-index: 1` onto the content
+// to sit above it — and that extra stacking context is what made those
+// rectangles come out wrong. The buttons rendered perfectly and did nothing.
+{
+  const page = await open(440, 92);
+  const m = await page.evaluate(() => {
+    const region = (el) => getComputedStyle(el).getPropertyValue("-webkit-app-region").trim();
+    const shield = document.getElementById("shieldBtn");
+    const close = document.querySelector("#collapsed .closeBtn");
+    // Every ancestor between the button and <body> must not re-enter a drag
+    // region, or the button's own no-drag is fighting its parent.
+    const chainDrag = (el) => {
+      const out = [];
+      for (let n = el; n && n !== document.body; n = n.parentElement) out.push([n.id || n.className, region(n)]);
+      return out;
+    };
+    return {
+      shield: region(shield),
+      close: region(close),
+      chain: chainDrag(shield),
+      // No stacking context may sit between the glass and the controls.
+      stacking: (() => {
+        const bad = [];
+        for (let n = shield.parentElement; n && n !== document.body; n = n.parentElement) {
+          const cs = getComputedStyle(n);
+          if (cs.zIndex !== "auto" && cs.position !== "static") bad.push(`${n.id || n.className}:z${cs.zIndex}`);
+        }
+        return bad;
+      })(),
+      hasAfterScrim: getComputedStyle(document.querySelector(".glass"), "::after").content !== "none",
+    };
+  });
+  ok("the shield opts out of the drag region", m.shield === "no-drag", m.shield);
+  ok("the × opts out of the drag region", m.close === "no-drag", m.close);
+  // Only the chain UP TO the content root has to be no-drag. `.glass` and
+  // `.frame` stay draggable on purpose — they are the panel's move handle, and a
+  // floating window you cannot move is its own bug. What must not happen is a
+  // drag region sitting between a button and the content root.
+  {
+    const upToRoot = [];
+    for (const [name, r] of m.chain) {
+      upToRoot.push([name, r]);
+      if (String(name).includes("collapsed")) break;
+    }
+    ok("...and nothing between them and the content root is draggable",
+      !upToRoot.some(([, r]) => r === "drag"), JSON.stringify(upToRoot));
+    ok("the panel itself is still draggable, so it can be moved",
+      m.chain.some(([name, r]) => String(name).includes("glass") && r === "drag"));
+  }
+  ok("no stacking context sits between the glass and the controls",
+    m.stacking.length === 0, m.stacking.join(", "));
+  ok("the scrim is a background layer, not a ::after over the content", m.hasAfterScrim === false);
+
+  // And the clicks land: the real proof, not a proxy for it.
+  await page.evaluate(() => { window.__resized = undefined; window.__stopped = false; });
+  await page.click("#collapsed .closeBtn");
+  ok("clicking the × reaches the page", (await page.evaluate(() => window.__stopped)) === true);
+  const page2 = await open(440, 92);
+  await page2.click("#shieldBtn");
+  ok("clicking the shield reaches the page", (await page2.evaluate(() => window.__resized)) !== undefined);
+  await page.close(); await page2.close();
 }
 
 // --- 6. the retired SVG filter is really gone --------------------------------
