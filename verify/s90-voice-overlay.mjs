@@ -40,7 +40,28 @@ const SHIM = `window.voice = {
   answerPermission(id, a){ (window.__answers ??= []).push([id, a]); },
 };`;
 
-const browser = await chromium.launch();
+// Launching is a SEPARATE question from importing, and the skip above only
+// answered the first one. playwright arrives transitively (via
+// @playwright/mcp), so the import always resolves even on a machine that has
+// never downloaded a browser — and the launch then fails with a message
+// ("AttachConsole failed" on Windows) that says nothing about the real cause.
+// A fresh clone running `npm run verify` should be told what to install, not
+// handed that.
+//
+// Only the missing-executable case is skipped. Any other launch failure is a
+// real problem and is re-thrown, because silently skipping a suite that COULD
+// have run is how a check quietly stops checking.
+let browser;
+try {
+  browser = await chromium.launch();
+} catch (err) {
+  const msg = String(err?.message ?? err);
+  if (/Executable doesn't exist|please run the following command|browserType\.launch/i.test(msg)) {
+    console.log("SKIP playwright's browser is not installed — run: npx playwright install chromium");
+    process.exit(0);
+  }
+  throw err;
+}
 
 /** Open the overlay at a size, in one of its two states. */
 async function open(w, h, { expand = false, backdrop = "#ffffff" } = {}) {

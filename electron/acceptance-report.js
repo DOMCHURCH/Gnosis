@@ -132,8 +132,20 @@ export async function postOnce(payload, fetchImpl = globalThis.fetch) {
       signal: controller.signal,
     });
     if (res.status === 200) return "sent";
-    // 4xx means the payload itself is wrong; sending the same bytes again will
-    // get the same answer. Anything else is treated as transient.
+    // 4xx USUALLY means the payload itself is wrong, and sending the same bytes
+    // again would get the same answer — so those are dropped rather than
+    // retried forever.
+    //
+    // Three are exceptions, and they matter here more than they would anywhere
+    // else. 408, 425 and 429 are 4xx codes that describe the TIMING of the
+    // request, not its content: too slow, too early, too many. The bytes are
+    // fine and the same bytes will succeed later. Dropping those would discard
+    // a real acceptance because a proxy was busy — a silent hole in the one
+    // record whose whole value is being complete.
+    //
+    // Nothing in this service emits them today; an edge proxy or CDN in front
+    // of it can, and that is exactly the case the client cannot see coming.
+    if (res.status === 408 || res.status === 425 || res.status === 429) return "retry";
     if (res.status >= 400 && res.status < 500) return "drop";
     return "retry";
   } catch {

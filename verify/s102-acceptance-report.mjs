@@ -100,6 +100,16 @@ const clearQueue = () => fs.rm(rep.queuePath(), { force: true }).catch(() => {})
   ok("200 means sent", (await rep.postOnce(p, stub(200))) === "sent");
   ok("400 means drop — resending cannot help", (await rep.postOnce(p, stub(400))) === "drop");
   ok("422 means drop", (await rep.postOnce(p, stub(422))) === "drop");
+  // The 4xx codes that describe TIMING rather than content. These are the
+  // dangerous ones: they look like "your payload is wrong" to a naive rule and
+  // are in fact "come back later", so treating them as permanent would discard
+  // a genuine acceptance because a proxy was momentarily busy.
+  ok("429 means retry — rate limiting is not a bad payload",
+    (await rep.postOnce(p, stub(429))) === "retry");
+  ok("408 means retry — a timeout is not a bad payload",
+    (await rep.postOnce(p, stub(408))) === "retry");
+  ok("425 means retry — too early is not a bad payload",
+    (await rep.postOnce(p, stub(425))) === "retry");
   ok("503 means retry", (await rep.postOnce(p, stub(503))) === "retry");
   ok("500 means retry", (await rep.postOnce(p, stub(500))) === "retry");
   ok("a thrown request means retry", (await rep.postOnce(p, stub("throw"))) === "retry");
