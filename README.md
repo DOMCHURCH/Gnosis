@@ -35,12 +35,11 @@ The desktop app includes:
   available model; a custom "hey gnosis" model is future work. The agent speaks
   its reply back only for turns you started by voice — typing in the chat never
   triggers speech
-- Local text-to-speech via Kokoro, with Windows SAPI as the fallback. Install it
-  with `pip install kokoro-onnx soundfile`, then put `kokoro-v1.0.onnx` and
-  `voices-v1.0.bin` (from the [kokoro-tts
-  release](https://github.com/nazdridoy/kokoro-tts/releases/tag/v1.0.0)) in
-  `~/.dom/kokoro/`. The settings panel's voice diagnostics reports which engine
-  is actually in use and names what is missing if it is not Kokoro
+- Local text-to-speech via Kokoro, with Windows SAPI as the fallback. You no
+  longer install this by hand: **Settings → Voice → Install voice support** fetches
+  the packages and the model weights for you, with progress. The voice
+  diagnostics table reports which engine is actually in use and names what is
+  missing if it is not Kokoro
 - Settings panel for API keys and configuration, including the working directory
   the app opens into. It defaults to the Gnosis source tree (`~/dom`); point it at
   whichever project you actually work on, or set `GNOSIS_CWD` to override it for a
@@ -53,6 +52,34 @@ For CLI use:
 ```sh
 npm install -g @dominquechurch/gnosis
 ```
+
+### First run — what you actually need
+
+Run the installer and open Gnosis. It creates `~/.dom` (its own state) and
+`~/Gnosis` (where anything the agent writes without a path ends up) on first
+launch, and seeds the MCP server registry. Nothing else is required to get a
+working agent.
+
+**Required — one key.** Gnosis is OpenRouter-only. Without a key it opens a
+"could not start" page with the Settings window already behind it: paste an
+OpenRouter key there and restart. Get one at
+[openrouter.ai/keys](https://openrouter.ai/keys).
+
+Everything below is **optional**, and Gnosis tells you which piece is missing
+rather than failing quietly:
+
+| Want | Needs | How |
+| --- | --- | --- |
+| MCP servers (docs lookup, browser control, desktop control) | **Node.js** | Install the LTS build from [nodejs.org](https://nodejs.org/en/download), restart Gnosis. Every bundled MCP server launches through `npx`, which ships with Node. The app is not a Node app and needs it for nothing else. |
+| Voice — wake word and speech | **Python 3.9+ with pip** | Install from [python.org](https://python.org/downloads) (tick *Add python.exe to PATH*), then **Settings → Voice → Install voice support**. That button does the rest: openWakeWord, Kokoro, and ~350MB of model weights. |
+| Voice — transcription | `GROQ_API_KEY` | Settings → Keys. The wake word and the speech are local and free; only turning your speech into text goes out to a service. |
+
+The desktop app cannot install Node or Python for you and does not try — putting
+a system runtime on your machine behind a toggle is not its call. It names what
+is missing, where to get it, and what still works without it.
+
+Say "hey jarvis" once voice is installed. **Esc** ends the conversation and
+leaves the wake word listening; the **×** turns voice off entirely.
 
 ## See it
 

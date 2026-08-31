@@ -1,5 +1,5 @@
 // Verify (MCP wiring — hermetic): the default ~/.dom/mcp.json registry ships the
-// three servers with the right transport + mutating flags, and dynamic MCP tools
+// four servers with the right transport + mutating flags, and dynamic MCP tools
 // published into the tool registry are resolvable, advertised, and pass their raw
 // JSON Schema through to the model verbatim. No servers are spawned here (that
 // needs network + a browser — see the live check in the commit notes).
@@ -20,16 +20,18 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 
 // --- default registry --------------------------------------------------------
 const def = defaultMcpConfig().mcpServers;
-ok("default registry ships context7 + playwright + chrome-devtools", !!def.context7 && !!def.playwright && !!def["chrome-devtools"]);
-ok("all three use stdio + npx", ["context7", "playwright", "chrome-devtools"].every((n) => def[n].command === "npx" && (def[n].transport ?? "stdio") === "stdio"));
+ok("default registry ships context7 + playwright + chrome-devtools + computer-use", !!def.context7 && !!def.playwright && !!def["chrome-devtools"] && !!def["computer-use"]);
+ok("all four use npx", ["context7", "playwright", "chrome-devtools", "computer-use"].every((n) => def[n].command === "npx"));
+ok("the three stdio servers use stdio transport", ["context7", "playwright", "chrome-devtools"].every((n) => (def[n].transport ?? "stdio") === "stdio"));
 ok("Playwright is gated as mutating; Context7 is read-only", def.playwright.mutating === true && def.context7.mutating === false);
+ok("computer-use is marked computer_use", def["computer-use"].computer_use === true);
 
 // --- ensure/load ~/.dom/mcp.json --------------------------------------------
 const created = await ensureMcpConfig();
 ok("ensureMcpConfig writes ~/.dom/mcp.json on first run", created === true && (await fs.readFile(mcpConfigPath(), "utf8")).includes("playwright"));
 ok("a second ensure does not overwrite", (await ensureMcpConfig()) === false);
 const loaded = await loadMcpConfig();
-ok("loadMcpConfig reads back the three servers", Object.keys(loaded.mcpServers).length === 3);
+ok("loadMcpConfig reads back the four servers", Object.keys(loaded.mcpServers).length === 4);
 
 // --- dynamic tool registry ---------------------------------------------------
 const jsonSchema = { type: "object", properties: { url: { type: "string" } }, required: ["url"], additionalProperties: false };

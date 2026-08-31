@@ -5,6 +5,8 @@ import { buildSystemPrompt } from "./system-prompt.js";
 import { loadSkills } from "./skills.js";
 import { ensurePublicApisCache } from "./publicapis.js";
 import { ensureMcpConfig } from "./mcp/config.js";
+import { ensureUserDirs } from "./firstrun.js";
+import { nodeMissing } from "./mcp/runtime.js";
 import { mcp } from "./mcp/manager.js";
 import { runNonBlockingHook } from "./hooks.js";
 import { fetchModels } from "./models.js";
@@ -132,6 +134,14 @@ export interface Boot {
 export class BootError extends Error {}
 
 export async function boot(flags: Flags, cwd: string): Promise<Boot> {
+  // Before anything else, and before the API-key check that can throw: a user
+  // who has not set a key yet is exactly the user on their first launch, and the
+  // folders should be there for them to look at either way. Cheap, idempotent,
+  // and it never throws — see firstrun.ts for why this is not left to whichever
+  // write happens to come first.
+  const created = await ensureUserDirs();
+  if (created.length) console.error(`gnosis: created ${created.join(", ")}`);
+
   const config = await loadConfig();
   const apiKey = await resolveApiKey(config);
   if (!apiKey) {
@@ -206,6 +216,15 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // deterministic. That is what made the serve suites take ~26s and fail
   // intermittently under load, waiting on a startup that was busy downloading.
   if (!flags.headless && process.env.GNOSIS_SKIP_MCP !== "1") {
+    // Say it once, up front, rather than leaving four identical spawn failures
+    // in a tab nobody has opened yet. On a fresh install with no Node.js this is
+    // the difference between "MCP doesn't work for some reason" and a fix.
+    if (nodeMissing()) {
+      console.error(
+        "gnosis: Node.js was not found, so no MCP server can start (they all launch through npx).\n" +
+          "        Install the LTS build from https://nodejs.org/en/download and restart. Everything else works without it.",
+      );
+    }
     void ensureMcpConfig().then(() => mcp.init()).catch(() => {});
   }
 

@@ -18,10 +18,12 @@ export interface McpServerConfig {
   /** Gate this server's tool calls through the permission system (default false). */
   mutating?: boolean;
   /** This server drives the real desktop (mouse, keyboard, screen). Every tool it
-   * publishes is treated as DANGEROUS by the permission gate: it always prompts,
-   * and can never be waved through by yolo mode or a prior "always". Marking a
-   * server computer_use also forces `mutating`, since none of it is read-only in
-   * any meaningful sense — a screenshot reads the user's entire screen. */
+   * publishes is treated as DANGEROUS by the permission gate: it prompts by
+   * default, in every mode, including yolo. A deliberate "always" silences the
+   * whole server for the session (the approval is keyed on the server, since one
+   * "click that" turn fires four different tools). Marking a server computer_use
+   * also forces `mutating`, since none of it is read-only in any meaningful
+   * sense — a screenshot reads the user's entire screen. */
   computer_use?: boolean;
   /** Skip this server this session. */
   disabled?: boolean;
@@ -45,7 +47,7 @@ export function mcpConfigPath(): string {
   return path.join(domDir(), "mcp.json");
 }
 
-/** The three servers dom ships with, written to ~/.dom/mcp.json on first run. */
+/** The servers dom ships with, written to ~/.dom/mcp.json on first run. */
 export function defaultMcpConfig(): McpConfig {
   return {
     mcpServers: {
@@ -69,6 +71,31 @@ export function defaultMcpConfig(): McpConfig {
         transport: "stdio",
         mutating: true,
         description: "live browser inspection",
+      },
+      // Voice mode's "click/type for me" flow calls this server directly (see
+      // VOICE-UI-ISSUES.md #4). Without it in the default registry, a fresh
+      // install has voice input working but every computer-use action silently
+      // has no tool to call — omitted here for a long time, matching this dev
+      // machine's manually-added ~/.dom/mcp.json rather than what ships.
+      "computer-use": {
+        command: "npx",
+        args: ["-y", "@zavora-ai/computer-use-mcp"],
+        transport: "stdio",
+        computer_use: true,
+        description: "cross-platform desktop control (screenshot, mouse, keyboard, clipboard)",
+        allowTools: [
+          "screenshot",
+          "get_frontmost_app",
+          "list_windows",
+          "get_window",
+          "mouse_move",
+          "left_click",
+          "right_click",
+          "double_click",
+          "scroll",
+          "type",
+          "key",
+        ],
       },
     },
   };

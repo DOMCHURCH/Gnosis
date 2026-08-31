@@ -7,6 +7,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { McpServerConfig } from "./config.js";
 import type { ImagePart } from "../messages.js";
 import { resolveServerEnv } from "./config.js";
+import { launcherProblem } from "./runtime.js";
 
 export type McpStatus = "disabled" | "connecting" | "connected" | "error";
 
@@ -89,6 +90,18 @@ export class McpServer {
     }
     this.status = "connecting";
     this.error = null;
+
+    // Check the launcher exists BEFORE trying to spawn it. Without this the
+    // failure surfaces as the OS's own "spawn npx ENOENT" on every server at
+    // once, which is what a fresh install shows on a machine with no Node.js —
+    // technically accurate and completely unactionable. See mcp/runtime.ts.
+    const problem = launcherProblem(this.config.command);
+    if (problem) {
+      this.status = "error";
+      this.error = problem;
+      return;
+    }
+
     try {
       const env = await resolveServerEnv(this.config);
       const transport = new StdioClientTransport({
