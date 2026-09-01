@@ -38,8 +38,27 @@
          * height turns out to be. Hard-coding 999px worked only because the
          * window happened to be 92px tall — see the responsive note below. */
         --radius: 999px;
+        /* Transparent room around the pill for its drop shadow. Kept in sync
+         * with SHADOW_PAD in voice.js — see the note on body's padding. */
+        --shadow-pad: 24px;
       }
+      /*
+       * The window is BIGGER than the pill, and this padding is the difference.
+       *
+       * .frame casts a 32px and a 48px drop shadow. A shadow is painted outside
+       * its element, and the window used to be sized to exactly the pill — so
+       * there was nowhere for it to go and Chromium clipped it at the window
+       * rectangle. What should have been a soft halo came out as a hard-edged
+       * dark box around the pill, which is what it looked like: a rounded pill
+       * sitting inside a square. On a 250%-scaled display the blurs render at 80
+       * and 120 device pixels, so essentially all of the shadow was clipped.
+       *
+       * boundsFor() in voice.js adds the same number to the window on every
+       * side. The two have to agree: padding here without the room there just
+       * shrinks the pill, and room there without padding here re-opens the gap.
+       */
       html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
+      body { padding: var(--shadow-pad); box-sizing: border-box; }
       body {
         font: 12px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
         color: var(--text);

@@ -243,11 +243,23 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
   function boundsFor(state, area, cx) {
     const to = OVERLAY[state] ?? OVERLAY.collapsed;
     const MARGIN = 16;
-    const w = Math.min(to.w, Math.max(240, area.width - MARGIN * 2));
-    const h = Math.min(to.h, Math.max(64, area.height - MARGIN * 2));
+    /*
+     * OVERLAY sizes are the PILL. The window is bigger, because the pill casts a
+     * drop shadow and a shadow needs somewhere to land: sized to the pill
+     * exactly, the shadow was clipped at the window edge and drew a hard dark
+     * rectangle around the rounded pill instead of a halo.
+     *
+     * Matched by --shadow-pad in voice-overlay.html, which insets the pill by
+     * the same amount. Change one and you must change the other.
+     */
+    const SHADOW_PAD = 24;
+    const w = Math.min(to.w + SHADOW_PAD * 2, Math.max(240, area.width - MARGIN * 2));
+    const h = Math.min(to.h + SHADOW_PAD * 2, Math.max(64, area.height - MARGIN * 2));
     const x = Math.round(Math.min(Math.max(cx - w / 2, area.x + MARGIN), area.x + area.width - w - MARGIN));
-    // Sits above the bottom edge, but never pushed off the top of a short display.
-    const y = Math.round(Math.max(area.y + MARGIN, area.y + area.height - h - 48));
+    // Sits above the bottom edge, but never pushed off the top of a short
+    // display. The +SHADOW_PAD keeps the PILL the same distance off the bottom
+    // as before: the window grew, and without it the pill would ride 24px higher.
+    const y = Math.round(Math.max(area.y + MARGIN, area.y + area.height - h - 48 + SHADOW_PAD));
     return { x, y, width: Math.round(w), height: Math.round(h) };
   }
 

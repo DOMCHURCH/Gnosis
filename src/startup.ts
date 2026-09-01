@@ -115,8 +115,37 @@ export function parseArgs(argv: string[]): Flags {
 // cheap, tool-capable model rather than a premium one.
 const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
 
-function pickDefaultModel(config: Config): string {
-  return config.model ?? DEFAULT_MODEL;
+/**
+ * The configured model, or the built-in default — but never a model id the
+ * catalog does not have.
+ *
+ * A model id that no longer resolves is not a startup error, it is a 400 on
+ * every single turn: the app boots, looks healthy, and fails the moment anyone
+ * says anything. It is an easy state to reach, because ids are edited by hand,
+ * copied out of logs, and retired upstream — and "google/gemini-flash-latest"
+ * is a plausible-looking way to write the real "~google/gemini-flash-latest",
+ * differing by one character that is easy to drop.
+ *
+ * Only when the catalog actually loaded: fetchModels never throws, so an
+ * offline boot returns an empty list, and treating that as "your model does not
+ * exist" would silently switch models for anyone without a network.
+ */
+function pickDefaultModel(config: Config, models: ModelInfo[]): { model: string; warning?: string } {
+  const wanted = config.model ?? DEFAULT_MODEL;
+  if (!models.length) return { model: wanted };            // offline; trust the config
+  if (models.some((m) => m.id === wanted)) return { model: wanted };
+
+  // Name the nearest thing we do have. The usual cause is a small edit to a real
+  // id, so the closest match is usually the model that was meant.
+  const near = models
+    .map((m) => m.id)
+    .filter((id) => id.includes(wanted) || wanted.includes(id) || id.endsWith(wanted.split("/").pop() ?? ""))
+    .slice(0, 3);
+  const suggestion = near.length ? ` Did you mean ${near.join(", ")}?` : "";
+  return {
+    model: DEFAULT_MODEL,
+    warning: `model "${wanted}" is not in the OpenRouter catalog — using ${DEFAULT_MODEL} instead.${suggestion} Set "model" in ~/.dom/config.json to change it.`,
+  };
 }
 
 export interface Boot {
@@ -127,7 +156,8 @@ export interface Boot {
   /** The configured default model (config.model ?? built-in default) — the status
    * bar marks divergence when the live session model differs from this. */
   defaultModel: string;
-  /** Non-fatal skill-loading warnings (malformed SKILL.md, cap hit, ...). */
+  /** Non-fatal boot warnings, shown as system lines: malformed SKILL.md, a cap
+   * hit, a configured model the catalog does not have. */
   skillWarnings: string[];
 }
 
@@ -168,7 +198,8 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
     input_modalities: e.input_modalities,
   }));
 
-  const defaultModel = pickDefaultModel(config);
+  const picked = pickDefaultModel(config, models);
+  const defaultModel = picked.model;
   const mode: Mode = flags.yolo ? "yolo" : config.mode ?? "ask";
 
   let session: SessionData | null = null;
@@ -190,6 +221,7 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
   // model reads a SKILL.md body on demand. Loading never throws — malformed files
   // become warnings.
   const { skills, warnings: skillWarnings } = await loadSkills(cwd);
+  const bootWarnings = picked.warning ? [picked.warning, ...skillWarnings] : skillWarnings;
   const systemPrompt = await buildSystemPrompt(cwd, skills, config.mapTokens ?? 1024);
   // Auto-commit is on by default; config.autoCommit=false or --no-auto-commit disables it.
   const autoCommit = !flags.noAutoCommit && (config.autoCommit ?? true);
@@ -228,5 +260,5 @@ export async function boot(flags: Flags, cwd: string): Promise<Boot> {
     void ensureMcpConfig().then(() => mcp.init()).catch(() => {});
   }
 
-  return { engine, models, config, resumed, defaultModel, skillWarnings };
+  return { engine, models, config, resumed, defaultModel, skillWarnings: bootWarnings };
 }

@@ -178,8 +178,14 @@ for (const w of [440, 380, 320, 260]) {
 // was fluid. The backing store is what you draw into; the CSS box is what it is
 // scaled to. Whenever they disagree the waveform is stretched — worse the
 // further the window is from the one size the numbers were written for.
+// These are PILL sizes. The window is bigger by --shadow-pad on every side, so
+// that the pill's drop shadow has somewhere to land instead of being clipped
+// into a hard rectangle at the window edge (see boundsFor in voice.js). Opening
+// the page at the pill size would squeeze the pill by 48px and squash the
+// waveform, which is a bug in the fixture rather than in the page.
+const SHADOW_PAD = 24;
 for (const [w, h, expand] of [[440, 92, false], [320, 92, false], [720, 320, true], [520, 320, true]]) {
-  const page = await open(w, h, { expand });
+  const page = await open(w + SHADOW_PAD * 2, h + SHADOW_PAD * 2, { expand });
   const m = await page.evaluate(() => {
     const cv = document.body.classList.contains("expanded")
       ? document.getElementById("bigWave") : document.getElementById("pillWave");
@@ -315,6 +321,30 @@ for (const [w, h] of [[720, 320], [520, 320], [720, 240], [420, 300], [360, 200]
   ok("the animated turbulence filter is gone", m.filter === false);
   ok("...and nothing still references it from backdrop-filter", !/url\(/.test(m.backdrop));
   await page.close();
+}
+
+// --- the pill's shadow has room, and both halves agree about how much --------
+//
+// The window used to be sized to exactly the pill. .frame casts a 32px and a
+// 48px drop shadow, a shadow paints OUTSIDE its element, and so it was clipped
+// at the window rectangle — the pill appeared to sit inside a hard-edged dark
+// box, worst on a scaled display where the blur radii are multiplied. The fix
+// is transparent room on every side, which only works if voice.js and the
+// stylesheet use the SAME number. Nothing else would notice if they drifted:
+// too little room re-clips the shadow, too much shrinks the pill, and both
+// still render.
+{
+  const { readFileSync } = await import("node:fs");
+  const js = readFileSync(new URL("../electron/voice.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../electron/voice-overlay.html", import.meta.url), "utf8");
+  const inJs = js.split("const SHADOW_PAD = ")[1]?.match(/[0-9]+/)?.[0];
+  const inCss = css.split("--shadow-pad:")[1]?.match(/[0-9]+/)?.[0];
+  ok("voice.js reserves room for the shadow", inJs !== undefined, String(inJs));
+  ok("the stylesheet insets the pill by the same amount", inCss !== undefined && inCss === inJs, `css ${inCss} vs js ${inJs}`);
+  // The window has to be the bigger of the two, or the padding just eats the pill.
+  ok("the window is grown, not the pill shrunk", js.includes("to.w + SHADOW_PAD * 2") && js.includes("to.h + SHADOW_PAD * 2"));
+  // Growing the window pushes the pill up unless the offset compensates.
+  ok("...and the pill keeps its distance from the screen edge", js.includes("- 48 + SHADOW_PAD"));
 }
 
 await browser.close();
