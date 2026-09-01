@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { VoiceMic } from "./VoiceMic";
 import type { SessionsModel, ZoneId } from "./sessions";
 import { ZONE_BY_ID } from "./sessions.js";
 import type { CommandItem } from "./store";
@@ -871,9 +872,17 @@ function ChatInput(props: { value: string; onChange: (v: string) => void; onSubm
           : <span style={{ color: "#22D3EE", fontSize: 12 }}>&gt;</span>}
         <input ref={ref} type="text" value={value} onChange={(e) => props.onChange(e.target.value)} onKeyDown={onKeyDown} placeholder={props.mobile ? "message…" : "message this session… (/ commands, @ files, ⎘ to attach)"} style={{ flex: 1, minWidth: 0, fontSize: props.mobile ? 15 : 11, color: "#C9C9D6", background: "transparent", border: 0, outline: "none", fontFamily: MONO }} />
         {props.mobile
-          ? <button type="button" onClick={props.onSubmit} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, minWidth: 56, minHeight: 40, cursor: "pointer" }}>SEND</button>
+          ? (<>
+              <VoiceMic variant="composer" />
+              <button type="button" onClick={props.onSubmit} style={{ fontFamily: MONO, fontSize: 11, letterSpacing: 1, background: "#22D3EE", color: "#0D0D12", border: 0, minWidth: 56, minHeight: 40, cursor: "pointer" }}>SEND</button>
+            </>)
           : (<>
               <button type="button" title="attach files" onClick={() => fileRef.current?.click()} style={{ fontFamily: MONO, fontSize: 14, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 2px" }}>📎</button>
+              {/* Talking is the same kind of act as attaching a file, so it sits
+                  with the paperclip rather than in a menu. This is the control
+                  that makes the wake phrase optional: you should not have to
+                  remember a magic word to use the headline feature. */}
+              <VoiceMic variant="composer" />
               <span style={{ width: 7, height: 14, background: "#22D3EE", animation: "domCaret 1s steps(1) infinite" }} />
             </>)}
       </div>
