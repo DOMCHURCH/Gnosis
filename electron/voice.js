@@ -291,6 +291,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       ...start,
       frame: false,
       transparent: true,
+      // Explicit, because the default is opaque and "transparent: true" alone
+      // has been observed to composite black on Windows. Costs nothing when the
+      // platform was going to do the right thing anyway.
+      backgroundColor: "#00000000",
       resizable: false,
       movable: true,
       skipTaskbar: true,

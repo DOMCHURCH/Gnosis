@@ -82,7 +82,10 @@ ok("the expanded panel is ~720x320", /expanded: \{ w: 720, h: 320 \}/.test(voice
 ok("the page drives the window size", /ipcMain\.on\("voice:resize"/.test(voice));
 ok("...frameless and always on top", /frame: false,[\s\S]*alwaysOnTop: true,/.test(voice));
 ok("...with no parent window, so the main window stays usable", !/parent: .*overlay/i.test(voice));
-ok("...glassmorphic", /backdrop-filter: blur/.test(overlay));
+// Glass by layered translucency and a rim, NOT by backdrop-filter: that could
+// only ever blur content inside this same window (there is none behind the
+// panel), and in a transparent window it cost an opaque black backing.
+ok("...glassmorphic", overlay.includes("linear-gradient(rgba(8, 10, 18,") && !overlay.includes("backdrop-filter:"));
 // The material itself is covered in depth by s97-liquid-glass.mjs (real
 // refraction, no colour tint, a liquid waveform). Kept here to just the
 // structural fact this suite already cared about: there is a rim.

@@ -158,8 +158,17 @@
          *
          * Order is top-down: the scrim gradient first, the white fill under it.
          */
+        /*
+         * Darker than it was (0.45 -> 0.78). brightness(0.45) used to clamp
+         * whatever was behind the panel before anything composited over it, so
+         * the scrim only had to finish the job; without it this is the entire
+         * contrast guarantee, and light text over a white document underneath
+         * has to stay readable. s90 computes the resulting ratios against a
+         * white desktop rather than trusting this note: 8.52, 6.94 and 5.71 to
+         * one for the three text colours, against 4.5 for AA.
+         */
         background:
-          linear-gradient(rgba(8, 10, 18, 0.45), rgba(8, 10, 18, 0.45)),
+          linear-gradient(rgba(8, 10, 18, 0.78), rgba(8, 10, 18, 0.78)),
           rgba(255, 255, 255, 0.10);
         /* The 1px inner edge — light catching the lip of the glass from inside.
          * inset, so it survives the .frame gradient sitting outside it. */
@@ -178,8 +187,23 @@
          * here clears WCAG AA against a pure-white backdrop — the worst case —
          * which is checked numerically rather than guessed at.
          */
-        backdrop-filter: blur(16px) saturate(1.8) brightness(0.45);
-        -webkit-backdrop-filter: blur(16px) saturate(1.8) brightness(0.45);
+        /*
+         * No backdrop-filter here, and it is not a style choice.
+         *
+         * An element with backdrop-filter needs a backdrop to sample. In a
+         * TRANSPARENT window there is nothing behind it — the desktop belongs to
+         * the compositor, not to this page — so Chromium gives the window an
+         * opaque backing to filter instead, and the whole window turns black
+         * wherever the page has not painted something over it. That is the dark
+         * rectangle around the pill: not a clipped shadow, which would be soft
+         * and graduated, but the window's own background showing through the
+         * rounded corners and the shadow margin.
+         *
+         * It was never doing the job it was written for either: it could only
+         * ever have blurred content inside this same window, and there is none
+         * behind the glass. The scrim below does the contrast work it was
+         * credited with, which is why the text colours are unchanged.
+         */
         overflow: hidden;
         position: relative;
         transition: border-radius var(--ease);
@@ -260,16 +284,27 @@
       .pillText { flex: 1 1 auto; min-width: 0; overflow: hidden; }
       #pillState { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       #pillHint { font-size: 10.5px; color: var(--dimmer); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-      /* Below this the waveform is a sliver and the hint is a row of dots; drop
-       * both rather than render two things too small to mean anything. */
+      /* Narrow enough that the hint is a row of dots: drop it rather than render
+       * a sentence nobody can read. (The waveform is already gone at every
+       * width — see above.) */
       @media (max-width: 380px) {
-        #pillWave { display: none; }
         #pillHint { display: none; }
       }
-      /* min-width:0 (not 60px) is what lets this actually give way when the pill
-       * is narrow — a flex item's default min-width is auto, so without it the
-       * canvas refuses to shrink and pushes the shield and × off the edge. */
-      #pillWave { flex: 1 1 auto; height: 26px; min-width: 0; display: block; }
+      /*
+       * The pill has no waveform.
+       *
+       * It shared the row with the label on equal terms (both flex: 1 1 auto),
+       * so it took about half the space the text needed — and the text is the
+       * part with something to say. What actually reached the screen was a hint
+       * ending in "Voice off in ..." next to a four-pixel stub of waveform: two
+       * things too small to be either of them.
+       *
+       * The level meter lives in the expanded panel, at a size where you can
+       * read syllables off it. Kept in the markup, not deleted, because the
+       * drawing code addresses both canvases by id and a missing element is a
+       * null check in a rAF loop.
+       */
+      #pillWave { display: none; }
 
       .shield, .closeBtn {
         position: relative; flex: 0 0 auto;

@@ -77,21 +77,26 @@ ok("the old dark tint is gone", !/rgba\(12, 13, 20, 0\.72\)/.test(overlay));
 ok("the old cyan/violet/magenta rim gradient is gone",
   !/linear-gradient\(120deg, rgba\(34, 211, 238.*rgba\(139, 124, 246.*rgba\(232, 121, 249/.test(overlay));
 
-// --- saturation, the cue that makes "through frost" read as vivid ----------
-{
-  const m = overlay.match(/backdrop-filter:\s*blur\((\d+)px\)\s*saturate\(([\d.]+)\)/);
-  // The upper bound is the whole fix. Anything past ~20px averages the backdrop
-  // to its mean colour and the panel goes grey; that is what "still isn't
-  // reading as real glass" was.
-  ok("blur is moderate enough to keep the backdrop legible", !!m && Number(m[1]) >= 10 && Number(m[1]) <= 20);
-  ok("saturation is boosted, not left flat", !!m && Number(m[2]) >= 1.6);
-  // Contrast over an unknown desktop cannot be won with the fill alone; the
-  // backdrop itself is clamped. s90 computes the resulting ratios.
-  ok("the backdrop is clamped so text can pass WCAG over a white desktop", (() => {
-    const b = overlay.match(/backdrop-filter:[^;]*brightness\(([\d.]+)\)/);
-    return !!b && Number(b[1]) < 1;
-  })());
-}
+// --- no backdrop-filter, and that is the point ------------------------------
+//
+// This suite used to require blur + saturate + brightness on .glass, and the
+// brightness clamp was the contrast guarantee. All of it is gone, because in a
+// TRANSPARENT window backdrop-filter has no backdrop to sample: Chromium gives
+// the window an opaque backing to filter instead, and every part of the window
+// the page has not painted over turns black. That was the dark rectangle around
+// the pill — it grew when the window grew, which a clipped shadow could not do.
+//
+// It was never doing the job it was credited with either. It could only have
+// blurred content inside this same window, and there is none behind the glass.
+ok("no backdrop-filter anywhere in the overlay", !overlay.includes("backdrop-filter:"));
+// The material is layered translucency over a rim instead: a dark scrim and a
+// white fill in one background, so neither needs a pseudo-element or a
+// stacking context (see the note in the stylesheet).
+ok("the glass is layered translucency instead", overlay.includes("linear-gradient(rgba(8, 10, 18,") && overlay.includes("rgba(255, 255, 255, 0.10)"));
+// And the scrim is now the whole contrast guarantee, so it has to stay heavy.
+// s90 computes the actual ratios against a white desktop; this only pins the
+// input, because a lighter scrim is the tempting change and the silent one.
+ok("the scrim is heavy enough to carry it alone", overlay.includes("rgba(8, 10, 18, 0.78)"));
 
 // --- the animated displacement filter is gone, and stays gone ---------------
 // Not a regression: a deliberate removal. See the header. Pinned so it cannot
@@ -101,10 +106,10 @@ ok("the old cyan/violet/magenta rim gradient is gone",
 // gone" must not read as evidence that it is still here.
 ok("no SVG turbulence/displacement filter remains",
   !/<feTurbulence/.test(overlay) && !/<feDisplacementMap/.test(overlay) && !/<filter\b/.test(overlay));
-ok("...and backdrop-filter references no SVG filter", (() => {
-  const m = overlay.match(/backdrop-filter:([^;]*);/g) ?? [];
-  return m.length > 0 && m.every((d) => !/url\(/.test(d));
-})());
+// (The old "backdrop-filter references no SVG filter" check lived here. It
+// required at least one backdrop-filter declaration to exist so it could
+// assert none of them used url(). There are none at all now — asserted above
+// — so it had nothing left to guard.)
 ok("the now-orphaned filter id is gone too", !/liquidDistort/.test(overlay));
 
 // --- the shadow lifts the surface, and is coloured --------------------------

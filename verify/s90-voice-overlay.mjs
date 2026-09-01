@@ -126,7 +126,14 @@ async function open(w, h, { expand = false, backdrop = "#ffffff" } = {}) {
   ok("--text clears WCAG AA over a WHITE desktop", r["--text"] >= 4.5, `${r["--text"]}:1`);
   ok("--dim clears WCAG AA over a WHITE desktop", r["--dim"] >= 4.5, `${r["--dim"]}:1`);
   ok("--dimmer clears WCAG AA over a WHITE desktop", r["--dimmer"] >= 4.5, `${r["--dimmer"]}:1`);
-  ok("the backdrop is actually clamped (this is what makes the above possible)", r.bright < 1);
+  // The three ratios above used to depend on backdrop-filter's brightness()
+  // clamping whatever was behind the panel. There is no backdrop-filter any
+  // more — in a transparent window it made Chromium give the window an opaque
+  // backing to filter, which is what painted a black box around the pill — so
+  // the scrim is now the whole guarantee, and it has to stay heavy enough to
+  // be one. Someone lightening it for looks is exactly the regression here.
+  ok("there is no backdrop-filter to depend on", r.bright === 1);
+  ok("...so the scrim alone carries the contrast", r.scrimA >= 0.7, `scrim ${r.scrimA}`);
   await page.close();
 }
 
