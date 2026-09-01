@@ -113,7 +113,13 @@ export function parseArgs(argv: string[]): Flags {
 
 // The active model comes from ~/.dom/config.json; absent, we default to a fast,
 // cheap, tool-capable model rather than a premium one.
-const DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
+//
+// glm-5.3-flash at $0.07/$0.25 per million is roughly a tenth of the flash tier
+// it replaces, with a 1.3M context. Voice is what made the choice matter: per
+// model CALL the overhead is close to fixed regardless of how little is
+// generated, so the model behind it sets the floor on how fast a spoken reply
+// can possibly arrive.
+const DEFAULT_MODEL = "z-ai/glm-5.3-flash";
 
 /**
  * The configured model, or the built-in default — but never a model id the

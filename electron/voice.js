@@ -310,7 +310,25 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     });
     overlay.setAlwaysOnTop(true, "screen-saver");
     void overlay.loadFile(overlayHtml);
-    overlay.on("closed", () => { overlay = null; });
+    /*
+     * A closed overlay has to END THE SESSION, not just forget the window.
+     *
+     * This used to only null the reference. Every other exit -- Esc, the x,
+     * "stop listening", the idle timer -- runs endSession(), which clears the
+     * session flag. Closing the window itself did not, and wake() opens with a
+     * guard that returns immediately while a session is believed to be open. So
+     * the wake word went dead for the rest of the process's life: "hey jarvis"
+     * was heard, the detector fired, and wake() returned because it thought a
+     * conversation was still in progress behind a window that no longer existed.
+     *
+     * It also left the microphone muted when the window went while a reply was
+     * still playing: the unmute only runs from stopSpeaking() and the reopen
+     * timer, and endSession() is what calls the first of those.
+     */
+    overlay.on("closed", () => {
+      overlay = null;
+      if (session) endSession("overlay window closed");
+    });
     return overlay;
   }
 
@@ -962,6 +980,55 @@ async function writeTurnTiming(timeline) {
   }
 
   /** A finished utterance: transcribe, run it, speak the reply. */
+  /*
+   * Whisper does not return nothing for near-silence. It returns a sentence.
+   *
+   * The recorder already discards a window it heard nothing in, but the gate is
+   * adaptive and deliberately sensitive -- a cough, a keystroke, a fan changing
+   * pitch crosses it, and then a second of essentially empty audio goes to the
+   * transcriber. Whisper's training data is full of subtitled video, so what
+   * comes back for empty audio is the most common thing at the end of one:
+   * "Thank you.", "Thanks for watching!", "you", a musical note.
+   *
+   * Those then became real turns. The app answered them, spoke the answer,
+   * muted, reopened, and heard the room again -- which is why it appeared to sit
+   * there talking to itself about waiting.
+   *
+   * Matched exactly, after stripping punctuation and case, and NOT by length: a
+   * short utterance is usually the most important kind. "yes", "no", "stop" and
+   * "open spotify" all have to survive this, so nothing is rejected for being
+   * brief -- only for being one of the specific things Whisper says when it has
+   * been given silence.
+   */
+  // Everything that is not a letter, a digit or a space goes: that covers
+  // punctuation, smart quotes, an ellipsis and the musical note Whisper emits
+  // for silence, without a character class that has to be escaped correctly to
+  // be right.
+  const normalise = (text) =>
+    String(text ?? "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/ +/g, " ").trim();
+
+  // Normalised through the SAME function as the input. Written raw and
+  // normalised at construction, because an entry typed in its normalised form
+  // is a trap: "subtitles by the amara.org community" never matches once the
+  // input has had its dot turned into a space, and the miss is silent.
+  const WHISPER_SILENCE = new Set([
+    "you", "thank you", "thanks", "thank you very much",
+    "thanks for watching", "thanks for watching!",
+    "thank you for watching", "thank you for watching!",
+    "bye", "bye bye", "goodbye", "okay", "ok", "so", "uh", "um", "hmm", "mm",
+    "the", "and", "i", "yeah", "oh", "ah",
+    "please subscribe", "subscribe", "amara.org",
+    "subtitles by the amara.org community", "www.mooji.org",
+  ].map(normalise));
+
+  /** True when a transcript is one of Whisper's silence artefacts rather than
+   * something the user said. */
+  function isSilenceArtefact(text) {
+    const bare = normalise(text);
+    if (!bare) return true;   // silence, punctuation, or a musical note
+    return WHISPER_SILENCE.has(bare);
+  }
+
   async function handleUtterance(wavBase64) {
     vlog("utterance.received", { bytes: Math.round((wavBase64?.length ?? 0) * 0.75) });
     const { env } = await readEnv();
@@ -977,6 +1044,17 @@ async function writeTurnTiming(timeline) {
       toOverlay("voice:state", { state: "error", transcript: t.error ?? "didn't catch that" });
       if (session) setTimeout(() => listenAgain(), 1200);
       else setTimeout(sleep, 3500);
+      return;
+    }
+
+    // Heard something, but it was the room rather than a person. Treated exactly
+    // like the recorder's own "heard nothing": go back to listening without
+    // showing an error, because there was no error -- nobody spoke.
+    if (isSilenceArtefact(t.text)) {
+      vlog("transcribe.discarded", { why: "silence artefact", text: t.text.slice(0, 40) });
+      toOverlay("voice:state", { state: "listening", transcript: "", response: "" });
+      if (session) { armIdle(); listenAgain(); }
+      else sleep();
       return;
     }
 
