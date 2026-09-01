@@ -25,6 +25,11 @@ import {
   toJsonSchema,
   writeSchema,
 } from "./schemas.js";
+// Capability probes for the availability predicates below: the shell lends these
+// to the engine at startup, and their absence is what makes a tool pointless
+// rather than merely unused.
+import { hasCamera } from "../camera.js";
+import { hasScreen } from "../screen.js";
 import { runRead } from "./read.js";
 import { runWrite } from "./write.js";
 import { runEdit } from "./edit.js";
@@ -191,6 +196,18 @@ export interface ToolDef {
   /** `signal` aborts a long-running tool (only bash honours it today); `ctx`
    * carries multi-tab runtime access for send_message/list_tabs. */
   run: (args: any, signal?: AbortSignal, ctx?: ToolContext) => Promise<ToolResult>;
+  /**
+   * Whether this tool can do anything in the CURRENT process, given the runtime
+   * it has been handed. Absent means "always".
+   *
+   * A tool's schema is sent on every request, whether or not the capability
+   * behind it exists: `office` alone is 762 tokens describing desks on a floor
+   * that a headless run has no browser to draw, and the UI-only set together is
+   * about 1,700 tokens on every turn of every session. Worse than the cost, an
+   * advertised tool is one the model will try — and then spend a round trip
+   * discovering it cannot work here, which is the expensive kind of mistake.
+   */
+  available?: (ctx?: ToolContext) => boolean;
   /** MCP tools carry a raw JSON Schema (used verbatim for the model) instead of a
    * zod schema; `source` marks where the tool came from. */
   jsonSchema?: Record<string, unknown>;
@@ -276,6 +293,8 @@ export const TOOLS: Record<string, ToolDef> = {
   },
   send_message: {
     name: "send_message",
+    // Both tab tools need a live tab runtime; a single-session CLI run has none.
+    available: (ctx) => !!ctx?.tab,
     description:
       "Multi-tab sessions only: deliver a message to another tab (a separate agent) by name. It arrives " +
       "in that tab as a user message tagged with your tab name and triggers a turn there. Use list_tabs " +
@@ -287,6 +306,7 @@ export const TOOLS: Record<string, ToolDef> = {
   },
   list_tabs: {
     name: "list_tabs",
+    available: (ctx) => !!ctx?.tab,
     description: "Multi-tab sessions only: list the open tabs (agents) with each one's name and one-line purpose.",
     schema: listTabsSchema,
     mutating: false,
@@ -331,6 +351,7 @@ export const TOOLS: Record<string, ToolDef> = {
   },
   camera: {
     name: "camera",
+    available: () => hasCamera(),
     description:
       "Take one frame from the webcam so you can SEE it — the image is attached to your next message. Use it when " +
       "the user asks what you can see, what they are holding, or anything about the room. Desktop app only; there " +
@@ -341,6 +362,9 @@ export const TOOLS: Record<string, ToolDef> = {
   },
   screen: {
     name: "screen",
+    // The shell lends the engine a capture provider (see src/screen.ts). Without
+    // one the tool's only possible answer is that it cannot see the screen.
+    available: () => hasScreen(),
     description:
       "Capture the user's SCREEN so you can see it — the image is attached to your next message. Use it for " +
       "\"what's on my screen\", \"what am I looking at\", or any question about what is displayed. It captures the " +
@@ -384,6 +408,10 @@ export const TOOLS: Record<string, ToolDef> = {
   },
   office: {
     name: "office",
+    // The floor is drawn by the browser. ctx.office is wired only when the
+    // engine has an event bus to emit onto — i.e. `dom serve` or the desktop
+    // app — so a CLI or headless run advertises nothing about desks.
+    available: (ctx) => !!ctx?.office,
     description:
       "Place agents on the office floor the browser UI draws (`dom serve`): five zones — coordinator (1 desk), " +
       "planning (2), application (2), coding (8), sub-agents (6). Call it the moment the user asks to add, place, " +
@@ -401,6 +429,9 @@ export const TOOLS: Record<string, ToolDef> = {
   },
   focus_window: {
     name: "focus_window",
+    // Every code path in focuswindow.ts opens with a win32 check; on any other
+    // platform the tool exists only to return "Windows only."
+    available: () => process.platform === "win32",
     description:
       "Windows only. Launch an app, bring a window to the foreground, or list the windows that are open. " +
       "action=launch is the RELIABLE way to open something: `app` plus `args` starts it (or focuses it if it is " +
@@ -435,8 +466,19 @@ export function resolveTool(name: string): ToolDef | undefined {
   return TOOLS[name] ?? MCP_TOOLS[name];
 }
 /** All advertised tool names (built-ins + connected MCP tools). */
-export function allToolNames(): string[] {
-  return [...TOOL_NAMES, ...Object.keys(MCP_TOOLS)];
+/**
+ * Every tool name, or — given a context — only the ones that can actually do
+ * something in this process. Callers that pass nothing get the full list, which
+ * is what the tool DISPATCHER wants: a tool that has become unavailable
+ * mid-session should still resolve and report why, rather than read as unknown.
+ */
+export function allToolNames(ctx?: ToolContext): string[] {
+  const names = [...TOOL_NAMES, ...Object.keys(MCP_TOOLS)];
+  if (!ctx) return names;
+  return names.filter((n) => {
+    const t = resolveTool(n);
+    return !t?.available || t.available(ctx);
+  });
 }
 
 /** The tools array sent to the API. Built-ins derive parameters from their zod

@@ -498,10 +498,16 @@ export class Engine {
    * multi-tab meta-tools), leaving only read-only research tools. */
   availableToolNames(): readonly string[] {
     if (this.toolAllowList) return this.toolAllowList;
-    if (this.mode !== "plan") return allToolNames();
+    // With the tool context, so a tool whose capability is absent in this
+    // process is never advertised: no browser floor in a headless run, no tab
+    // tools in a single session, no screen or camera without a shell to capture
+    // them. It saves the tokens, and it stops the model spending a round trip
+    // finding out the hard way.
+    const ctx = this.toolCtx();
+    if (this.mode !== "plan") return allToolNames(ctx);
     // Plan mode: built-ins keep the existing exclusion set; MCP tools are advertised
     // only when read-only (mutating ones are rejected by the gate anyway).
-    return allToolNames().filter((n) => (TOOLS[n] ? !PLAN_EXCLUDED.has(n) : !resolveTool(n)?.mutating));
+    return allToolNames(ctx).filter((n) => (TOOLS[n] ? !PLAN_EXCLUDED.has(n) : !resolveTool(n)?.mutating));
   }
 
   /** System prompt for the current turn, with the stated working directory
