@@ -48,26 +48,24 @@ ok("the page initialised with its bridge", m.pageOk && m.pageOk.bridge && m.page
   JSON.stringify(m.pageOk || null));
 ok("the permission pane rendered", m.pageOk && m.pageOk.pane === true);
 
-// --- 1. every region the page does not paint is genuinely transparent --------
-// The corners are the furthest point from the pill in both axes, so nothing
-// legitimate reaches them: they must be exactly zero.
-for (const k of ["top-left", "top-right", "bottom-left", "bottom-right"]) {
-  ok(k + " is fully transparent", m.probes[k] === 0, "alpha " + m.probes[k]);
+// --- 1. there is no transparent region, which is the whole point -------------
+//
+// This block used to assert the opposite: that the window's unpainted margin
+// was fully transparent. It WAS — capturePage() reported alpha 0 at every
+// corner through three separate attempts at this bug — and the panel still
+// rendered inside a hard black rectangle on the user's screen, because the
+// window's own buffer was never the problem. What the desktop compositor did
+// with that buffer on that GPU was, and nothing in this process can reach it.
+//
+// So the window is opaque now and the assertion inverts. A region that does
+// not exist cannot composite wrongly: this is a guarantee rather than a fourth
+// attempt. If the panel ever goes back to being transparent, this fails, and
+// it should — that change needs to be deliberate and re-verified on real
+// hardware, not inherited.
+for (const k of ["top-left", "top-right", "bottom-left", "bottom-right", "mid-top", "mid-left"]) {
+  ok(k + " is painted, not transparent", m.probes[k] === 255, "alpha " + m.probes[k]);
 }
-// The mid-edge samples sit where the pill is widest and the drop shadow reaches
-// furthest, so a trace of shadow is correct there. The threshold is what
-// separates "a shadow faded to nothing" from "a backing surface": an opaque
-// backing reads 255, and 4/255 is under 2% — invisible, and three orders of
-// magnitude from the bug.
-for (const k of ["mid-top", "mid-left"]) {
-  ok(k + " carries at most a trace of shadow", m.probes[k] <= 4, "alpha " + m.probes[k]);
-}
-// Inside the margin the drop shadow is allowed — but it has to be a shadow, not
-// a wall. This is the assertion that fails if a hard rectangle comes back.
-ok("the shadow margin is a shadow, not a backing", m.probes["shadow-margin"] < 90, "alpha " + m.probes["shadow-margin"]);
-// And the pill has to be drawn, or "everything is transparent" would pass by
-// rendering nothing at all.
-ok("the pill itself is drawn", m.probes["pill-body"] > 120, "alpha " + m.probes["pill-body"]);
+ok("the panel fills its own window", m.probes["pill-body"] === 255, "alpha " + m.probes["pill-body"]);
 
 // --- 2. contrast over the backgrounds a floating panel actually lands on -----
 {

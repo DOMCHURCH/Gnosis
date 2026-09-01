@@ -37,10 +37,21 @@
         /* Collapsed is a pill: the radius is half the height, whatever the
          * height turns out to be. Hard-coding 999px worked only because the
          * window happened to be 92px tall — see the responsive note below. */
-        --radius: 999px;
+        /*
+         * A rounded rectangle, not a stadium.
+         *
+         * 999px made the pill's ends semicircles, and the corners outside those
+         * curves have to be transparent for the shape to read. On this hardware
+         * a transparent region in this window composites BLACK, so the shape
+         * that needed them was the shape that produced the black box. 16px needs
+         * no transparent corner at all -- see the note on the BrowserWindow in
+         * voice.js for the three attempts that came before this.
+         */
+        --radius: 16px;
         /* Transparent room around the pill for its drop shadow. Kept in sync
          * with SHADOW_PAD in voice.js — see the note on body's padding. */
-        --shadow-pad: 24px;
+        /* Zero: the window is opaque and Windows draws the shadow outside it. */
+        --shadow-pad: 0px;
 
         /*
          * The material, as layers rather than one fill.
@@ -197,11 +208,9 @@
          * separates the glass from a dark backdrop without reading as a glow.
          * On white it is invisible; on a dark window it is the only thing that
          * says where the panel ends. */
-        box-shadow:
-          0 0 22px -8px rgba(34, 211, 238, 0.30),
-          0 6px 20px -4px rgba(31, 38, 135, 0.36),
-          0 14px 36px -14px rgba(10, 12, 30, 0.54),
-          0 2px 5px -2px rgba(0, 0, 0, 0.34);
+        /* No drop shadow here any more. The window is opaque and Windows draws
+         * the shadow outside it (hasShadow: true), so a CSS one would be a dark
+         * band painted ON the panel rather than depth under it. */
         transition: border-radius var(--ease);
       }
 
@@ -257,8 +266,12 @@
           linear-gradient(160deg, var(--tint-violet) 0%, transparent 46%),
           linear-gradient(20deg, var(--tint-cyan) 0%, transparent 55%),
           linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.014) 44%, rgba(255, 255, 255, 0.038) 100%),
-          linear-gradient(rgba(var(--base), var(--scrim)), rgba(var(--base), var(--scrim))),
-          rgba(255, 255, 255, 0.06);
+          /* OPAQUE. Every layer above is translucent and sits on this; there is
+           * no backdrop to let through any more, because the window no longer
+           * has one. The tints and the sheen still do their work — the surface
+           * reads as a material rather than a flat fill — they just do it over
+           * a colour instead of over the desktop. */
+          rgb(var(--base));
         /*
          * The inner rim — light catching the lip of the glass from inside. Inset,
          * so it survives the .frame gradient sitting outside it.
@@ -541,6 +554,18 @@
        * would be narrower than a single permission card's buttons. Stack it, and
        * let the conversation column keep the top. */
       @media (max-width: 560px) {
+        /*
+         * The two columns stack here, which puts .right near the BOTTOM of the
+         * panel — and the corner controls are positioned against it, so they
+         * went with it and hung off the bottom edge. Making .right static hands
+         * them back to .glass, which is the panel, so they stay in the panel's
+         * top-right corner at every width. They are the two exits; they cannot
+         * be the thing that falls off screen.
+         */
+        /* #expanded .right, not .right: a later rule in this stylesheet sets
+         * position: relative on .right, and at equal specificity the later one
+         * wins even from outside a media query. */
+        #expanded .right { position: static; }
         #expanded { flex-direction: column; }
         /* `flex: 0 0 auto` here pushed .right — and with it the × pinned to its
          * corner — clean off the bottom of a short panel. The conversation

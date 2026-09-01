@@ -89,7 +89,11 @@ ok("...with no parent window, so the main window stays usable", !/parent: .*over
 // transparent window that has no backdrop to sample and costs an opaque black
 // backing. The scrim is a token now, so this checks the token is applied
 // rather than pinning one literal colour.
-ok("...glassmorphic", overlay.includes("rgba(var(--base), var(--scrim))") && !overlay.includes("backdrop-filter:"));
+// Glass by layered translucency over an OPAQUE base, and never by
+// backdrop-filter. The base stopped being translucent when the window did:
+// a transparent window composited black on real hardware, so the panel now
+// fills its window and the tints sit on a colour instead of on the desktop.
+ok("...glassmorphic", overlay.includes("rgb(var(--base))") && !overlay.includes("backdrop-filter:"));
 // The material itself is covered in depth by s97-liquid-glass.mjs (real
 // refraction, no colour tint, a liquid waveform). Kept here to just the
 // structural fact this suite already cared about: there is a rim.

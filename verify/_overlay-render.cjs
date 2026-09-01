@@ -16,7 +16,9 @@ const root = path.resolve(__dirname, "..");
 // different folder, which is how the before/after pair is produced.
 const SHOTS = process.env.OVERLAY_SHOTS || path.join(root, "verify", "_shots");
 const PAGE = process.env.OVERLAY_PAGE || path.join(root, "electron", "voice-overlay.html");
-const PAD = 24;
+// Zero since the overlay window became opaque: there is no shadow margin any
+// more, so the window IS the panel.
+const PAD = 0;
 const out = { probes: {}, contrast: {}, states: {}, copy: {}, rail: {}, a11y: null, behaviour: {}, shots: 0, error: null };
 
 setTimeout(() => { console.log(JSON.stringify({ ...out, error: "timed out" })); app.exit(0); }, 90000);
@@ -34,7 +36,7 @@ app.whenReady().then(async () => {
   try {
     win = new BrowserWindow({
       x: 40, y: 40, width: 440 + PAD * 2, height: 92 + PAD * 2,
-      frame: false, transparent: true, backgroundColor: "#00000000",
+      frame: false, transparent: false, backgroundColor: "#0b0f18",
       resizable: false, skipTaskbar: true, alwaysOnTop: true, show: false,
       focusable: true, hasShadow: false,
       // WITHOUT this the page's script threw at its first window.voice call and

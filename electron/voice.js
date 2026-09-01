@@ -297,7 +297,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
      * Matched by --shadow-pad in voice-overlay.html, which insets the pill by
      * the same amount. Change one and you must change the other.
      */
-    const SHADOW_PAD = 24;
+    // Zero, now that the window is opaque: the shadow is drawn by Windows
+    // OUTSIDE the window, so it needs no transparent margin inside it. The
+    // margin existed only to stop the CSS shadow being clipped, and a CSS
+    // shadow on an opaque window would just be a dark band on the panel.
+    const SHADOW_PAD = 0;
     const w = Math.min(to.w + SHADOW_PAD * 2, Math.max(240, area.width - MARGIN * 2));
     const h = Math.min(to.h + SHADOW_PAD * 2, Math.max(64, area.height - MARGIN * 2));
     const x = Math.round(Math.min(Math.max(cx - w / 2, area.x + MARGIN), area.x + area.width - w - MARGIN));
@@ -332,37 +336,49 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     const area = workAreaFor(getWindow());
     overlayState = "collapsed"; // the page always loads in the pill state
     const start = boundsFor("collapsed", area, area.x + area.width / 2);
+    /*
+     * OPAQUE, deliberately, after three attempts at a transparent one.
+     *
+     * The panel was a transparent window with a 999px-radius pill painted on it.
+     * On this hardware the region the page does not paint composites BLACK, not
+     * see-through, so the pill sat in a hard black rectangle. Three fixes were
+     * tried and each was reasoned from real evidence: the drop shadow was being
+     * clipped (it was, and that was not this); backdrop-filter hands a
+     * transparent window an opaque backing (it does, and removing it was
+     * correct and did not fix this); Windows 11's background-material path
+     * mishandles translucent windows (electron/electron#49428, and asking for
+     * "none" did not fix it either).
+     *
+     * capturePage() reports alpha 0 at every corner through all of it. The
+     * window's own buffer is right; what the desktop compositor does with that
+     * buffer on this GPU is not, and nothing in this process can reach that.
+     *
+     * So the shape changes instead of the compositing. An opaque window has no
+     * unpainted region, so there is nothing that CAN go black — which is a
+     * guarantee rather than another attempt. The cost is the stadium outline:
+     * a 999px radius needs transparent corners, and those corners are the bug.
+     * A rounded rectangle needs none, and Windows draws the shadow itself.
+     *
+     * If a future Electron fixes the composite, this is one flag and a radius.
+     */
     overlay = new BrowserWindow({
       ...start,
       frame: false,
-      transparent: true,
-      // Explicit, because the default is opaque and "transparent: true" alone
-      // has been observed to composite black on Windows. Costs nothing when the
-      // platform was going to do the right thing anyway.
-      backgroundColor: "#00000000",
-      /*
-       * Windows 11 draws a system "background material" behind a window, and
-       * Electron's patch for it takes a different path when the window is
-       * translucent -- which is reported upstream (electron/electron#49428) as
-       * producing exactly this: a black or grey backing that appears on focus
-       * events, on some hardware, for a window that asked to be transparent.
-       *
-       * Asking for no material at all keeps the window off that path. It is not
-       * the default: unset means "let the system decide", which is the case the
-       * patch handles badly.
-       */
-      backgroundMaterial: "none",
+      transparent: false,
+      // The panel's own base colour, so the frame the OS paints and the surface
+      // the page paints are the same colour and there is no seam on resize.
+      backgroundColor: "#0b0f18",
       resizable: false,
       movable: true,
       skipTaskbar: true,
       alwaysOnTop: true,
       show: false,
-      // Focusable, unlike before: the panel now has a close button, and a
-      // non-focusable window is a coin toss for reliable clicks on Windows. It is
-      // shown with showInactive() so appearing still never steals focus — you
-      // only give it focus by clicking it.
       focusable: true,
-      hasShadow: false, // the CSS draws the shadow; two of them looks like a halo
+      // Both of these are the OS doing what the CSS used to fake. hasShadow is
+      // now true because a real window shadow costs no transparent margin, and
+      // roundedCorners is what makes an opaque frameless window not a box.
+      hasShadow: true,
+      roundedCorners: true,
       webPreferences: { preload: enginePreload, nodeIntegration: false, contextIsolation: true },
     });
     overlay.setAlwaysOnTop(true, "screen-saver");

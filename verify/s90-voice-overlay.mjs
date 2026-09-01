@@ -15,6 +15,7 @@
 //      controls have to survive widths the constants never mention.
 //
 // Playwright renders the real file; nothing here is a mock of the CSS.
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,7 +106,14 @@ async function open(w, h, { expand = false, backdrop = "#ffffff" } = {}) {
 // somewhere to land, so the viewport is 48px wider and taller than the pill —
 // treating it as the pill put the rounded boundary 24px outside where it really
 // is and quietly reported ~24px more clearance than every control actually had.
-const SHADOW_PAD = 24;
+// Read from voice.js rather than restated here. It was 24 while the window
+// was transparent and needed room for a CSS drop shadow; the window is opaque
+// now and Windows draws the shadow outside it, so it is 0 — and this suite
+// failed on every width when the constant moved, which is the drift a second
+// copy of a number always eventually causes.
+const voiceSrc = readFileSync(new URL("../electron/voice.js", import.meta.url), "utf8");
+const SHADOW_PAD = Number((voiceSrc.split("const SHADOW_PAD = ")[1] || "").match(/[0-9]+/)?.[0] ?? NaN);
+ok("the shadow pad is readable from voice.js", Number.isFinite(SHADOW_PAD), String(SHADOW_PAD));
 for (const w of [440, 380, 320, 296, 260]) {
   const page = await open(w + SHADOW_PAD * 2, 92 + SHADOW_PAD * 2);
   // The countdown chip is hidden until the main process sends a deadline, so a
@@ -208,10 +216,11 @@ for (const [w, h] of [[720, 320], [520, 320], [720, 240], [420, 300], [360, 200]
       overflowX: document.documentElement.scrollWidth > innerWidth + 1,
       overflowY: document.documentElement.scrollHeight > innerHeight + 1,
       closeOnScreen: el.width > 0 && el.right <= innerWidth + 0.5 && el.top >= -0.5 && el.bottom <= innerHeight + 0.5,
+      rect: [Math.round(el.left), Math.round(el.right), Math.round(el.top), Math.round(el.bottom), innerWidth, innerHeight],
     };
   });
   ok(`@${w}x${h} nothing overflows the panel`, !m.overflowX && !m.overflowY);
-  ok(`@${w}x${h} the × is on screen`, m.closeOnScreen === true);
+  ok(`@${w}x${h} the × is on screen`, m.closeOnScreen === true, JSON.stringify(m.rect));
   await page.close();
 }
 
