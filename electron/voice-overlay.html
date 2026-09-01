@@ -222,7 +222,21 @@
       .pillActions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
       .orb { position: relative; width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; }
-      .orb .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(139, 124, 246, 0.35); }
+      /*
+       * An arc, not a full ring. A closed circle around a pulsing dot reads as a
+       * target; an open one reads as something in progress, which is what the
+       * pill is actually saying. Two of the four borders are coloured and the
+       * other two are transparent, so the gap is part of the shape rather than
+       * something drawn over it.
+       */
+      .orb .ring {
+        position: absolute; inset: 0; border-radius: 50%;
+        border: 1.5px solid transparent;
+        border-top-color: var(--cyan);
+        border-left-color: rgba(80, 200, 255, 0.55);
+        animation: spin 3.4s linear infinite;
+      }
+      @media (prefers-reduced-motion: reduce) { .orb .ring { animation: none; } }
       .orb .dot {
         width: 9px; height: 9px; border-radius: 50%;
         background: var(--cyan); box-shadow: 0 0 12px var(--cyan);
@@ -331,14 +345,38 @@
       #response { font-size: 11.5px; color: var(--dim); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
       .spacer { flex: 1 1 auto; min-height: 8px; }
 
-      .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 9.5px; letter-spacing: 0.1em; color: var(--dimmer); }
-      .step { display: flex; align-items: center; gap: 5px; }
-      .step .bullet { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--dimmer); }
-      .step.on { color: var(--text); }
+      /*
+       * Three states, one of which is true. The live one is a filled chip and
+       * the others are bare, so which one you are in is readable at a glance
+       * from across a desk — a rail of three identically-weighted labels with
+       * one slightly brighter is not.
+       */
+      .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 9.5px; letter-spacing: 0.1em; color: var(--dimmer); }
+      .step {
+        display: flex; align-items: center; gap: 7px;
+        padding: 6px 12px; border-radius: 999px;
+        border: 1px solid transparent;
+        transition: background-color var(--ease), border-color var(--ease), color var(--ease);
+      }
+      .step .bullet { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--dimmer); flex: 0 0 auto; }
+      .step.on {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.16);
+      }
       .step.on .bullet { background: #4ade80; border-color: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
-      #escHint { margin-left: auto; color: var(--dimmer); white-space: nowrap; }
+      /* Its own line: at the panel's width the rail plus a trailing hint wrapped
+       * the hint onto a second row anyway, and half of one. */
+      #escHint { flex: 1 0 100%; color: var(--dimmer); letter-spacing: 0.04em; margin-top: 2px; }
 
-      .right { position: relative; flex: 1 1 auto; min-width: 0; padding: 16px 18px; box-sizing: border-box; display: flex; flex-direction: column; }
+      /* The seam between "what the voice is doing" and "what it wants from
+       * you". Without it the two halves read as one crowded column. */
+      .right {
+        position: relative; flex: 1 1 auto; min-width: 0;
+        padding: 16px 18px; box-sizing: border-box;
+        display: flex; flex-direction: column;
+        border-left: 1px solid var(--line);
+      }
       /* The tab strip wraps rather than overflowing: at a narrow width four tabs
        * do not fit on one line, and a non-wrapping strip pushed them off the
        * edge of the panel entirely. The right padding is the ×'s parking space. */
@@ -361,7 +399,10 @@
       }
       .tab svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.6; }
       .tab:hover { color: var(--text); }
-      .tab.active { background: rgba(139, 124, 246, 0.18); border-color: rgba(139, 124, 246, 0.4); color: var(--text); }
+      /* Neutral, not violet. The violet tint read as a coloured status (the
+       * same violet the permission cards use for "needs you"), when all it
+       * means is "this is the tab you are on". */
+      .tab.active { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.18); color: var(--text); }
 
       .paneHead { display: flex; align-items: baseline; justify-content: space-between; flex: 0 0 auto; margin-bottom: 10px; }
       .paneTitle { font-size: 10px; letter-spacing: 0.14em; color: var(--dim); text-transform: uppercase; }
@@ -402,7 +443,7 @@
           <div class="orb"><div class="ring"></div><div class="dot"></div></div>
           <div class="pillText">
             <div id="pillState">Listening…</div>
-            <div id="pillHint">Esc ends the chat · × turns voice off</div>
+            <div id="pillHint">Say “stop listening” or press Esc</div>
           </div>
           <canvas id="pillWave"></canvas>
           <div class="pillActions">
@@ -429,7 +470,7 @@
               <span class="step" id="stepListening"><span class="bullet"></span>LISTENING</span>
               <span class="step" id="stepProcessing"><span class="bullet"></span>PROCESSING</span>
               <span class="step" id="stepReady"><span class="bullet"></span>READY</span>
-              <span id="escHint">ESC ENDS CHAT · × TURNS VOICE OFF</span>
+              <span id="escHint">Press Esc to end chat · × turns voice off</span>
             </div>
           </div>
 
@@ -486,20 +527,6 @@
       let target = 0;
       let current = 0;
 
-      /** The smooth curve through `pts`, quadratic bezier via each pair's
-       * midpoint. This is what turns N sample points into one continuous line
-       * instead of N-1 straight segments meeting at a visible corner. */
-      function traceSmooth(g, pts) {
-        g.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length - 1; i++) {
-          const mx = (pts[i].x + pts[i + 1].x) / 2;
-          const my = (pts[i].y + pts[i + 1].y) / 2;
-          g.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-        }
-        const last = pts[pts.length - 1];
-        g.quadraticCurveTo(last.x, last.y, last.x, last.y);
-      }
-
       /*
        * Match the canvas backing store to the size it is actually displayed at.
        *
@@ -525,67 +552,52 @@
         return true;
       }
 
+      /*
+       * A bar meter, not a liquid blob.
+       *
+       * The previous waveform was one filled curve with a rim light and a
+       * specular highlight riding the peak — a lot of compositing for a shape
+       * that, at 26px tall, mostly read as a grey smear. Discrete bars mirrored
+       * about the centre line say the same thing in far fewer pixels: you can
+       * see individual syllables in it, which is the entire point of showing a
+       * level at all.
+       *
+       * Bars are drawn from the centre outwards in both directions so the
+       * meter stays visually anchored to its middle no matter how loud it gets,
+       * and quiet frames collapse to a dotted line rather than to nothing —
+       * an empty canvas looks like a dead microphone.
+       */
       function drawInto(cv) {
         if (!fitCanvas(cv)) return;
         const g = cv.getContext("2d");
         const w = cv.width, h = cv.height, mid = h / 2;
         g.clearRect(0, 0, w, h);
 
-        // Line widths and highlight radii are in backing-store pixels, so they
-        // have to scale with it — otherwise a 1.1px rim light on a 2x display is
-        // a half-pixel hairline and the specular highlight is half the size it
-        // was drawn to be.
+        // Widths are in backing-store pixels, so they scale with the device
+        // ratio — a 2px bar on a 2.5x display is otherwise a hairline.
         const s = w / Math.max(1, cv.clientWidth);
+        const step = w / BARS;
+        const barW = Math.max(1.5 * s, step * 0.42);
+        const maxAmp = h / 2 - 1.5 * s;
 
-        const step = w / (BARS - 1);
-        const top = [], bottom = [];
-        let peakX = 0, peakY = mid, peakV = -1;
+        g.lineCap = "round";
+        g.lineWidth = barW;
         for (let i = 0; i < BARS; i++) {
           const v = Math.min(1, history[i] * 7); // speech RMS sits well under 0.2
-          const amp = Math.max(1.5 * s, v * (h / 2 - 2 * s)); // a floor, so idle still lives
-          const x = i * step;
-          top.push({ x, y: mid - amp });
-          bottom.push({ x, y: mid + amp });
-          if (v > peakV) { peakV = v; peakX = x; peakY = mid - amp; }
-        }
-        bottom.reverse();
+          // The floor is half a bar width, which renders as a dot: the meter
+          // reads as idle rather than broken when nobody is speaking.
+          const amp = Math.max(barW / 2, v * maxAmp);
+          const x = step * (i + 0.5);
 
-        // The liquid body: top curve across, bottom curve back, one fill.
-        g.beginPath();
-        traceSmooth(g, top);
-        traceSmooth(g, bottom);
-        g.closePath();
-        const body = g.createLinearGradient(0, 0, 0, h);
-        body.addColorStop(0, "rgba(255,255,255,0.22)");
-        body.addColorStop(0.5, "rgba(255,255,255,0.10)");
-        body.addColorStop(1, "rgba(255,255,255,0.22)");
-        g.fillStyle = body;
-        g.fill();
-
-        // Rim light along the top surface only — the same cue as the panel's
-        // own edge highlight, applied to the liquid's surface.
-        g.beginPath();
-        traceSmooth(g, top);
-        g.strokeStyle = "rgba(255,255,255,0.8)";
-        g.lineWidth = 1.1 * s;
-        g.shadowColor = "rgba(255,255,255,0.6)";
-        g.shadowBlur = 4 * s;
-        g.stroke();
-        g.shadowBlur = 0;
-
-        // A specular highlight riding the current peak — small, soft, and it
-        // moves with the loudest point in the window, which is what reads as
-        // "wet" rather than "lit": a fixed highlight on a moving surface looks
-        // painted on; one that tracks the surface looks reflected off it.
-        if (peakV > 0.04) {
-          const r = 16 * s;
-          const spec = g.createRadialGradient(peakX, peakY, 0, peakX, peakY, r);
-          spec.addColorStop(0, `rgba(255,255,255,${0.55 * Math.min(1, peakV * 1.4)})`);
-          spec.addColorStop(1, "rgba(255,255,255,0)");
-          g.fillStyle = spec;
+          // Brighter with amplitude. A flat colour made loud and quiet look the
+          // same shape at different heights; this makes the loud part read as
+          // the loud part even in peripheral vision.
+          const a = 0.34 + 0.56 * v;
+          g.strokeStyle = `rgba(226, 240, 255, ${a.toFixed(3)})`;
           g.beginPath();
-          g.arc(peakX, peakY, r, 0, Math.PI * 2);
-          g.fill();
+          g.moveTo(x, mid - amp);
+          g.lineTo(x, mid + amp);
+          g.stroke();
         }
       }
 
@@ -602,6 +614,27 @@
       // them. The rAF loop calls fitCanvas() anyway, so this exists for the one
       // case the loop cannot see: the collapsed↔expanded swap changes which
       // canvas is visible AND the window size at the same moment.
+      /*
+       * "Voice off in 12s" — the session's own idle timer, shown rather than
+       * left to surprise people.
+       *
+       * The main process sends a deadline once when it arms the timer; this
+       * counts it down locally. One message per arm instead of sixty, and the
+       * number keeps moving even while the main process is busy inside a turn,
+       * which is exactly when a frozen countdown would look like a hang.
+       */
+      let idleAt = 0;
+      let baseHint = "";
+      function renderHint() {
+        const el = $("pillHint");
+        if (!el) return;
+        const left = idleAt ? Math.ceil((idleAt - Date.now()) / 1000) : 0;
+        // Below zero the session is already closing; showing "0s" for the last
+        // tick reads as stuck, and a negative number reads as broken.
+        el.textContent = left > 0 ? `${baseHint} · Voice off in ${left}s` : baseHint;
+      }
+      setInterval(renderHint, 1000);
+
       const refit = () => { fitCanvas($("pillWave")); fitCanvas($("bigWave")); };
       window.addEventListener("resize", refit);
 
@@ -655,10 +688,11 @@
         }
         if (s.transcript !== undefined) $("transcript").textContent = s.transcript ?? "";
         if (s.response !== undefined) $("response").textContent = s.response ?? "";
-        if (s.hint !== undefined) $("pillHint").textContent = s.hint ?? "";
+        if (s.hint !== undefined) { baseHint = s.hint ?? ""; renderHint(); }
       });
 
       window.voice.onLevel((v) => { target = Number(v) || 0; });
+      window.voice.onIdle?.((m) => { idleAt = Number(m?.at) || 0; renderHint(); });
 
       // ------------------------------------------------------- permissions
       const ICONS = {

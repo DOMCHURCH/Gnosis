@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld("voice", {
   /** Collapsed pill <-> expanded panel: the page owns the state, the main
    * process owns the window size. */
   resize: (state) => ipcRenderer.send("voice:resize", state),
+  /** When the session will close itself if nobody says anything — an absolute
+   * timestamp, counted down by the overlay rather than pushed every second. */
+  onIdle: (cb) => ipcRenderer.on("voice:idle", (_e, m) => cb(m)),
   /** The pending permission queue, rendered as cards in the Permissions tab. */
   onPermissions: (cb) => ipcRenderer.on("voice:permissions", (_e, list) => cb(list)),
   answerPermission: (id, answer) => ipcRenderer.send("voice:permission-answer", { id, answer }),

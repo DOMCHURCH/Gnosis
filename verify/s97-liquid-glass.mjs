@@ -138,21 +138,31 @@ for (const [name, sel] of [["frame", /\.frame \{[\s\S]*?\n      \}/], ["glass", 
     block.length > 0 && !/#22d3ee|#8b7cf6|#e879f9|34, 211, 238|139, 124, 246|232, 121, 249/i.test(block));
 }
 
-// --- the waveform is liquid, not bars ----------------------------------------
-ok("bars are gone — no discrete rectangles are drawn", !/g\.roundRect\(/.test(overlay));
-ok("the wave is a smooth curve through the samples", /quadraticCurveTo/.test(overlay));
-ok("...traced as one continuous line via midpoints (not straight segments)",
-  /function traceSmooth/.test(overlay) && /const mx = \(pts\[i\]\.x \+ pts\[i \+ 1\]\.x\) \/ 2;/.test(overlay));
-ok("the wave is a FILLED body (top+bottom mirrored), not a single line",
-  /top\.push\(\{ x, y: mid - amp \}\)/.test(overlay) && /bottom\.push\(\{ x, y: mid \+ amp \}\)/.test(overlay));
-ok("...filled white/translucent rather than the old accent gradient",
-  /rgba\(255,255,255,0\.22\)/.test(overlay) && !/addColorStop\(0, "#22d3ee"\)/.test(overlay));
-ok("the liquid's own surface catches a rim light too",
-  /strokeStyle = "rgba\(255,255,255,0\.8\)"/.test(overlay));
-ok("a specular highlight tracks the current peak (wet, not painted-on)",
-  /peakV > peakX|peakX = x; peakY/.test(overlay) || /if \(v > peakV\)/.test(overlay));
-ok("...moves WITH the loudest sample rather than sitting fixed",
-  /createRadialGradient\(peakX, peakY, 0, peakX, peakY/.test(overlay));
+// --- the waveform is a bar meter ---------------------------------------------
+//
+// This suite used to assert the opposite: one smooth filled curve with a rim
+// light and a specular highlight tracking the peak. That was a deliberate
+// design and it is deliberately reversed — at 26px tall the liquid mostly read
+// as a grey smear, and a design pass asked for a meter you can see syllables
+// in. The assertions are re-pointed rather than deleted, so the next person to
+// change it has to mean it the way this change did.
+ok("the meter is drawn as discrete bars", overlay.includes("for (let i = 0; i < BARS; i++)"));
+// Mirrored about the centre line, so the meter stays anchored to its middle
+// however loud it gets.
+ok("...drawn outwards from the centre in both directions", overlay.includes("g.moveTo(x, mid - amp)") && overlay.includes("g.lineTo(x, mid + amp)"));
+// A silent microphone must still look like a live one: collapsing to zero
+// height reads as a dead input, which is the one thing the meter rules out.
+ok("a quiet frame floors at a visible dot rather than nothing", overlay.includes("Math.max(barW / 2, v * maxAmp)"));
+ok("...with round caps, so that floor is a dot and not a tick", overlay.includes("g.lineCap = \"round\""));
+// On this machine's 250% display a bar sized in CSS pixels is a hairline.
+ok("bar width scales with the device pixel ratio", overlay.includes("Math.max(1.5 * s, step * 0.42)"));
+// Loudness visible as more than height, or a loud passage and a quiet one are
+// the same picture at two scales.
+ok("bars brighten with amplitude", overlay.includes("0.34 + 0.56 * v"));
+// Gone, not merely unused: a dead curve tracer sitting next to a bar renderer
+// is the kind of thing that gets called again by accident.
+ok("the old curve tracer is gone", !overlay.includes("traceSmooth") && !overlay.includes("quadraticCurveTo"));
+ok("...along with the peak-tracking specular highlight", !overlay.includes("createRadialGradient(peakX"));
 
 // --- still driven by the real microphone, still one instance -----------------
 // Regression guard: none of the above should have detached the waveform from

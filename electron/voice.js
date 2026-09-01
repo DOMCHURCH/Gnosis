@@ -352,6 +352,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     clearTimeout(idleTimer);
     if (!session) return;
     idleTimer = setTimeout(() => endSession("60s of silence"), IDLE_MS);
+    // The panel counts this down itself rather than being told every second:
+    // one message per arm instead of sixty, and the number keeps moving even
+    // while the main process is busy inside a turn.
+    toOverlay("voice:idle", { at: Date.now() + IDLE_MS });
   }
 
   /** Start listening again inside an open session, without a wake word. */
@@ -381,7 +385,10 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       transcript: "",
       response: "",
       model: currentModel(),
-      hint: "say “stop listening” or press Esc · × turns voice off · 60s idle closes it",
+      // Two clauses, because a third does not fit: #pillHint ellipsises, and the
+      // old three-clause hint reached the screen as "... × turns voice off · 6…".
+      // The idle countdown is appended by the overlay, which can tick it.
+      hint: "Say “stop listening” or press Esc",
     });
     if (Notification.isSupported()) {
       // The chime is the notification sound; the toast itself is deliberately

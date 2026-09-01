@@ -97,8 +97,11 @@ ok("...state labels", /LISTENING/.test(overlay) && /PROCESSING/.test(overlay) &&
 // things: Esc ends the conversation and leaves the wake word armed, the × turns
 // voice off outright. It used to say only "ESC TO END", while the pill's own
 // hint promised a × that did not exist in the markup at all.
-ok("...a hint naming the Esc exit", /ESC ENDS CHAT/.test(overlay));
-ok("...and the × exit", /TURNS VOICE OFF/.test(overlay));
+// Case-insensitive: the copy moved from shouty caps to sentence case in a
+// design pass, and which of the two exits are NAMED is the thing worth
+// guarding — not how they are capitalised.
+ok("...a hint naming the Esc exit", /esc to end chat/i.test(overlay));
+ok("...and the × exit", /turns voice off/i.test(overlay));
 ok("the × actually exists in the markup", /id="closeBtn"/.test(overlay));
 ok("...and turns voice off rather than merely ending the session",
   /stopVoice\(\)/.test(overlay) && /ipcMain\.on\("voice:stop-voice"/.test(voice));
