@@ -1,7 +1,0 @@
-- generic [active] [ref=f11e1]:
-  - generic:
-    - generic:
-      - generic: "81"
-      - generic: km/h
-    - generic: 0.2 km
-  - generic: WASD / Arrow Keys to Steer · Down/S to Brake

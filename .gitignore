@@ -13,3 +13,32 @@ dist*/
 # Electron build output
 /release/
 /build/
+
+# ---------------------------------------------------------------------------
+# Agent scratch must never reach the repo.
+#
+# 7.7MB of it did: amazon-*.md, slow-roads-*.png, car-game*.png, greet.py,
+# test.csv and 58 .playwright-mcp/ captures, each swept in by autocommit, which
+# commits every file the agent writes.
+#
+# writescope.ts now refuses to CREATE anything inside the source checkout, so
+# the write and edit tools cannot do this again. That guard cannot see MCP
+# servers: they write straight to disk with their own cwd, which is how
+# .playwright-mcp/ appeared. These patterns are the backstop for everything the
+# guard is not in a position to stop.
+# ---------------------------------------------------------------------------
+
+# Browser-automation MCP captures
+/.playwright-mcp/
+
+# Scratch output from agent sessions run against this checkout. Anything the
+# agent produces belongs in ~/Gnosis; if one of these is genuinely a deliverable,
+# move it there rather than un-ignoring it here.
+/*.png
+/*.csv
+/*.py
+!/scripts/*.py
+
+# Site scrapes and audit dumps
+/amazon-*.md
+/*-audit-report.md
