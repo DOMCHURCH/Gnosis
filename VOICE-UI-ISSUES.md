@@ -202,3 +202,115 @@ is omitted inside a virtualenv, where it is a hard error.
 ---
 
 **File location:** `C:\Users\Dominique\dom\VOICE-UI-ISSUES.md`
+
+---
+
+# Overlay audit — 2026-09-01
+
+A second pass over the same panel. Several of the fixes above turned out to be
+right about the symptom and wrong about the cause, which is recorded here
+because the wrong causes were plausible and will look plausible again.
+
+## 9. The black rectangle was `backdrop-filter`, not a clipped shadow
+
+**Status:** FIXED — `electron/voice-overlay.html`, `electron/voice.js`
+
+It was diagnosed first as the drop shadow being clipped at the window edge, and
+"fixed" by giving the window 24px of transparent margin on every side. The box
+got BIGGER, by exactly the amount the window grew — which a clipped shadow
+cannot do, and which is what finally identified the real cause.
+
+An element with `backdrop-filter` needs a backdrop to sample. In a transparent
+window there is none: the desktop belongs to the compositor, not the page. So
+Chromium gives the window an opaque backing to filter instead, and every region
+the page has not painted over comes out black.
+
+It could not have worked anyway — it can only blur content inside the same
+window, and there is nothing behind the glass. Removed. `mix-blend-mode: screen`
+went with it for the same reason: a blend mode is also a compositing operation
+against the backdrop.
+
+What replaces it is layered translucency, and it is **not** blur and is not
+described as blur anywhere in the file: a tinted scrim over a charcoal-navy
+base, an environmental cyan/violet cast, an internal sheen, a rim that is bright
+along the top and fades down the sides, an inner rim, and a coloured shadow that
+fits inside the margin.
+
+`brightness(0.45)` was doing one real job — clamping the backdrop so text stayed
+legible — so the scrim absorbed it at 0.78. Measured from real pixels in a real
+transparent window, over four backdrops: **6.70 / 15.47 / 11.10 / 9.24 to one**
+against 4.5 for AA.
+
+The shadow margin stayed. It is genuinely needed, and s110 now asserts the
+corners of the window capture at **alpha 0**.
+
+## 10. "Answering…" lit the READY step
+
+**Status:** FIXED — `electron/voice-overlay.html`
+
+`STEP` mapped `speaking → stepReady`, so the panel said ANSWERING and READY at
+once. There is no ready state to light: `voice.js` emits exactly `listening`,
+`thinking`, `speaking` and `error`. The rail is those three plus an error that
+lights nothing, and every surface — both labels, the rail, the orb, the aria
+label — is now set by one `applyState()` rather than four assignments in a row.
+
+## 11. The × turned voice off
+
+**Status:** FIXED — reverses #5 above
+
+#5 made × a full stop, reasoning that closing the thing that represents a
+feature should disable the feature. That is not what × means anywhere else, and
+it left no way to dismiss the panel without disarming the wake word and going to
+Settings to get it back. Now: **Esc and × end the conversation**, and a separate
+crossed-microphone button releases the microphone and persists
+`voiceEnabled: false`. Two actions that differ that much in how hard they are to
+undo should not share a button.
+
+## 12. The collapsed hint was ellipsised
+
+**Status:** FIXED
+
+Three clauses in an element with `text-overflow: ellipsis`, so what reached the
+screen was `… × turns voice off · 6…` — including the countdown, the one part
+that changes every second. The hint is two clauses, the countdown is its own
+chip, and at narrow widths they drop out in priority order rather than
+truncating: hint first, then the countdown, then the voice-off button, and the
+state label never. s110 asserts nothing displayed is ever clipped.
+
+## 13. Memory / Tools / Settings were placeholders
+
+**Status:** FIXED
+
+Three tabs whose entire content was a sentence saying the tab was a placeholder.
+Disabled, dimmed, and given tooltips naming where the real thing lives.
+
+## 14. The footer over-promised
+
+**Status:** FIXED
+
+"Gnosis will always ask before taking actions that affect your system" is not
+true: `PermissionAnswer` includes `"always"` and the caller persists it, and
+yolo mode auto-approves. It now says what is actually guaranteed — including
+that deleting outside the workspace always asks, which `permissions.ts` really
+does enforce even in yolo.
+
+## 15. The geometry tests measured the viewport as the pill
+
+**Status:** FIXED — `verify/s90-voice-overlay.mjs`
+
+`body` carries 24px of transparent padding, so the viewport is 48px larger than
+the pill in both axes. Treating it as the pill put the rounded boundary 24px
+outside where it is and over-reported every control's clearance. Measured from
+`.frame`'s own `getBoundingClientRect()` now.
+
+The contrast block was worse: it parsed the first `rgba()` out of `.glass` and
+composited by hand, so the moment the material became five layers it measured
+the violet tint at 0.075 and reported **1.13:1** for text that was perfectly
+readable. Deleted, and replaced by real pixels in `s110-voice-overlay-render.mjs`.
+
+**Not verified locally:** the black box was only ever reproduced on this
+machine's display at 250% scaling, and the alpha assertions run against
+`capturePage()` rather than the desktop composite — `desktopCapturer` returned
+empty thumbnails here and PowerShell's `CopyFromScreen` has no desktop handle
+from a non-interactive session. Acrylic/Mica was NOT adopted: it requires an
+opaque window on Windows 11, which is the thing this panel must not be.

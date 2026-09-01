@@ -389,10 +389,11 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       transcript: "",
       response: "",
       model: currentModel(),
-      // Two clauses, because a third does not fit: #pillHint ellipsises, and the
-      // old three-clause hint reached the screen as "... × turns voice off · 6…".
-      // The idle countdown is appended by the overlay, which can tick it.
-      hint: "Say “stop listening” or press Esc",
+      // Two exits, named in the order you reach for them, and nothing else: the
+      // hint ellipsises, so a third clause is a third clause nobody reads. The
+      // countdown is its own element in the pill and the microphone button
+      // carries its own tooltip, so neither needs room here.
+      hint: "Esc: end chat · ×: close",
     });
     if (Notification.isSupported()) {
       // The chime is the notification sound; the toast itself is deliberately

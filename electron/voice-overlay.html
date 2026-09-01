@@ -41,6 +41,35 @@
         /* Transparent room around the pill for its drop shadow. Kept in sync
          * with SHADOW_PAD in voice.js — see the note on body's padding. */
         --shadow-pad: 24px;
+
+        /*
+         * The material, as layers rather than one fill.
+         *
+         * There is no real desktop blur here and there cannot be: see the note on
+         * .glass. So the glass is built the only way that works in a transparent
+         * window — translucency, a rim that catches light, an internal gradient,
+         * and a coloured shadow. Each is cheap and static; together they read as
+         * a surface. One heavy opaque fill reads as plastic, which is what this
+         * replaces.
+         */
+        --base: 10, 14, 24;              /* charcoal-navy, not neutral grey */
+        --scrim: 0.72;                   /* how much of it covers the backdrop */
+        --tint-cyan: rgba(34, 211, 238, 0.055);
+        --tint-violet: rgba(139, 124, 246, 0.075);
+        --rim-top: rgba(255, 255, 255, 0.55);
+        --rim-side: rgba(255, 255, 255, 0.10);
+        --inner-rim: rgba(255, 255, 255, 0.13);
+      }
+
+      /*
+       * Windows exposes "Show transparency effects" as an accessibility setting,
+       * and some people turn it off because translucent UI over busy desktops is
+       * genuinely hard to read. Honour it: the same layout, an opaque surface.
+       * The window stays transparent — only the pill's fill changes — so the
+       * rounded corners are still corners and not a black box.
+       */
+      @media (prefers-reduced-transparency: reduce) {
+        :root { --scrim: 0.985; --tint-cyan: transparent; --tint-violet: transparent; }
       }
       /*
        * The window is BIGGER than the pill, and this padding is the difference.
@@ -123,91 +152,98 @@
         box-sizing: border-box;
         padding: 1px;
         border-radius: var(--radius);
+        /*
+         * The rim: bright along the TOP edge, fading to almost nothing down the
+         * sides, coming back faintly at the bottom. That is what a curved edge
+         * does under light from above — a gradient wrapping the whole shape
+         * evenly reads as a painted outline instead.
+         */
         background: linear-gradient(180deg,
-          rgba(255, 255, 255, 0.75) 0%,
-          rgba(255, 255, 255, 0.22) 14%,
-          rgba(255, 255, 255, 0.05) 32%,
-          rgba(255, 255, 255, 0.02) 55%,
-          rgba(255, 255, 255, 0.14) 100%);
-        /* The coloured lift, then a short contact shadow to seat it. */
+          var(--rim-top) 0%,
+          rgba(255, 255, 255, 0.20) 12%,
+          var(--rim-side) 34%,
+          rgba(255, 255, 255, 0.045) 62%,
+          rgba(255, 255, 255, 0.13) 100%);
+        /*
+         * Coloured, and deliberately not black. Black drains the hue out of
+         * whatever it falls on and reads as the panel being stamped into the
+         * screen rather than floating over it. Three stops: a wide violet lift,
+         * a deeper one to seat it, and a short contact shadow at the base.
+         *
+         * The blur radii all fit inside --shadow-pad, which is why the window is
+         * bigger than the pill. A shadow wider than the room it has is clipped
+         * at the window edge, and a clipped shadow is a rectangle.
+         */
         box-shadow:
-          0 8px 32px 0 rgba(31, 38, 135, 0.37),
-          0 16px 48px -12px rgba(10, 12, 30, 0.55),
-          0 2px 6px -2px rgba(0, 0, 0, 0.4);
+          0 6px 20px -4px rgba(31, 38, 135, 0.34),
+          0 14px 36px -14px rgba(10, 12, 30, 0.52),
+          0 2px 5px -2px rgba(0, 0, 0, 0.36);
         transition: border-radius var(--ease);
       }
+
       .glass {
         height: 100%;
         box-sizing: border-box;
         border-radius: var(--radius);
-        /* Two layers in ONE background, and that matters structurally.
-         *
-         * The dark scrim used to be a ::after pseudo-element. A pseudo-element
-         * is painted after in-flow children, so the content needed `z-index: 1`
-         * to sit above it — and that z-index established a stacking context
-         * around every button in the panel. On Windows a `-webkit-app-region:
-         * no-drag` child inside a `drag` parent is hit-tested against a
-         * rectangle list the compositor hands the OS, and an extra stacking
-         * context in between is exactly the kind of thing that makes those
-         * rectangles come out wrong: the buttons rendered, and clicks went to
-         * the drag region instead.
-         *
-         * An element's own background paints BELOW its children by definition,
-         * so putting the scrim here needs no z-index, no pseudo-element, and no
-         * stacking context. Same pixels, no hit-testing hazard.
-         *
-         * Order is top-down: the scrim gradient first, the white fill under it.
-         */
         /*
-         * Darker than it was (0.45 -> 0.78). brightness(0.45) used to clamp
-         * whatever was behind the panel before anything composited over it, so
-         * the scrim only had to finish the job; without it this is the entire
-         * contrast guarantee, and light text over a white document underneath
-         * has to stay readable. s90 computes the resulting ratios against a
-         * white desktop rather than trusting this note: 8.52, 6.94 and 5.71 to
-         * one for the three text colours, against 4.5 for AA.
-         */
-        background:
-          linear-gradient(rgba(8, 10, 18, 0.78), rgba(8, 10, 18, 0.78)),
-          rgba(255, 255, 255, 0.10);
-        /* The 1px inner edge — light catching the lip of the glass from inside.
-         * inset, so it survives the .frame gradient sitting outside it. */
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.20);
-        /*
-         * brightness(0.45) is the contrast guarantee, and it is why the text
-         * colours below can stay honestly dim.
-         *
-         * This panel floats over whatever the user has on screen, which can be a
-         * white document — and light text on frosted white is unreadable no
-         * matter how the fill is tuned. brightness() clamps the backdrop BEFORE
-         * anything is composited over it, so a white desktop arrives as mid-grey
-         * while a dark or colourful one keeps its hue and detail (brightness
-         * scales channels, it does not wash them toward grey the way a heavier
-         * opaque scrim would). With the scrim below it, every text colour in
-         * here clears WCAG AA against a pure-white backdrop — the worst case —
-         * which is checked numerically rather than guessed at.
-         */
-        /*
-         * No backdrop-filter here, and it is not a style choice.
+         * NO backdrop-filter, and this is the load-bearing comment in the file.
          *
          * An element with backdrop-filter needs a backdrop to sample. In a
-         * TRANSPARENT window there is nothing behind it — the desktop belongs to
-         * the compositor, not to this page — so Chromium gives the window an
-         * opaque backing to filter instead, and the whole window turns black
-         * wherever the page has not painted something over it. That is the dark
-         * rectangle around the pill: not a clipped shadow, which would be soft
-         * and graduated, but the window's own background showing through the
-         * rounded corners and the shadow margin.
+         * transparent Electron window there is none — the desktop belongs to the
+         * compositor, not to this page — so Chromium gives the window an opaque
+         * backing to filter instead, and every region the page has not painted
+         * over comes out BLACK. That is the hard-edged rectangle this overlay
+         * kept growing around itself; it scaled with the window, which a clipped
+         * shadow could never do.
          *
-         * It was never doing the job it was written for either: it could only
-         * ever have blurred content inside this same window, and there is none
-         * behind the glass. The scrim below does the contrast work it was
-         * credited with, which is why the text colours are unchanged.
+         * It could not have worked anyway: it can only blur content inside this
+         * same window, and there is nothing behind the glass. What is below is
+         * therefore NOT blur and is not claimed to be. It is layered
+         * translucency — a tinted scrim, an environmental colour cast, a rim and
+         * a specular — which is how you build glass when you cannot have the
+         * real thing.
+         *
+         * Everything here is static. Nothing on this element animates, filters,
+         * blends or transforms: each of those can promote the window to an
+         * opaque compositing surface, and this window floats permanently over
+         * real work.
+         *
+         * Layers, top to bottom:
+         *   1. the environmental tint — cyan low, violet high, the identity
+         *   2. an internal sheen, brighter at the top where the rim is
+         *   3. the contrast scrim, which is what makes text legible at all
+         *   4. a thin white fill, so the surface has something to catch light on
+         *
+         * The scrim lives in .glass's own background rather than a ::after for a
+         * hit-testing reason: a pseudo-element paints after in-flow children, so
+         * the content would need z-index to clear it — and that z-index makes a
+         * stacking context around every button. On Windows a no-drag child in a
+         * drag parent is hit-tested against a rectangle list the compositor
+         * hands the OS, and an extra stacking context in between is exactly what
+         * makes those rectangles wrong: the buttons rendered, and the clicks
+         * went to the drag region. An element's own background paints BELOW its
+         * children by definition. Same pixels, no hazard.
+         *
+         * The scrim is also the whole contrast guarantee now that there is no
+         * brightness() clamp on the backdrop. s90 computes the ratios against a
+         * white desktop rather than trusting this note.
          */
+        background:
+          linear-gradient(160deg, var(--tint-violet) 0%, transparent 42%),
+          linear-gradient(20deg, var(--tint-cyan) 0%, transparent 55%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.012) 46%, rgba(255, 255, 255, 0.028) 100%),
+          linear-gradient(rgba(var(--base), var(--scrim)), rgba(var(--base), var(--scrim))),
+          rgba(255, 255, 255, 0.055);
+        /* The inner rim — light catching the lip of the glass from inside. Inset,
+         * so it survives the .frame gradient sitting outside it. */
+        box-shadow:
+          inset 0 1px 0 0 var(--inner-rim),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.055);
         overflow: hidden;
         position: relative;
         transition: border-radius var(--ease);
       }
+
       /* The specular highlight — top-left, aligned with the rim light above it,
        * because a highlight that does not agree with its own rim light reads as
        * two light sources. Static: a highlight that moves on its own, with
@@ -217,13 +253,33 @@
         position: absolute;
         inset: 0;
         pointer-events: none;
-        background: radial-gradient(140px 70px at 18% -20%, rgba(255, 255, 255, 0.30), transparent 70%);
-        mix-blend-mode: screen;
+        /*
+         * No mix-blend-mode. It was `screen`, which is a compositing operation
+         * against the backdrop — the same class of thing as backdrop-filter, and
+         * the same risk in a transparent window: a blend mode can force the
+         * whole stack onto an opaque surface to have something to blend with.
+         * A plain white gradient at low alpha lands in almost the same place and
+         * cannot promote anything.
+         */
+        background: radial-gradient(160px 78px at 20% -24%, rgba(255, 255, 255, 0.16), transparent 72%);
       }
       /* No z-index here on purpose — see the note on .glass's background. The
        * only remaining pseudo-layer is ::before (the specular highlight), which
        * is painted BEFORE in-flow children and so is already underneath them. */
       body.expanded { --radius: 22px; }
+
+      /*
+       * Nothing here animates continuously except the orb, which is a status
+       * indicator rather than decoration. Honoured globally so a future addition
+       * cannot quietly re-introduce a permanently animating window.
+       */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
 
       /* ------------------------------------------------------------ collapsed
        *
@@ -274,6 +330,24 @@
       @media (prefers-reduced-motion: reduce) { .orb .dot { animation: none; } }
 
       /*
+       * The orb is the state in a different register, driven off body[data-state]
+       * so it cannot disagree with the label beside it. Only the colour and the
+       * pulse change — the geometry is identical in every state, because an
+       * indicator that changes size is a layout shift on a permanent overlay.
+       */
+      body[data-state="thinking"] .orb .dot,
+      body[data-state="thinking"] .bigOrb .core { background: var(--violet); box-shadow: 0 0 12px var(--violet); }
+      body[data-state="thinking"] .orb .ring { border-top-color: var(--violet); }
+      body[data-state="speaking"] .orb .dot,
+      body[data-state="speaking"] .bigOrb .core { background: #6ee7b7; box-shadow: 0 0 12px #6ee7b7; }
+      body[data-state="speaking"] .orb .ring { border-top-color: #6ee7b7; }
+      /* An error is the one state that must not keep pulsing: a steady red reads
+       * as "stopped", a pulsing one reads as "still trying". */
+      body[data-state="error"] .orb .dot,
+      body[data-state="error"] .bigOrb .core { background: #f87171; box-shadow: 0 0 12px #f87171; animation: none; }
+      body[data-state="error"] .orb .ring { border-top-color: #f87171; animation: none; }
+
+      /*
        * `flex: 0 0 auto` here meant the label refused to give up a single pixel,
        * so on a narrow pill it was the waveform that collapsed to nothing and
        * then the CONTROLS that got pushed out past the rounded edge and clipped
@@ -284,11 +358,27 @@
       .pillText { flex: 1 1 auto; min-width: 0; overflow: hidden; }
       #pillState { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       #pillHint { font-size: 10.5px; color: var(--dimmer); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-      /* Narrow enough that the hint is a row of dots: drop it rather than render
-       * a sentence nobody can read. (The waveform is already gone at every
-       * width — see above.) */
-      @media (max-width: 380px) {
+      /*
+       * What survives as the pill narrows, in order of what you cannot operate
+       * without. Controls never shrink; the label ellipsises but stays; the
+       * countdown and then the hint drop out.
+       *
+       * Widths are the WINDOW, which is the pill plus --shadow-pad on each side —
+       * so 380px of window is a 332px pill. Stated because the numbers otherwise
+       * look 48px too generous.
+       */
+      @media (max-width: 392px) {          /* pill ~344px: the hint is the first to go */
         #pillHint { display: none; }
+        /* ...and the third control with it. Two 34px buttons plus the orb leave
+         * the label about 44px at this width, which is not a word — it turns
+         * "Listening…" into "Listen…", exactly the truncation this pass exists
+         * to remove. Voice-off is the rarest of the three actions and it is also
+         * in the expanded panel, so it is the one that can be spared; close and
+         * permissions cannot. */
+        #micOffBtn { display: none; }
+      }
+      @media (max-width: 344px) {          /* pill ~296px: the countdown goes too */
+        #pillCountdown { display: none !important; }
       }
       /*
        * The pill has no waveform.
@@ -306,13 +396,70 @@
        */
       #pillWave { display: none; }
 
-      .shield, .closeBtn {
+      /*
+       * The countdown, as a chip rather than a clause. Tabular figures so it does
+       * not jitter as the number changes width, and flex: 0 0 auto so it never
+       * steals room from the label.
+       */
+      #pillCountdown {
+        flex: 0 0 auto;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--dimmer);
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.045);
+      }
+      #pillCountdown[hidden] { display: none; }
+
+      /*
+       * The countdown, as a chip rather than a clause. Tabular figures so it does
+       * not jitter as the number changes width, and flex: 0 0 auto so it never
+       * steals room from the label.
+       */
+      #pillCountdown {
+        flex: 0 0 auto;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--dimmer);
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.045);
+      }
+      #pillCountdown[hidden] { display: none; }
+
+      /*
+       * Controls are the one thing on the pill that never shrinks and never
+       * moves — everything else yields to them. Slightly brighter than the
+       * surface so they read as raised, with a full set of states: an overlay
+       * that floats over other work has to make it obvious what is clickable,
+       * what is being pressed, and what has keyboard focus.
+       */
+      .shield, .closeBtn, .micOff {
         position: relative; flex: 0 0 auto;
         width: 34px; height: 34px; border-radius: 50%;
-        border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.17);
+        background: rgba(255, 255, 255, 0.085);
         display: grid; place-items: center;
-        transition: background-color var(--ease), border-color var(--ease);
+        transition: background-color var(--ease), border-color var(--ease), transform 90ms ease-out;
       }
+      .shield:hover, .closeBtn:hover, .micOff:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.30); }
+      /* Pressed is a real cue, not a colour change: 0.94 is small enough not to
+       * disturb the row and large enough to feel like a button going down. */
+      .shield:active, .closeBtn:active, .micOff:active { transform: scale(0.94); }
+      /* Visible focus, but only for keyboard users — a focus ring that appears on
+       * every mouse click on an always-on-top panel is noise. */
+      .shield:focus-visible, .closeBtn:focus-visible, .micOff:focus-visible,
+      .tab:focus-visible, .btn:focus-visible {
+        outline: 2px solid var(--cyan); outline-offset: 2px;
+      }
+      .shield:disabled, .closeBtn:disabled, .micOff:disabled { opacity: 0.4; cursor: not-allowed; }
+      /* Turning voice off is the heavier of the two exits, so it warms to red on
+       * hover the way a destructive action should. */
+      .micOff:hover { background: rgba(248, 113, 113, 0.20); border-color: rgba(248, 113, 113, 0.55); }
+      .micOff svg { width: 15px; height: 15px; stroke: var(--dim); fill: none; stroke-width: 1.7; stroke-linecap: round; }
       .shield:hover { background: rgba(139, 124, 246, 0.20); border-color: rgba(139, 124, 246, 0.55); }
       .shield svg, .closeBtn svg { width: 15px; height: 15px; stroke: var(--dim); fill: none; stroke-width: 1.6; }
       /* The × is a stop button, so it warms to red rather than to the accent —
@@ -414,15 +561,21 @@
       }
       /* The tab strip wraps rather than overflowing: at a narrow width four tabs
        * do not fit on one line, and a non-wrapping strip pushed them off the
-       * edge of the panel entirely. The right padding is the ×'s parking space. */
-      .tabs { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; margin-bottom: 14px; padding-right: 34px; }
+       * edge of the panel entirely. The right padding is the corner controls'
+       * parking space — two of them now, so it is wider than it was. */
+      .tabs { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; margin-bottom: 14px; padding-right: 72px; }
       /* The × is OUT of the wrapping flow. As a flex item it was pushed onto a
        * second line the moment the four tabs filled the first one — a close
        * button floating on its own row under the tabs, which is exactly where a
        * close button should not be. Pinned to the panel's top-right corner it
        * stays put at every width. */
+      /* Both panel exits live in the corner, in the same order as the pill: the
+       * heavier action (voice off) first, then the ×. Positioned rather than in
+       * flow, because in flow the microphone button landed at the head of the
+       * tab strip and read as a fifth tab. */
       .right > .closeBtn { position: absolute; top: 14px; right: 16px; z-index: 2; width: 28px; height: 28px; }
-      .right > .closeBtn svg { width: 13px; height: 13px; }
+      .right > .micOff { position: absolute; top: 14px; right: 52px; z-index: 2; width: 28px; height: 28px; }
+      .right > .closeBtn svg, .right > .micOff svg { width: 13px; height: 13px; }
       .tab {
         /* 12px of horizontal padding put the four tabs 17px over the width left
          * after the ×'s reserved corner, so "Settings" wrapped to a second row.
@@ -438,6 +591,11 @@
        * same violet the permission cards use for "needs you"), when all it
        * means is "this is the tab you are on". */
       .tab.active { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.18); color: var(--text); }
+      /* Dimmed, not hidden: the strip keeps its shape, and the cursor plus the
+       * tooltip say where the real thing lives. :hover deliberately does nothing
+       * here — a hover response on a dead control is a promise. */
+      .tab[disabled] { opacity: 0.42; cursor: not-allowed; }
+      .tab[disabled]:hover { color: var(--dim); background: transparent; border-color: transparent; }
 
       .paneHead { display: flex; align-items: baseline; justify-content: space-between; flex: 0 0 auto; margin-bottom: 10px; }
       .paneTitle { font-size: 10px; letter-spacing: 0.14em; color: var(--dim); text-transform: uppercase; }
@@ -478,15 +636,25 @@
           <div class="orb"><div class="ring"></div><div class="dot"></div></div>
           <div class="pillText">
             <div id="pillState">Listening…</div>
-            <div id="pillHint">Say “stop listening” or press Esc</div>
+            <div id="pillHint">Esc: end chat · ×: close</div>
           </div>
+          <!-- The countdown is its OWN element, not a third clause glued to the
+               hint. As a clause it was the part that got ellipsised, so the one
+               piece of information that changes every second was the one that
+               vanished; and it has to shrink out of the layout on its own at
+               narrow widths, which a substring cannot do. -->
+          <div id="pillCountdown" hidden></div>
           <canvas id="pillWave"></canvas>
           <div class="pillActions">
             <button class="shield" id="shieldBtn" type="button" tabindex="-1" title="Permissions">
               <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3z"/></svg>
               <span class="badge" id="badge">0</span>
             </button>
-            <button class="closeBtn" id="closeBtn" type="button" tabindex="-1" title="Turn voice off (Esc ends the conversation but keeps the wake word)">
+            <button class="micOff" id="micOffBtn" type="button" tabindex="-1"
+                    title="Turn voice off — stops wake-word listening and releases the microphone">
+              <svg viewBox="0 0 24 24"><path d="M9 4.5a3 3 0 016 0V11m-6 0v.5a3 3 0 004.9 2.3"/><path d="M5 11a7 7 0 0011 5.9M19 11a7 7 0 01-.6 2.8"/><path d="M12 19v2"/><path d="M4 3l16 18"/></svg>
+            </button>
+            <button class="closeBtn" id="closeBtn" type="button" tabindex="-1" title="Close — ends this conversation (voice stays on, say “hey jarvis” to start another)">
               <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
           </div>
@@ -502,28 +670,37 @@
             <div id="response"></div>
             <div class="spacer"></div>
             <div class="steps">
+              <!-- Three states, because three is what the pipeline has. There
+                   was a READY step and "speaking" lit it, so the panel said
+                   ANSWERING and READY at the same time. voice.js emits exactly
+                   listening / thinking / speaking / error; a ready state would
+                   have to be a real thing before it can be a light. -->
               <span class="step" id="stepListening"><span class="bullet"></span>LISTENING</span>
               <span class="step" id="stepProcessing"><span class="bullet"></span>PROCESSING</span>
-              <span class="step" id="stepReady"><span class="bullet"></span>READY</span>
-              <span id="escHint">Press Esc to end chat · × turns voice off</span>
+              <span class="step" id="stepAnswering"><span class="bullet"></span>ANSWERING</span>
+              <span id="escHint">Esc or × ends this chat · the mic button turns voice off</span>
             </div>
           </div>
 
           <div class="right">
-            <button class="closeBtn" id="closeBtn2" type="button" tabindex="-1" title="Turn voice off (Esc ends the conversation but keeps the wake word)">
+            <button class="micOff" id="micOffBtn2" type="button" tabindex="-1"
+                    title="Turn voice off — stops wake-word listening and releases the microphone">
+              <svg viewBox="0 0 24 24"><path d="M9 4.5a3 3 0 016 0V11m-6 0v.5a3 3 0 004.9 2.3"/><path d="M5 11a7 7 0 0011 5.9M19 11a7 7 0 01-.6 2.8"/><path d="M12 19v2"/><path d="M4 3l16 18"/></svg>
+            </button>
+            <button class="closeBtn" id="closeBtn2" type="button" tabindex="-1" title="Close — ends this conversation (voice stays on, say “hey jarvis” to start another)">
               <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
             <div class="tabs">
               <button class="tab active" data-tab="permissions" type="button" tabindex="-1">
                 <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3z"/></svg>Permissions
               </button>
-              <button class="tab" data-tab="memory" type="button" tabindex="-1">
+              <button class="tab" data-tab="memory" type="button" tabindex="-1" disabled title="Session memory lives in the main Gnosis window — not available from the overlay">
                 <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>Memory
               </button>
-              <button class="tab" data-tab="tools" type="button" tabindex="-1">
+              <button class="tab" data-tab="tools" type="button" tabindex="-1" disabled title="Tool activity lives in the main Gnosis window — not available from the overlay">
                 <svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 015.4 5.4l-8.4 8.4-5.4-5.4 8.4-8.4z"/><path d="M4 20l3-1"/></svg>Tools
               </button>
-              <button class="tab" data-tab="settings" type="button" tabindex="-1">
+              <button class="tab" data-tab="settings" type="button" tabindex="-1" disabled title="Voice settings live in the Settings window (tray → Settings)">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 00-1.7-1L14.5 3h-4l-.4 2.6a7 7 0 00-1.7 1l-2.3-1-2 3.4L6 11a7 7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.7 1l.4 2.6h4l.4-2.6a7 7 0 001.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg>Settings
               </button>
             </div>
@@ -535,7 +712,13 @@
             <div class="pane" id="pane"></div>
             <div class="foot">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
-              <span>Gnosis will always ask before taking actions that affect your system.</span>
+              <!-- "always ask" was not true. PermissionAnswer includes "always"
+                   and the caller persists it (src/permissions.ts), and yolo mode
+                   auto-approves outright — which is the mode this machine runs
+                   in. Deletions outside the sandbox DO always prompt, even in
+                   yolo, so the sentence names the thing that is actually
+                   guaranteed instead of over-promising. -->
+              <span>Gnosis asks before sensitive actions unless you have already approved them. Deleting outside your workspace always asks.</span>
             </div>
           </div>
         </div>
@@ -661,12 +844,15 @@
       let idleAt = 0;
       let baseHint = "";
       function renderHint() {
-        const el = $("pillHint");
-        if (!el) return;
+        const hint = $("pillHint");
+        const chip = $("pillCountdown");
+        if (hint) hint.textContent = baseHint;
+        if (!chip) return;
         const left = idleAt ? Math.ceil((idleAt - Date.now()) / 1000) : 0;
-        // Below zero the session is already closing; showing "0s" for the last
-        // tick reads as stuck, and a negative number reads as broken.
-        el.textContent = left > 0 ? `${baseHint} · Voice off in ${left}s` : baseHint;
+        // Below zero the session is already closing; "0s" for the last tick reads
+        // as stuck and a negative number reads as broken, so it just goes away.
+        chip.hidden = left <= 0;
+        if (left > 0) chip.textContent = left + "s";
       }
       setInterval(renderHint, 1000);
 
@@ -678,8 +864,33 @@
       let pending = [];
       let activeTab = "permissions";
 
+      /*
+       * One state, one place. The collapsed label, the expanded label, the
+       * status rail, the orb and the accessibility announcement all come from
+       * applyState() below, so they cannot disagree — which they did: "speaking"
+       * mapped to the READY step, and the panel showed "Answering…" and READY at
+       * the same moment.
+       */
       const LABEL = { listening: "Listening…", thinking: "Processing…", speaking: "Answering…", error: "Voice error" };
-      const STEP = { listening: "stepListening", thinking: "stepProcessing", speaking: "stepReady", error: null };
+      const STEP = { listening: "stepListening", thinking: "stepProcessing", speaking: "stepAnswering", error: null };
+      const STEP_IDS = ["stepListening", "stepProcessing", "stepAnswering"];
+      let voiceState = "listening";
+
+      function applyState(state) {
+        voiceState = state;
+        const label = LABEL[state] ?? state;
+        $("pillState").textContent = label;
+        $("bigState").textContent = label;
+        for (const id of STEP_IDS) $(id).classList.remove("on");
+        const step = STEP[state];
+        if (step) $(step).classList.add("on");
+        // The orb is the same signal in a different register, so it reads off the
+        // same value rather than being set beside it.
+        document.body.dataset.state = state;
+        // Screen readers get the change announced once, from the live region on
+        // the label, rather than from four elements updating in sequence.
+        $("pillState").setAttribute("aria-label", label);
+      }
 
       function setExpanded(on) {
         if (expanded === on) return;
@@ -688,18 +899,37 @@
         window.voice.resize(on ? "expanded" : "collapsed");
       }
 
-      $("shieldBtn").addEventListener("click", () => setExpanded(!expanded));
+      // The shield is the permissions affordance, so it opens the permissions
+      // tab — not whichever tab was left selected last time.
+      $("shieldBtn").addEventListener("click", () => {
+        selectTab("permissions");
+        setExpanded(true);
+      });
       $("collapsed").addEventListener("click", (e) => {
         if (e.target.closest("#shieldBtn") || e.target.closest(".closeBtn")) return;
         setExpanded(true);
       });
 
-      // The × turns voice OFF — detector down, microphone released, setting
-      // persisted. It used only to end the conversation, which left the app
-      // listening for "hey jarvis" behind a panel the user had just dismissed
-      // (VOICE-UI-ISSUES.md #5). Closing the thing that represents a feature
-      // has to turn the feature off.
+      /*
+       * × closes the conversation. It used to turn voice off entirely, on the
+       * reasoning that closing the thing representing a feature should disable
+       * the feature (VOICE-UI-ISSUES.md #5) — but that is not what a × means
+       * anywhere else, and there was no way to dismiss a panel without also
+       * disarming the wake word and having to go to Settings to get it back.
+       *
+       * Turning voice off is now its own control, with a crossed-out microphone
+       * and a tooltip that says what it releases. Two destructive-ish actions
+       * that differ in how hard they are to undo should not share a button.
+       */
       for (const b of document.querySelectorAll(".closeBtn")) {
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          window.voice.endSession();
+        });
+      }
+      // Both copies — the pill hides its own at narrow widths, so the panel's is
+      // the one that is always reachable.
+      for (const b of document.querySelectorAll(".micOff")) {
         b.addEventListener("click", (e) => {
           e.stopPropagation();
           window.voice.stopVoice();
@@ -714,13 +944,7 @@
       });
 
       window.voice.onState((s) => {
-        if (s.state) {
-          $("pillState").textContent = LABEL[s.state] ?? s.state;
-          $("bigState").textContent = LABEL[s.state] ?? s.state;
-          for (const id of ["stepListening", "stepProcessing", "stepReady"]) $(id).classList.remove("on");
-          const step = STEP[s.state];
-          if (step) $(step).classList.add("on");
-        }
+        if (s.state) applyState(s.state);
         if (s.transcript !== undefined) $("transcript").textContent = s.transcript ?? "";
         if (s.response !== undefined) $("response").textContent = s.response ?? "";
         if (s.hint !== undefined) { baseHint = s.hint ?? ""; renderHint(); }
@@ -739,22 +963,13 @@
       function render() {
         $("badge").textContent = String(pending.length);
         document.body.classList.toggle("haspending", pending.length > 0);
-        $("paneTitle").textContent =
-          activeTab === "permissions" ? `Pending requests (${pending.length})` : activeTab;
+        $("paneTitle").textContent = `Pending requests (${pending.length})`;
         $("clearAll").style.display = activeTab === "permissions" && pending.length ? "" : "none";
 
         const pane = $("pane");
         pane.innerHTML = "";
-        if (activeTab !== "permissions") {
-          const d = document.createElement("div");
-          d.className = "empty";
-          d.textContent =
-            activeTab === "memory" ? "Session memory lives in the main window — this tab is a placeholder."
-            : activeTab === "tools" ? "Tool activity lives in the main window — this tab is a placeholder."
-            : "Voice settings live in the settings window (tray → Settings).";
-          pane.appendChild(d);
-          return;
-        }
+        // Only permissions can be active — the other tabs are disabled — so there
+        // is no placeholder branch here any more.
         if (!pending.length) {
           const d = document.createElement("div");
           d.className = "empty";
@@ -810,12 +1025,25 @@
         for (const p of [...pending]) window.voice.answerPermission(p.id, "no");
       });
 
+      /*
+       * Memory, Tools and Settings are disabled rather than clickable.
+       *
+       * They used to open a pane whose entire content was a sentence saying the
+       * tab was a placeholder — three affordances that looked like features and
+       * were not. Disabled with a tooltip naming where the real thing lives is
+       * honest, keeps the shape of the strip, and costs nothing to re-enable
+       * when there is something behind them.
+       */
+      function selectTab(name) {
+        const tab = document.querySelector('.tab[data-tab="' + name + '"]');
+        if (!tab || tab.disabled) return;
+        activeTab = name;
+        for (const o of document.querySelectorAll(".tab")) o.classList.toggle("active", o === tab);
+        render();
+      }
+
       for (const t of document.querySelectorAll(".tab")) {
-        t.addEventListener("click", () => {
-          activeTab = t.dataset.tab;
-          for (const o of document.querySelectorAll(".tab")) o.classList.toggle("active", o === t);
-          render();
-        });
+        t.addEventListener("click", () => { if (!t.disabled) selectTab(t.dataset.tab); });
       }
 
       render();

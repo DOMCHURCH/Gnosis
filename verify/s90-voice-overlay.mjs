@@ -79,103 +79,99 @@ async function open(w, h, { expand = false, backdrop = "#ffffff" } = {}) {
   return page;
 }
 
-// --- 1. contrast, computed from the rendered layer stack ---------------------
+// --- 1. contrast now lives where the pixels are ------------------------------
 //
-// Composited in the browser rather than re-derived here: getComputedStyle gives
-// the real fill, scrim and backdrop-filter the stylesheet ended up with, so this
-// keeps holding if those values are retuned.
-{
-  const page = await open(720, 320, { expand: true, backdrop: "#ffffff" });
-  const r = await page.evaluate(() => {
-    const parse = (s) => (s.match(/[\d.]+/g) ?? []).map(Number);
-    const glass = getComputedStyle(document.querySelector(".glass"));
-    const fill = parse(glass.backgroundColor);      // rgba(255,255,255,F)
-    // The contrast scrim is a background LAYER on .glass, not a ::after — a
-    // pseudo-element paints above in-flow children and needed a z-index to sit
-    // under them, and that stacking context broke click hit-testing on Windows.
-    // Read the first rgba() in the background-image gradient.
-    const grad = glass.backgroundImage || "";
-    const sc = parse((/rgba?\([^)]*\)/.exec(grad) ?? ["rgba(0,0,0,0)"])[0]);
-    const bright = Number(/brightness\(([\d.]+)\)/.exec(glass.backdropFilter)?.[1] ?? 1);
-
-    const over = (fg, a, bg) => fg.map((c, i) => c * a + bg[i] * (1 - a));
-    const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-    const L = (v) => { const [x, y, z] = v.map(lin); return 0.2126 * x + 0.7152 * y + 0.0722 * z; };
-    const ratio = (a, b) => { const l1 = L(a), l2 = L(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
-
-    // Worst case: a pure-white desktop behind the glass, on bare glass (no card
-    // of its own to help). Composite order matches paint order — the backdrop is
-    // clamped, then the background-color fill, then the gradient layer above it.
-    let s = [1, 1, 1].map((c) => c * bright);
-    s = over(fill.slice(0, 3).map((c) => c / 255), fill[3] ?? 1, s);
-    s = over(sc.slice(0, 3).map((c) => c / 255), sc[3] ?? 1, s);
-
-    const css = getComputedStyle(document.documentElement);
-    const tok = (n) => parse(css.getPropertyValue(n)).map((c) => c / 255);
-    // Read the tokens as the browser resolved them, via a probe element.
-    const probe = document.createElement("span");
-    document.body.appendChild(probe);
-    const colorOf = (v) => { probe.style.color = v; return parse(getComputedStyle(probe).color).map((c) => c / 255); };
-    const out = { bright, fillA: fill[3], scrimA: sc[3] };
-    for (const n of ["--text", "--dim", "--dimmer"]) out[n] = +ratio(colorOf(`var(${n})`), s).toFixed(2);
-    probe.remove();
-    void tok;
-    return out;
-  });
-  console.log(`    (backdrop-filter brightness=${r.bright}, fill alpha=${r.fillA}, scrim alpha=${r.scrimA})`);
-  ok("--text clears WCAG AA over a WHITE desktop", r["--text"] >= 4.5, `${r["--text"]}:1`);
-  ok("--dim clears WCAG AA over a WHITE desktop", r["--dim"] >= 4.5, `${r["--dim"]}:1`);
-  ok("--dimmer clears WCAG AA over a WHITE desktop", r["--dimmer"] >= 4.5, `${r["--dimmer"]}:1`);
-  // The three ratios above used to depend on backdrop-filter's brightness()
-  // clamping whatever was behind the panel. There is no backdrop-filter any
-  // more — in a transparent window it made Chromium give the window an opaque
-  // backing to filter, which is what painted a black box around the pill — so
-  // the scrim is now the whole guarantee, and it has to stay heavy enough to
-  // be one. Someone lightening it for looks is exactly the regression here.
-  ok("there is no backdrop-filter to depend on", r.bright === 1);
-  ok("...so the scrim alone carries the contrast", r.scrimA >= 0.7, `scrim ${r.scrimA}`);
-  await page.close();
-}
+// This used to compute WCAG ratios by parsing the alpha out of .glass's CSS and
+// compositing the layers by hand. That worked while the material was one scrim
+// over one fill; the moment it became five layers — two tints, a sheen, the
+// scrim, a fill — the regex picked the first rgba() it found, which is now the
+// violet tint at 0.075, and cheerfully reported 1.13:1 as if the text had gone
+// unreadable. It had not. The measurement had.
+//
+// A number that wrong is worse than no number, so the real ones are measured in
+// s110-voice-overlay-render.mjs from an actual transparent Electron window,
+// composited over white / black / colour / detail and sampled at the pixels the
+// text is actually drawn on. Nothing here parses a stylesheet to guess at what
+// the compositor did.
 
 // --- 2. the pill's controls clear its curved edge ----------------------------
 //
 // The shield used to read as fused to the rim. 10px of padding is 10px only at
 // the exact vertical centre; everywhere else the cap eats into it, and the
 // notification badge overhangs the shield by 2px on two sides on top of that.
-for (const w of [440, 380, 320, 260]) {
-  const page = await open(w, 92);
+//
+// Measured against the FRAME's own rectangle, not the viewport. body carries
+// --shadow-pad of transparent padding on every side so the drop shadow has
+// somewhere to land, so the viewport is 48px wider and taller than the pill —
+// treating it as the pill put the rounded boundary 24px outside where it really
+// is and quietly reported ~24px more clearance than every control actually had.
+const SHADOW_PAD = 24;
+for (const w of [440, 380, 320, 296, 260]) {
+  const page = await open(w + SHADOW_PAD * 2, 92 + SHADOW_PAD * 2);
+  // The countdown chip is hidden until the main process sends a deadline, so a
+  // fixture that never sends one measures it as permanently absent.
+  await page.evaluate(() => { idleAt = Date.now() + 48000; renderHint(); });
   const m = await page.evaluate(() => {
-    const W = innerWidth, H = innerHeight, rad = Math.min(H, W) / 2;
-    // Signed distance to the pill's rounded-rect boundary (negative = inside).
+    const f = document.querySelector(".frame").getBoundingClientRect();
+    const rad = Math.min(f.height, f.width) / 2;
+    // Signed distance to the frame's rounded-rect boundary (negative = inside).
     const sdf = (px, py) => {
-      const qx = Math.abs(px - W / 2) - (W / 2 - rad);
-      const qy = Math.abs(py - H / 2) - (H / 2 - rad);
+      const qx = Math.abs(px - (f.left + f.width / 2)) - (f.width / 2 - rad);
+      const qy = Math.abs(py - (f.top + f.height / 2)) - (f.height / 2 - rad);
       return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rad;
     };
+    // Sample the control's own rim, not its bounding box: a circle in the corner
+    // of its box is further from the curve than the box is.
     const clearOf = (el) => {
+      if (!el) return null;
       const b = el.getBoundingClientRect();
-      if (!b.width) return null;
-      const cx = b.x + b.width / 2, cy = b.y + b.height / 2, r = b.width / 2;
+      if (!b.width) return "hidden";
       let worst = Infinity;
-      for (let a = 0; a < 360; a += 5) {
+      for (let a = 0; a < 360; a += 6) {
         const t = (a * Math.PI) / 180;
-        worst = Math.min(worst, -sdf(cx + r * Math.cos(t), cy + r * Math.sin(t)));
+        worst = Math.min(worst, -sdf(b.left + b.width / 2 + Math.cos(t) * b.width / 2,
+                                     b.top + b.height / 2 + Math.sin(t) * b.height / 2));
       }
-      return +worst.toFixed(1);
+      return Math.round(worst);
     };
-    const badge = document.getElementById("badge").getBoundingClientRect();
+    const de = document.documentElement;
+    const seen = (id) => { const e = document.getElementById(id); return !!e && e.getBoundingClientRect().width > 0; };
     return {
+      frame: [Math.round(f.width), Math.round(f.height)],
       shield: clearOf(document.getElementById("shieldBtn")),
-      close: clearOf(document.querySelector("#collapsed .closeBtn")),
-      badge: badge.width ? +Math.min(-sdf(badge.right, badge.top), -sdf(badge.right, badge.bottom)).toFixed(1) : null,
-      closeVisible: document.querySelector("#collapsed .closeBtn").getBoundingClientRect().right <= innerWidth + 0.5,
+      close: clearOf(document.querySelector(".pillActions .closeBtn")),
+      mic: clearOf(document.getElementById("micOffBtn")),
+      badge: clearOf(document.getElementById("badge")),
+      overflowX: de.scrollWidth - de.clientWidth,
+      overflowY: de.scrollHeight - de.clientHeight,
+      state: seen("pillState"), hint: seen("pillHint"), countdown: seen("pillCountdown"),
     };
   });
-  // 6px is the floor at which it stops reading as "attached to the edge".
+
+  // The fixture is honest about what it is measuring: if the frame is not the
+  // size we asked for, every number below is about some other pill.
+  ok(`@${w}px the frame is the pill, not the viewport`, m.frame[0] === w && m.frame[1] === 92, m.frame.join("x"));
+  ok(`@${w}px nothing overflows`, m.overflowX === 0 && m.overflowY === 0, `${m.overflowX}/${m.overflowY}`);
   ok(`@${w}px the shield clears the pill's curve`, m.shield >= 6, `${m.shield}px`);
   ok(`@${w}px the × clears the pill's curve`, m.close >= 6, `${m.close}px`);
+  // Below 392px of window the pill drops this button so the state label has
+  // room to be a whole word — so "hidden" is the correct answer there, and
+  // the expanded panel carries the only copy that is always reachable.
+  if (w + SHADOW_PAD * 2 > 392) ok(`@${w}px the voice-off button clears the curve`, m.mic >= 6, `${m.mic}px`);
+  else ok(`@${w}px the voice-off button steps aside for the label`, m.mic === "hidden");
   ok(`@${w}px the badge stays inside the rim`, m.badge >= 2, `${m.badge}px`);
-  ok(`@${w}px the × is not clipped off the edge`, m.closeVisible === true);
+
+  // Progressive disclosure, in the order things stop being worth the room. The
+  // state label and the controls are never sacrificed; the hint goes first and
+  // the countdown second. What must NOT happen is a truncated sentence.
+  ok(`@${w}px the state label always survives`, m.state === true);
+  // The media queries see the WINDOW, which is the pill plus a pad on each side,
+  // so the pill widths where things drop are 48px below the query values.
+  if (w > 392 - SHADOW_PAD * 2) ok(`@${w}px the hint is shown`, m.hint === true);
+  else ok(`@${w}px the hint is dropped rather than truncated`, m.hint === false);
+  if (w > 344 - SHADOW_PAD * 2) ok(`@${w}px the countdown is shown`, m.countdown === true);
+  else ok(`@${w}px the countdown is dropped too`, m.countdown === false);
+
   await page.close();
 }
 
@@ -190,7 +186,6 @@ for (const w of [440, 380, 320, 260]) {
 // into a hard rectangle at the window edge (see boundsFor in voice.js). Opening
 // the page at the pill size would squeeze the pill by 48px and squash the
 // waveform, which is a bug in the fixture rather than in the page.
-const SHADOW_PAD = 24;
 for (const [w, h, expand] of [[440, 92, false], [320, 92, false], [720, 320, true], [520, 320, true]]) {
   const page = await open(w + SHADOW_PAD * 2, h + SHADOW_PAD * 2, { expand });
   const m = await page.evaluate(() => {
@@ -220,18 +215,33 @@ for (const [w, h] of [[720, 320], [520, 320], [720, 240], [420, 300], [360, 200]
   await page.close();
 }
 
-// --- 5. the × turns voice off; Esc only ends the conversation ----------------
+// --- 5. three exits, three different amounts of damage -----------------------
 //
-// The whole point of VOICE-UI-ISSUES.md #5: these were the same call, so closing
-// the panel left the wake word armed and the app still listening.
+// VOICE-UI-ISSUES.md #5 made the × turn voice off entirely, reasoning that
+// closing the thing representing a feature should disable the feature. That is
+// not what a × means anywhere else, and it left no way to dismiss the panel
+// without disarming the wake word and going to Settings to get it back.
+//
+//   Esc  -> end this conversation
+//   x    -> end this conversation
+//   mic  -> stop voice, release the microphone, persist voiceEnabled: false
+//
+// The two that differ in how hard they are to undo must not share a button.
 {
   const page = await open(440, 92);
   await page.click("#collapsed .closeBtn");
   const afterClose = await page.evaluate(() => ({ stopped: !!window.__stopped, ended: !!window.__ended }));
-  ok("the × calls stopVoice (turns the feature off)", afterClose.stopped === true);
-  ok("...and not merely endSession", afterClose.ended === false);
+  ok("the × ends the conversation", afterClose.ended === true);
+  ok("...and leaves voice on", afterClose.stopped === false);
 
-  const page2 = await open(440, 92);
+  const pageM = await open(440 + SHADOW_PAD * 2, 92 + SHADOW_PAD * 2);
+  await pageM.click("#micOffBtn");
+  const afterMic = await pageM.evaluate(() => ({ stopped: !!window.__stopped, ended: !!window.__ended }));
+  ok("the microphone button turns voice off", afterMic.stopped === true);
+  ok("...and is the ONLY control that does", afterMic.ended === false);
+  await pageM.close();
+
+  const page2 = await open(440 + SHADOW_PAD * 2, 92 + SHADOW_PAD * 2);
   await page2.keyboard.press("Escape");
   const afterEsc = await page2.evaluate(() => ({ stopped: !!window.__stopped, ended: !!window.__ended }));
   ok("Esc ends the conversation", afterEsc.ended === true);
@@ -311,7 +321,7 @@ for (const [w, h] of [[720, 320], [520, 320], [720, 240], [420, 300], [360, 200]
   // And the clicks land: the real proof, not a proxy for it.
   await page.evaluate(() => { window.__resized = undefined; window.__stopped = false; });
   await page.click("#collapsed .closeBtn");
-  ok("clicking the × reaches the page", (await page.evaluate(() => window.__stopped)) === true);
+  ok("clicking the × reaches the page", (await page.evaluate(() => window.__ended)) === true);
   const page2 = await open(440, 92);
   await page2.click("#shieldBtn");
   ok("clicking the shield reaches the page", (await page2.evaluate(() => window.__resized)) !== undefined);

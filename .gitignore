@@ -42,3 +42,4 @@ dist*/
 # Site scrapes and audit dumps
 /amazon-*.md
 /*-audit-report.md
+_shots/

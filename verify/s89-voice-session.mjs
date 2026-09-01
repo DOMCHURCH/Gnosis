@@ -85,7 +85,11 @@ ok("...with no parent window, so the main window stays usable", !/parent: .*over
 // Glass by layered translucency and a rim, NOT by backdrop-filter: that could
 // only ever blur content inside this same window (there is none behind the
 // panel), and in a transparent window it cost an opaque black backing.
-ok("...glassmorphic", overlay.includes("linear-gradient(rgba(8, 10, 18,") && !overlay.includes("backdrop-filter:"));
+// Glass by layered translucency and a rim, NOT by backdrop-filter: in a
+// transparent window that has no backdrop to sample and costs an opaque black
+// backing. The scrim is a token now, so this checks the token is applied
+// rather than pinning one literal colour.
+ok("...glassmorphic", overlay.includes("rgba(var(--base), var(--scrim))") && !overlay.includes("backdrop-filter:"));
 // The material itself is covered in depth by s97-liquid-glass.mjs (real
 // refraction, no colour tint, a liquid waveform). Kept here to just the
 // structural fact this suite already cared about: there is a rim.
@@ -103,7 +107,9 @@ ok("...state labels", /LISTENING/.test(overlay) && /PROCESSING/.test(overlay) &&
 // Case-insensitive: the copy moved from shouty caps to sentence case in a
 // design pass, and which of the two exits are NAMED is the thing worth
 // guarding — not how they are capitalised.
-ok("...a hint naming the Esc exit", /esc to end chat/i.test(overlay));
+// Both exits are still named; the wording is shorter because the long form
+// was being ellipsised away in the pill.
+ok("...a hint naming the Esc exit", /esc/i.test(overlay) && /ends this chat/i.test(overlay));
 ok("...and the × exit", /turns voice off/i.test(overlay));
 ok("the × actually exists in the markup", /id="closeBtn"/.test(overlay));
 ok("...and turns voice off rather than merely ending the session",
@@ -111,7 +117,9 @@ ok("...and turns voice off rather than merely ending the session",
 // The two exits must stay distinct: a × wired to endSession is the original bug.
 ok("Esc still only ends the conversation", /Escape[\s\S]{0,120}voice\.endSession\(\)/.test(overlay));
 ok("...a Clear all link", /id="clearAll"/.test(overlay));
-ok("...and the footer promise", /always ask before taking actions/.test(overlay));
+// "always ask" was not true: approvals persist and yolo auto-approves. The
+// footer now names what IS guaranteed.
+ok("...and the footer promise", /asks before sensitive actions/.test(overlay));
 ok("Esc ends the session", /e\.key === "Escape"/.test(overlay));
 ok("the waveform is driven by real audio, not a synthesised wave", /window\.voice\.onLevel/.test(overlay));
 ok("...and the main process forwards the level to it", /voice:level-out/.test(voice));

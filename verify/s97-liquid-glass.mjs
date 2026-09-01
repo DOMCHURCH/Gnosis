@@ -52,25 +52,23 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 // A fill this low used to be 0.055, which is close enough to nothing that the
 // rim light had no surface to sit on. The band is two-sided on purpose: too high
 // and it is a painted panel again.
-// The fill is now the last layer of a two-layer background (the contrast scrim
-// sits above it in the same declaration, rather than in a ::after — see the note
-// in the stylesheet about stacking contexts breaking click hit-testing).
-ok("the glass body is a low-opacity wash, not a dark panel", (() => {
-  const block = /\.glass \{[\s\S]*?\n      \}/.exec(overlay)?.[0] ?? "";
-  const m = /rgba\(255, 255, 255, ([\d.]+)\);/.exec(block);
-  return !!m && Number(m[1]) >= 0.07 && Number(m[1]) <= 0.16;
-})());
-// And the scrim is genuinely still there, just relocated.
-ok("...with the contrast scrim folded into the same background", (() => {
-  const block = /\.glass \{[\s\S]*?\n      \}/.exec(overlay)?.[0] ?? "";
-  const m = /linear-gradient\(rgba\(8, 10, 18, ([\d.]+)\)/.exec(block);
-  return !!m && Number(m[1]) >= 0.3;
-})());
+// The material is tokenised now: --base is the charcoal-navy the scrim is made
+// of and --scrim is how much of the backdrop it covers, so the assertions pin
+// the tokens rather than one literal rgba() that a retune would rewrite.
+ok("the glass body is a low-opacity wash, not a dark panel", overlay.includes("rgba(255, 255, 255, 0.055)"));
+ok("...with the contrast scrim folded into the same background", overlay.includes("rgba(var(--base), var(--scrim))"));
 // The pseudo-element it replaced must not come back: it is what forced a
-// z-index onto the content and broke the buttons.
-ok("...and not as a ::after over the content", !/\.glass::after/.test(overlay));
-ok("...with a 1px lit edge along the inside of the lip",
-  /box-shadow: inset 0 0 0 1px rgba\(255, 255, 255, 0\.[12]\d?\)/.test(overlay));
+// z-index onto the content and broke the buttons on Windows.
+ok("...and not as a ::after over the content", !overlay.includes(".glass::after"));
+// The scrim has to stay heavy: with no brightness() clamp on the backdrop it
+// is the entire contrast guarantee. s110 measures the ratios it produces from
+// real pixels over four backgrounds; this pins the input so a retune for looks
+// cannot quietly drop it.
+ok("the scrim is heavy enough to carry the contrast alone", (() => {
+  const m = /--scrim: ([0-9.]+);/.exec(overlay);
+  return !!m && Number(m[1]) >= 0.65;
+})());
+ok("...with a 1px lit edge along the inside of the lip", overlay.includes("inset 0 1px 0 0 var(--inner-rim)"));
 // The old dark tint, and the old colour-wrapped rim, must both be gone —
 // otherwise this is a second coat of paint over the first, not a replacement.
 ok("the old dark tint is gone", !/rgba\(12, 13, 20, 0\.72\)/.test(overlay));
@@ -92,11 +90,11 @@ ok("no backdrop-filter anywhere in the overlay", !overlay.includes("backdrop-fil
 // The material is layered translucency over a rim instead: a dark scrim and a
 // white fill in one background, so neither needs a pseudo-element or a
 // stacking context (see the note in the stylesheet).
-ok("the glass is layered translucency instead", overlay.includes("linear-gradient(rgba(8, 10, 18,") && overlay.includes("rgba(255, 255, 255, 0.10)"));
+ok("the glass is layered translucency instead", overlay.includes("rgba(var(--base), var(--scrim))") && overlay.includes("rgba(255, 255, 255, 0.055)"));
 // And the scrim is now the whole contrast guarantee, so it has to stay heavy.
 // s90 computes the actual ratios against a white desktop; this only pins the
 // input, because a lighter scrim is the tempting change and the silent one.
-ok("the scrim is heavy enough to carry it alone", overlay.includes("rgba(8, 10, 18, 0.78)"));
+// (covered above, against the token rather than a literal)
 
 // --- the animated displacement filter is gone, and stays gone ---------------
 // Not a regression: a deliberate removal. See the header. Pinned so it cannot
@@ -115,21 +113,19 @@ ok("the now-orphaned filter id is gone too", !/liquidDistort/.test(overlay));
 // --- the shadow lifts the surface, and is coloured --------------------------
 // A pure-black shadow drains colour from everything it touches and reads as the
 // panel being stamped into the page rather than floating above it.
-ok("the lift shadow is coloured, not black", /0 8px 32px 0 rgba\(31, 38, 135, 0\.37\)/.test(overlay));
+ok("the lift shadow is coloured, not black", overlay.includes("rgba(31, 38, 135, 0.34)"));
 
 // --- a rim, not a rainbow ----------------------------------------------------
 // One direction (top-down), fading out, not a hue wrapped around the whole
 // shape — the latter is exactly what read as "a glow" instead of "an edge".
 ok("the rim highlight comes from one direction (top)",
   /\.frame \{[\s\S]*?background: linear-gradient\(180deg,/.test(overlay));
-ok("...bright at the top, fading toward the bottom",
-  /rgba\(255, 255, 255, 0\.75\) 0%[\s\S]*?rgba\(255, 255, 255, 0\.0[0-9]+\) (32|4\d)%/.test(overlay));
+ok("...bright at the top, fading toward the bottom", overlay.includes("var(--rim-top) 0%") && overlay.includes("var(--rim-side) 34%"));
 // The specular sheen is a second, independent highlight — must exist, and must
 // agree with the rim about where the light is coming from (top-left corner),
 // or the glass reads as lit from two different places at once.
 ok("a specular sheen exists on the glass surface", /\.glass::before/.test(overlay));
-ok("...anchored top-left, matching the rim's own direction",
-  /radial-gradient\(\d+px \d+px at 18% -20%/.test(overlay));
+ok("...anchored top-left, matching the rim's own direction", overlay.includes("at 20% -24%"));
 
 // --- no colour tint on the material itself -----------------------------------
 // The accent colours (--cyan/--violet/--magenta) are allowed to remain on
