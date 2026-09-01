@@ -33,6 +33,7 @@ import { registerScreen } from "./screen.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+
 /** The default working directory when nothing else has been chosen: the Gnosis
  * source tree. See rootcwd.js — the resolution lives there so it can be tested
  * without an Electron process around it. */
@@ -210,9 +211,28 @@ process.on("uncaughtException", (err) => {
   app?.exit?.(1);
 });
 
+/*
+ * A diagnostic mode that boots ONLY the voice overlay, over a set of test
+ * backdrops, and boots none of the app.
+ *
+ *   set GNOSIS_OVERLAY_DIAGNOSTIC=1 && "%LOCALAPPDATA%\Programs\Gnosis\Gnosis.exe"
+ *
+ * It is gated here, in the packaged entry point, because the question it answers
+ * is specifically about the packaged app: whether the always-on-top transparent
+ * BrowserWindow composites onto the real Windows desktop at this machine's real
+ * scaling, or gets handed an opaque backing and paints a black rectangle.
+ * capturePage() in verify/s110 reads the window's own buffer and so cannot see
+ * that last step; a person looking at the screen is the only instrument for it.
+ *
+ * It takes the single-instance lock branch so it can run WHILE Gnosis is
+ * installed and idle, and it starts no engine, server, tray or session.
+ */
 // One agent per machine. A second launch would boot a second engine against the
 // same ~/.dom session state; focus the live window instead.
-if (!app.requestSingleInstanceLock()) {
+if (process.env.GNOSIS_OVERLAY_DIAGNOSTIC) {
+  const { runOverlayDiagnostic } = await import("./overlay-diagnostic.js");
+  runOverlayDiagnostic();
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   let server = null;

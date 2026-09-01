@@ -17,14 +17,14 @@ const root = path.resolve(__dirname, "..");
 const SHOTS = process.env.OVERLAY_SHOTS || path.join(root, "verify", "_shots");
 const PAGE = process.env.OVERLAY_PAGE || path.join(root, "electron", "voice-overlay.html");
 const PAD = 24;
-const out = { probes: {}, contrast: {}, states: {}, copy: {}, shots: 0, error: null };
+const out = { probes: {}, contrast: {}, states: {}, copy: {}, rail: {}, a11y: null, behaviour: {}, shots: 0, error: null };
 
 setTimeout(() => { console.log(JSON.stringify({ ...out, error: "timed out" })); app.exit(0); }, 90000);
 
 const drive = (expand, state, countdown) =>
   "(() => { document.body.classList.toggle('expanded', " + expand + ");" +
   " applyState('" + state + "');" +
-  " baseHint = 'Esc: end chat \u00b7 \u00d7: close';" +
+  " baseHint = 'Esc or \u00d7 ends this chat';" +
   " idleAt = " + (countdown ? "Date.now() + 48000" : "0") + "; renderHint(); })()";
 
 app.disableHardwareAcceleration();
@@ -37,8 +37,19 @@ app.whenReady().then(async () => {
       frame: false, transparent: true, backgroundColor: "#00000000",
       resizable: false, skipTaskbar: true, alwaysOnTop: true, show: false,
       focusable: true, hasShadow: false,
+      // WITHOUT this the page's script threw at its first window.voice call and
+      // silently stopped — see the note at the top of _overlay-preload.cjs. The
+      // geometry checks passed anyway, which is why it went unnoticed.
+      webPreferences: { preload: path.join(root, "verify", "_overlay-preload.cjs"), contextIsolation: true, sandbox: false },
     });
     await win.loadFile(PAGE);
+    // Loud, because a throw in the page's own script leaves a DOM that looks
+    // plausible and measures wrong.
+    out.pageOk = await win.webContents.executeJavaScript(
+      "(() => ({ bridge: typeof window.voice === 'object'," +
+      " ready: typeof applyState === 'function' && typeof render === 'function'," +
+      " pane: !!document.getElementById('pane').children.length," +
+      " errors: (window.__pageErrors || []).slice(0, 3) }))()");
 
     const shot = async (pillW, pillH, opts) => {
       const o = opts || {};
@@ -98,6 +109,88 @@ app.whenReady().then(async () => {
 
     } catch (e) { out.states._error = String(e && e.message); }
 
+
+    // 3b. the status rail: one row, no overlap, and what the narrow fallback does
+    //
+    // Measured off getBoundingClientRect on the real rendered chips. "One row"
+    // is not "flex-wrap is nowrap" — a nowrap row can still overflow its
+    // container, and the failure this replaces was chips at DIFFERENT y values,
+    // so the tops are what gets compared.
+    try {
+      const RAIL = "(() => {" +
+        " const r = (el) => { const b = el.getBoundingClientRect();" +
+        "   return { x: b.left, y: b.top, w: b.width, h: b.height, r: b.right, b: b.bottom }; };" +
+        " const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);" +
+        " const ids = ['stepListening','stepProcessing','stepAnswering'];" +
+        " const shown = ids.filter((i) => vis(document.getElementById(i)));" +
+        " const rail = document.querySelector('.rail'); const steps = document.querySelector('.steps');" +
+        " const hint = document.getElementById('escHint'); const left = document.querySelector('.left');" +
+        " return {" +
+        "   container: rail.getBoundingClientRect().width," +
+        "   shown: shown," +
+        "   lit: ids.filter((i) => document.getElementById(i).classList.contains('on'))," +
+        "   litShown: shown.filter((i) => document.getElementById(i).classList.contains('on'))," +
+        "   tops: shown.map((i) => Math.round(r(document.getElementById(i)).y))," +
+        "   rowRight: shown.length ? Math.max.apply(null, shown.map((i) => r(document.getElementById(i)).r)) : 0," +
+        "   stepsRect: r(steps), railRect: r(rail), hintRect: r(hint)," +
+        "   hintVisible: vis(hint)," +
+        "   hintText: Array.from(hint.children).filter(vis).map((c) => c.textContent).join('').trim()," +
+        "   tabRows: new Set(Array.from(document.querySelectorAll('.tab')).map((t) => Math.round(t.getBoundingClientRect().top))).size," +
+        "   tabsRight: Math.max.apply(null, Array.from(document.querySelectorAll('.tab')).map((t) => t.getBoundingClientRect().right))," +
+        "   cornerLeft: Math.min.apply(null, Array.from(document.querySelectorAll('.right > button')).map((b) => b.getBoundingClientRect().left))," +
+        "   hintClipped: hint.scrollWidth - hint.clientWidth > 1," +
+        "   stepsOverflow: steps.scrollWidth - steps.clientWidth > 1," +
+        "   transcript: r(document.getElementById('transcript'))," +
+        "   response: r(document.getElementById('response'))," +
+        "   leftRect: r(left)," +
+        "   leftOverflow: left.scrollHeight - left.clientHeight > 1" +
+        " }; })()";
+      // 720 is the design width; 560 is the last width before the columns stack,
+      // which is where the left column is at its narrowest as a COLUMN.
+      for (const c of [[720, "listening"], [720, "thinking"], [720, "speaking"], [720, "error"],
+                       [600, "speaking"], [560, "speaking"],
+                       [320, "speaking"], [260, "speaking"], [212, "speaking"], [212, "error"]]) {
+        await shot(c[0], 320, { expand: true, state: c[1] });
+        out.rail[c[0] + ":" + c[1]] = await win.webContents.executeJavaScript(RAIL);
+      }
+    } catch (e) { out.rail._error = String(e && e.message); }
+
+    // 3c. every icon-only control has an accessible name, and no control is
+    //     wired so that clicking it also expands the pill.
+    try {
+      await shot(440, 92);
+      out.a11y = await win.webContents.executeJavaScript(
+        "(() => Array.from(document.querySelectorAll('button')).map((b) => ({" +
+        " id: b.id || b.className," +
+        " text: (b.textContent || '').trim()," +
+        " aria: b.getAttribute('aria-label') || ''," +
+        " title: b.getAttribute('title') || ''" +
+        " })))()");
+      /*
+       * The expand handler and the exit semantics are the two things a
+       * screenshot cannot show. Drive real clicks through the real listeners and
+       * read back WHICH bridge call each one made, plus whether the pill
+       * expanded on the way out — clicking "turn voice off" used to open the
+       * panel as well, because the guard listed two control ids and there were
+       * three controls.
+       */
+      out.behaviour = await win.webContents.executeJavaScript(
+        "(() => {" +
+        " const res = {};" +
+        " const run = (name, fn) => { setExpanded(false); window.__probe.clear(); fn();" +
+        "   res[name] = { calls: window.__probe.calls(), expanded: document.body.classList.contains('expanded') }; };" +
+        " run('closeBtn', () => document.getElementById('closeBtn').click());" +
+        " run('micOffBtn', () => document.getElementById('micOffBtn').click());" +
+        " run('shieldBtn', () => document.getElementById('shieldBtn').click());" +
+        " run('escape', () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));" +
+        " run('pillBody', () => document.querySelector('.pillText').click());" +
+        " res.shieldTab = (document.querySelector('.tab.active') || {}).dataset.tab;" +
+        " setExpanded(false); window.__probe.clear();" +
+        " run('closeBtn2', () => document.getElementById('closeBtn2').click());" +
+        " run('micOffBtn2', () => document.getElementById('micOffBtn2').click());" +
+        " return res; })()");
+    } catch (e) { out.behaviour._error = String(e && e.message); }
+
     // 4. does the collapsed copy fit, at every supported width
     try {
       const FITS = "(() => { const f = (id) => { const e = document.getElementById(id);" +
@@ -120,6 +213,15 @@ app.whenReady().then(async () => {
         ["collapsed-260", 260, 92, {}],
         ["expanded-720", 720, 320, { expand: true, state: "speaking" }],
         ["expanded-360", 360, 320, { expand: true }],
+        // The narrow expanded panel that still has TWO columns — this is the one
+        // that exercises the rail's compact fallback, which the 360px stacked
+        // view does not (stacked, the left column is the full panel width).
+        ["expanded-narrow", 600, 320, { expand: true, state: "speaking" }],
+        // One view per state, so the rail's active styling can be compared
+        // side by side rather than described.
+        ["expanded-720-listening", 720, 320, { expand: true, state: "listening" }],
+        ["expanded-720-processing", 720, 320, { expand: true, state: "thinking" }],
+        ["expanded-720-answering", 720, 320, { expand: true, state: "speaking" }],
       ];
       for (const v of views) {
         const s = await shot(v[1], v[2], v[3]);

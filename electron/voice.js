@@ -389,11 +389,14 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       transcript: "",
       response: "",
       model: currentModel(),
-      // Two exits, named in the order you reach for them, and nothing else: the
-      // hint ellipsises, so a third clause is a third clause nobody reads. The
-      // countdown is its own element in the pill and the microphone button
-      // carries its own tooltip, so neither needs room here.
-      hint: "Esc: end chat · ×: close",
+      // One clause, because the two keys do the SAME thing: "×: close" read as a
+      // third, heavier action than "Esc: end chat" when both simply end the
+      // conversation and leave the wake word armed. The panel's own hint says the
+      // same sentence, so the pill and the panel cannot disagree about it.
+      //
+      // The countdown is its own element in the pill and the microphone button
+      // carries its own tooltip and aria-label, so neither needs room here.
+      hint: "Esc or × ends this chat",
     });
     if (Notification.isSupported()) {
       // The chime is the notification sound; the toast itself is deliberately
@@ -1087,7 +1090,9 @@ async function writeTurnTiming(timeline) {
   ipcMain.on("voice:end-session", (e) => endSession(`overlay close (from wc ${e?.sender?.id ?? "?"})`));
 
   /**
-   * The overlay's × — stop voice ENTIRELY, not just this conversation.
+   * The overlay's crossed-microphone button — stop voice ENTIRELY, not just this
+   * conversation. NOT the ×: the × ends the conversation and leaves the wake
+   * word armed, which is what a × means everywhere else.
    *
    * endSession() alone was what the × used to do, and it left the wake-word
    * detector running and the microphone engine open: the panel vanished but the

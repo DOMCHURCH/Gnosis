@@ -52,13 +52,27 @@
          * a surface. One heavy opaque fill reads as plastic, which is what this
          * replaces.
          */
-        --base: 10, 14, 24;              /* charcoal-navy, not neutral grey */
-        --scrim: 0.72;                   /* how much of it covers the backdrop */
-        --tint-cyan: rgba(34, 211, 238, 0.055);
-        --tint-violet: rgba(139, 124, 246, 0.075);
-        --rim-top: rgba(255, 255, 255, 0.55);
-        --rim-side: rgba(255, 255, 255, 0.10);
-        --inner-rim: rgba(255, 255, 255, 0.13);
+        --base: 8, 13, 27;               /* charcoal-navy, not neutral grey */
+        /*
+         * How much of the backdrop the scrim covers. Lowered from 0.72: at that
+         * value the panel was reading as a solid dark card that happened to have
+         * a rim, and the whole point of the layered build is that you can tell
+         * something is BEHIND it. The floor is not taste, it is contrast — the
+         * state label has to clear 4.5:1 over a white desktop, and s110 measures
+         * that from the composited pixels rather than trusting this number.
+         */
+        --scrim: 0.66;
+        /* The environmental cast. Slightly stronger than before and still under
+         * a tenth of an alpha each: enough that the surface picks up a hue from
+         * its own accent colours, nowhere near enough to read as a tint. */
+        --tint-cyan: rgba(34, 211, 238, 0.085);
+        --tint-violet: rgba(139, 124, 246, 0.12);
+        /* The lip. A thin bright line along the top edge is most of what makes a
+         * translucent panel read as a solid object with a thickness rather than
+         * a hole cut in the screen, so it carries the increase the scrim gave up. */
+        --rim-top: rgba(255, 255, 255, 0.64);
+        --rim-side: rgba(255, 255, 255, 0.115);
+        --inner-rim: rgba(255, 255, 255, 0.17);
       }
 
       /*
@@ -174,10 +188,20 @@
          * bigger than the pill. A shadow wider than the room it has is clipped
          * at the window edge, and a clipped shadow is a rectangle.
          */
+        /* Four stops, and every one of them still fits inside --shadow-pad: a
+         * shadow's reach is offset + blur/2 + spread, and the widest here is
+         * 14 + 18 - 14 = 18px against 24px of room. That arithmetic is the whole
+         * reason the window is bigger than the pill, so it is written down.
+         *
+         * The first is new: a tight cyan halo with a negative spread, which
+         * separates the glass from a dark backdrop without reading as a glow.
+         * On white it is invisible; on a dark window it is the only thing that
+         * says where the panel ends. */
         box-shadow:
-          0 6px 20px -4px rgba(31, 38, 135, 0.34),
-          0 14px 36px -14px rgba(10, 12, 30, 0.52),
-          0 2px 5px -2px rgba(0, 0, 0, 0.36);
+          0 0 22px -8px rgba(34, 211, 238, 0.30),
+          0 6px 20px -4px rgba(31, 38, 135, 0.36),
+          0 14px 36px -14px rgba(10, 12, 30, 0.54),
+          0 2px 5px -2px rgba(0, 0, 0, 0.34);
         transition: border-radius var(--ease);
       }
 
@@ -229,16 +253,28 @@
          * white desktop rather than trusting this note.
          */
         background:
-          linear-gradient(160deg, var(--tint-violet) 0%, transparent 42%),
+          radial-gradient(120% 150% at 88% 118%, var(--tint-cyan) 0%, transparent 58%),
+          linear-gradient(160deg, var(--tint-violet) 0%, transparent 46%),
           linear-gradient(20deg, var(--tint-cyan) 0%, transparent 55%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.012) 46%, rgba(255, 255, 255, 0.028) 100%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.014) 44%, rgba(255, 255, 255, 0.038) 100%),
           linear-gradient(rgba(var(--base), var(--scrim)), rgba(var(--base), var(--scrim))),
-          rgba(255, 255, 255, 0.055);
-        /* The inner rim — light catching the lip of the glass from inside. Inset,
-         * so it survives the .frame gradient sitting outside it. */
+          rgba(255, 255, 255, 0.06);
+        /*
+         * The inner rim — light catching the lip of the glass from inside. Inset,
+         * so it survives the .frame gradient sitting outside it.
+         *
+         * Three lines now rather than two. The top highlight is the thickest,
+         * because that is the edge facing the light; a hairline of the same
+         * white all the way round is what keeps the OTHER three edges from
+         * disappearing into a dark backdrop, and a faint dark line just inside
+         * the bottom is the shaded far wall of the glass. Together they give the
+         * surface a readable thickness at every backdrop, which one flat inset
+         * highlight does not.
+         */
         box-shadow:
           inset 0 1px 0 0 var(--inner-rim),
-          inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+          inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+          inset 0 -1px 0 0 rgba(0, 0, 0, 0.20);
         overflow: hidden;
         position: relative;
         transition: border-radius var(--ease);
@@ -261,7 +297,15 @@
          * A plain white gradient at low alpha lands in almost the same place and
          * cannot promote anything.
          */
-        background: radial-gradient(160px 78px at 20% -24%, rgba(255, 255, 255, 0.16), transparent 72%);
+        background:
+          radial-gradient(160px 78px at 20% -24%, rgba(255, 255, 255, 0.185), transparent 72%),
+          /* The environmental reflection. Cyan low on the right, violet high on
+           * the left — the same two accents the orb and the rim already use, so
+           * the panel looks like it is sitting in a room lit by its own identity
+           * rather than wearing a gradient. Both are under 0.06 alpha: the test
+           * of a reflection is that you notice the surface, not the colour. */
+          radial-gradient(210px 120px at 104% 116%, rgba(34, 211, 238, 0.055), transparent 66%),
+          radial-gradient(180px 110px at -6% -14%, rgba(139, 124, 246, 0.05), transparent 62%);
       }
       /* No z-index here on purpose — see the note on .glass's background. The
        * only remaining pseudo-layer is ::before (the specular highlight), which
@@ -414,23 +458,6 @@
       #pillCountdown[hidden] { display: none; }
 
       /*
-       * The countdown, as a chip rather than a clause. Tabular figures so it does
-       * not jitter as the number changes width, and flex: 0 0 auto so it never
-       * steals room from the label.
-       */
-      #pillCountdown {
-        flex: 0 0 auto;
-        font-size: 11px;
-        font-variant-numeric: tabular-nums;
-        color: var(--dimmer);
-        padding: 3px 9px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        background: rgba(255, 255, 255, 0.045);
-      }
-      #pillCountdown[hidden] { display: none; }
-
-      /*
        * Controls are the one thing on the pill that never shrinks and never
        * moves — everything else yields to them. Slightly brighter than the
        * surface so they read as raised, with a full set of states: an overlay
@@ -488,9 +515,25 @@
        * full size. It now has a preferred width it will shrink from, and a floor
        * it will not go under.
        */
+      /*
+       * `max-width: 340px` was never reached, because .right was `flex: 1 1 auto`
+       * — an AUTO basis, which means "my content's width" — and the tab strip plus
+       * the footer sentence is a lot of content. The right column therefore won
+       * the whole negotiation and the left one sat at 238px, ~198px of it usable.
+       * That is the real reason the status rail could not fit three chips on a
+       * row: not the chips, the column. Measured, not assumed — s110 reports the
+       * rail container's own inline size.
+       *
+       * .right now has a ZERO basis (below), so the free space is split by the
+       * grow factors instead of by how wordy the right-hand pane happens to be,
+       * and this cap is what the left column is actually given.
+       */
       .left {
-        flex: 1 1 300px; max-width: 340px; min-width: 190px;
-        padding: 20px; box-sizing: border-box;
+        flex: 1 1 300px; max-width: 268px; min-width: 190px;
+        /* 16px sides rather than 20: the 8px this frees is 8px of status rail,
+         * and the column's own left edge is the panel's edge, which does not
+         * need as much air as an internal seam. */
+        padding: 18px 16px; box-sizing: border-box;
         display: flex; flex-direction: column; min-height: 0;
         border-right: 1px solid var(--line);
       }
@@ -513,7 +556,7 @@
        * orb and the step rail on top of the actual conversation. */
       @media (max-height: 260px) {
         .bigOrb { display: none; }
-        .steps { display: none; }
+        .rail { display: none; }
       }
       .bigOrb { position: relative; width: 74px; height: 74px; flex: 0 0 auto; display: grid; place-items: center; margin-bottom: 14px; }
       .bigOrb .arc { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--cyan); border-left-color: var(--violet); animation: spin 3.4s linear infinite; }
@@ -528,33 +571,129 @@
       .spacer { flex: 1 1 auto; min-height: 8px; }
 
       /*
+       * THE STATUS RAIL — three states on one row, and the hint under them.
+       *
+       * It used to be one wrapping flex line holding the three chips AND the
+       * hint. At the panel's design width that never fit: the chips were 9.5px
+       * with 0.1em of tracking and 12px of side padding, which came to ~335px of
+       * content in a 300px column, so `flex-wrap: wrap` did what it was told and
+       * stacked all three vertically. That cost ~90px of the left column, which
+       * pushed the hint clean off the bottom edge — the rail was tall, the hint
+       * was gone, and the transcript had nowhere to grow.
+       *
+       * So: the chips are compact and the row does not wrap, the hint is a
+       * SIBLING rather than a flex item forced onto its own line with
+       * `flex: 1 0 100%`, and .rail is a query container so the fallback below
+       * responds to the column's real width instead of guessing it from the
+       * window's. Guessing is what the old media queries did, and the column's
+       * width is two nested flex negotiations away from the window's.
+       */
+      .rail {
+        flex: 0 0 auto;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+        container-type: inline-size;
+        container-name: rail;
+      }
+      /*
        * Three states, one of which is true. The live one is a filled chip and
        * the others are bare, so which one you are in is readable at a glance
        * from across a desk — a rail of three identically-weighted labels with
        * one slightly brighter is not.
+       *
+       * nowrap on purpose. If the three genuinely do not fit, wrapping is the
+       * wrong answer and the container query below gives the right one; a rail
+       * that silently becomes a column is the bug this replaces.
        */
-      .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 9.5px; letter-spacing: 0.1em; color: var(--dimmer); }
+      .steps {
+        display: flex; flex-wrap: nowrap; align-items: center;
+        gap: 4px;
+        font-size: 9px; letter-spacing: 0.03em; color: var(--dimmer);
+      }
       .step {
-        display: flex; align-items: center; gap: 7px;
-        padding: 6px 12px; border-radius: 999px;
+        display: flex; align-items: center; gap: 5px;
+        padding: 5px 7px; border-radius: 999px;
         border: 1px solid transparent;
+        white-space: nowrap; flex: 0 0 auto;
         transition: background-color var(--ease), border-color var(--ease), color var(--ease);
       }
-      .step .bullet { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--dimmer); flex: 0 0 auto; }
+      /*
+       * The bullet marks the LIVE state and nothing else.
+       *
+       * Three identical hollow dots cost ~11px each in a column that did not have
+       * 33px to give, and they were saying the same thing three times: "this is a
+       * state chip". One filled dot on the one chip that is true is a stronger
+       * active/inactive contrast than three dots of which one is filled, and it
+       * is what buys the row its width.
+       */
+      .step .bullet { display: none; width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+      .step.on .bullet { display: block; }
       .step.on {
         color: var(--text);
-        background: rgba(255, 255, 255, 0.07);
-        border-color: rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.085);
+        border-color: rgba(255, 255, 255, 0.18);
       }
-      .step.on .bullet { background: #4ade80; border-color: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
-      /* Its own line: at the panel's width the rail plus a trailing hint wrapped
-       * the hint onto a second row anyway, and half of one. */
-      #escHint { flex: 1 0 100%; color: var(--dimmer); letter-spacing: 0.04em; margin-top: 2px; }
+      .step.on .bullet { background: #4ade80; box-shadow: 0 0 7px rgba(74, 222, 128, 0.7); }
+
+      /* Its own clean line beneath the rail, as a sibling rather than a wrapped
+       * flex item. Two copies of the sentence, long and short, swapped by the
+       * container query — a hint that ellipsises is a hint you cannot read, and
+       * dropping a clause is not the same as cutting a word in half. */
+      #escHint {
+        margin-top: 7px;
+        font-size: 9.5px; letter-spacing: 0.02em;
+        color: var(--dimmer);
+        white-space: nowrap; overflow: hidden;
+      }
+      #escHint .short { display: none; }
+
+      /*
+       * RESPONSIVE, in the order the requirements put it: squeeze first, and
+       * only fall back to a single chip when three genuinely will not fit.
+       *
+       * The numbers are the .rail container's own inline size, measured by
+       * s110's probe against the real rendered chips rather than estimated here.
+       */
+      @container rail (max-width: 228px) {   /* squeeze: padding and gap go first */
+        .steps { gap: 3px; }
+        .step { padding: 5px 6px; gap: 4px; letter-spacing: 0.02em; }
+      }
+      /*
+       * 250px, not the container's own width: the FULL sentence needs ~240px at
+       * 9.5px and the rail container is 235px at the design size, so the long
+       * copy is one the panel can essentially never show. The short one names
+       * both exits, which is the part that has to be on screen; what the
+       * microphone button does is on the button, as a tooltip and an aria-label.
+       */
+      @container rail (max-width: 250px) {
+        #escHint .long { display: none; }
+        #escHint .short { display: inline; }
+      }
+      @container rail (max-width: 198px) {
+        /*
+         * The fallback: ONE chip, the live one. Three chips stacked vertically is
+         * what this whole section exists to stop — it is taller than the
+         * transcript it sits under and it still does not read as a rail.
+         *
+         * The active state is never the thing that gets hidden: .on is the only
+         * chip that survives, and it keeps its filled styling so it still reads
+         * as live rather than as a lone label.
+         */
+        .steps .step:not(.on) { display: none; }
+        /* error lights none of the three — voice.js emits listening / thinking /
+         * speaking / error and there is no error step, deliberately. With no
+         * active chip there is nothing true for a one-chip rail to say, and three
+         * dead chips is the stack we are removing, so the rail steps aside and
+         * #bigState ("Voice error") carries it. */
+        body[data-state="error"] .steps .step { display: none; }
+      }
 
       /* The seam between "what the voice is doing" and "what it wants from
        * you". Without it the two halves read as one crowded column. */
       .right {
-        position: relative; flex: 1 1 auto; min-width: 0;
+        /* Zero basis on purpose — see the note on .left. With `auto` the pane
+         * sized itself to its own content and starved the column beside it. */
+        position: relative; flex: 1 1 0%; min-width: 150px;
         padding: 16px 18px; box-sizing: border-box;
         display: flex; flex-direction: column;
         border-left: 1px solid var(--line);
@@ -563,7 +702,18 @@
        * do not fit on one line, and a non-wrapping strip pushed them off the
        * edge of the panel entirely. The right padding is the corner controls'
        * parking space — two of them now, so it is wider than it was. */
-      .tabs { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; margin-bottom: 14px; padding-right: 72px; }
+      /* 76px of reserve, not 72: the further of the two corner buttons sits at
+       * right:52 and is 28px wide, so it occupies the first 80px — the old 72
+       * left the tab strip running under it by 8px before wrapping saved it. */
+      /* 78px of reserve: the further corner button sits at right:46 and is 26px
+       * wide, so it occupies the first 72px, and 6px separates the strip from it.
+       * The old 72 was measured against buttons that reached 80 — the strip ran
+       * under the microphone by 8px and only wrapping hid it.
+       *
+       * row-gap so that IF the strip does wrap (it does below the design width,
+       * where four labelled tabs genuinely do not fit beside a 268px conversation
+       * column) the second row is spaced like a row and not like an accident. */
+      .tabs { display: flex; flex-wrap: wrap; gap: 6px 4px; flex: 0 0 auto; margin-bottom: 14px; padding-right: 78px; }
       /* The × is OUT of the wrapping flow. As a flex item it was pushed onto a
        * second line the moment the four tabs filled the first one — a close
        * button floating on its own row under the tabs, which is exactly where a
@@ -573,19 +723,19 @@
        * heavier action (voice off) first, then the ×. Positioned rather than in
        * flow, because in flow the microphone button landed at the head of the
        * tab strip and read as a fifth tab. */
-      .right > .closeBtn { position: absolute; top: 14px; right: 16px; z-index: 2; width: 28px; height: 28px; }
-      .right > .micOff { position: absolute; top: 14px; right: 52px; z-index: 2; width: 28px; height: 28px; }
+      .right > .closeBtn { position: absolute; top: 13px; right: 14px; z-index: 2; width: 26px; height: 26px; }
+      .right > .micOff { position: absolute; top: 13px; right: 46px; z-index: 2; width: 26px; height: 26px; }
       .right > .closeBtn svg, .right > .micOff svg { width: 13px; height: 13px; }
       .tab {
         /* 12px of horizontal padding put the four tabs 17px over the width left
          * after the ×'s reserved corner, so "Settings" wrapped to a second row.
          * 9px fits them on one line with room to spare at the panel's design
          * width, and the strip still wraps gracefully below it. */
-        display: flex; align-items: center; gap: 5px; padding: 7px 9px; border-radius: 9px;
-        border: 1px solid transparent; background: transparent; color: var(--dim); font-size: 11.5px;
+        display: flex; align-items: center; gap: 4px; padding: 7px 7px; border-radius: 9px;
+        border: 1px solid transparent; background: transparent; color: var(--dim); font-size: 10.5px;
         transition: background-color var(--ease), color var(--ease);
       }
-      .tab svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+      .tab svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 1.6; }
       .tab:hover { color: var(--text); }
       /* Neutral, not violet. The violet tint read as a coloured status (the
        * same violet the permission cards use for "needs you"), when all it
@@ -636,7 +786,7 @@
           <div class="orb"><div class="ring"></div><div class="dot"></div></div>
           <div class="pillText">
             <div id="pillState">Listening…</div>
-            <div id="pillHint">Esc: end chat · ×: close</div>
+            <div id="pillHint">Esc or × ends this chat</div>
           </div>
           <!-- The countdown is its OWN element, not a third clause glued to the
                hint. As a clause it was the part that got ellipsised, so the one
@@ -646,15 +796,20 @@
           <div id="pillCountdown" hidden></div>
           <canvas id="pillWave"></canvas>
           <div class="pillActions">
-            <button class="shield" id="shieldBtn" type="button" tabindex="-1" title="Permissions">
+            <button class="shield" id="shieldBtn" type="button" tabindex="-1"
+                    aria-label="Permissions — open the permissions panel"
+                    title="Permissions">
               <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 8.2-7 9-4-.8-7-4.6-7-9V6l7-3z"/></svg>
-              <span class="badge" id="badge">0</span>
+              <span class="badge" id="badge" aria-live="polite" aria-label="0 pending requests">0</span>
             </button>
             <button class="micOff" id="micOffBtn" type="button" tabindex="-1"
+                    aria-label="Turn voice off"
                     title="Turn voice off — stops wake-word listening and releases the microphone">
               <svg viewBox="0 0 24 24"><path d="M9 4.5a3 3 0 016 0V11m-6 0v.5a3 3 0 004.9 2.3"/><path d="M5 11a7 7 0 0011 5.9M19 11a7 7 0 01-.6 2.8"/><path d="M12 19v2"/><path d="M4 3l16 18"/></svg>
             </button>
-            <button class="closeBtn" id="closeBtn" type="button" tabindex="-1" title="Close — ends this conversation (voice stays on, say “hey jarvis” to start another)">
+            <button class="closeBtn" id="closeBtn" type="button" tabindex="-1"
+                    aria-label="End this conversation"
+                    title="Close — ends this conversation (voice stays on, say “hey jarvis” to start another)">
               <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
           </div>
@@ -669,25 +824,34 @@
             <div id="transcript"></div>
             <div id="response"></div>
             <div class="spacer"></div>
-            <div class="steps">
-              <!-- Three states, because three is what the pipeline has. There
-                   was a READY step and "speaking" lit it, so the panel said
-                   ANSWERING and READY at the same time. voice.js emits exactly
-                   listening / thinking / speaking / error; a ready state would
-                   have to be a real thing before it can be a light. -->
-              <span class="step" id="stepListening"><span class="bullet"></span>LISTENING</span>
-              <span class="step" id="stepProcessing"><span class="bullet"></span>PROCESSING</span>
-              <span class="step" id="stepAnswering"><span class="bullet"></span>ANSWERING</span>
-              <span id="escHint">Esc or × ends this chat · the mic button turns voice off</span>
+            <!-- The rail is a container, not a row: .steps is the row and
+                 #escHint is a sibling under it. As a flex item forced full-width
+                 with `flex: 1 0 100%` the hint shared the chips' wrapping fate,
+                 and when they stacked it was pushed off the panel. -->
+            <div class="rail">
+              <div class="steps" id="steps" role="group" aria-label="Voice status">
+                <!-- Three states, because three is what the pipeline has. There
+                     was a READY step and "speaking" lit it, so the panel said
+                     ANSWERING and READY at the same time. voice.js emits exactly
+                     listening / thinking / speaking / error; a ready state would
+                     have to be a real thing before it can be a light. -->
+                <span class="step" id="stepListening"><span class="bullet"></span>LISTENING</span>
+                <span class="step" id="stepProcessing"><span class="bullet"></span>PROCESSING</span>
+                <span class="step" id="stepAnswering"><span class="bullet"></span>ANSWERING</span>
+              </div>
+              <div id="escHint"><span class="long">Esc or × ends this chat · the mic button turns voice off</span><span class="short">Esc or × ends this chat</span></div>
             </div>
           </div>
 
           <div class="right">
             <button class="micOff" id="micOffBtn2" type="button" tabindex="-1"
+                    aria-label="Turn voice off"
                     title="Turn voice off — stops wake-word listening and releases the microphone">
               <svg viewBox="0 0 24 24"><path d="M9 4.5a3 3 0 016 0V11m-6 0v.5a3 3 0 004.9 2.3"/><path d="M5 11a7 7 0 0011 5.9M19 11a7 7 0 01-.6 2.8"/><path d="M12 19v2"/><path d="M4 3l16 18"/></svg>
             </button>
-            <button class="closeBtn" id="closeBtn2" type="button" tabindex="-1" title="Close — ends this conversation (voice stays on, say “hey jarvis” to start another)">
+            <button class="closeBtn" id="closeBtn2" type="button" tabindex="-1"
+                    aria-label="End this conversation"
+                    title="Close — ends this conversation (voice stays on, say “hey jarvis” to start another)">
               <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
             <div class="tabs">
@@ -905,8 +1069,17 @@
         selectTab("permissions");
         setExpanded(true);
       });
+      /*
+       * Clicking the pill expands it — clicking a CONTROL on the pill does not.
+       *
+       * This used to name the two controls it knew about (#shieldBtn and
+       * .closeBtn) and so it missed the third: the crossed-microphone button
+       * added last pass turned voice off AND expanded the panel on the way out,
+       * which is a panel opening onto a feature that just stopped. Any button is
+       * a button; a list of ids is a thing to forget to update.
+       */
       $("collapsed").addEventListener("click", (e) => {
-        if (e.target.closest("#shieldBtn") || e.target.closest(".closeBtn")) return;
+        if (e.target.closest("button")) return;
         setExpanded(true);
       });
 
@@ -962,6 +1135,7 @@
 
       function render() {
         $("badge").textContent = String(pending.length);
+        $("badge").setAttribute("aria-label", pending.length + " pending requests");
         document.body.classList.toggle("haspending", pending.length > 0);
         $("paneTitle").textContent = `Pending requests (${pending.length})`;
         $("clearAll").style.display = activeTab === "permissions" && pending.length ? "" : "none";

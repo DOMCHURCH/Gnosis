@@ -46,6 +46,7 @@
     "verify": "node verify/run-all.mjs",
     "eval": "node eval/run-eval.mjs",
     "app": "electron electron/main.js",
+  "overlay:check": "node scripts/overlay-check.mjs",
     "dist": "npm run build && npm run gen:icon && electron-builder --win",
     "gen:icon": "node scripts/gen-icon.mjs"
   },

@@ -55,7 +55,26 @@ const ok = (n, c) => { console.log(`${c ? "PASS" : "FAIL"} ${n}`); if (!c) fails
 // The material is tokenised now: --base is the charcoal-navy the scrim is made
 // of and --scrim is how much of the backdrop it covers, so the assertions pin
 // the tokens rather than one literal rgba() that a retune would rewrite.
-ok("the glass body is a low-opacity wash, not a dark panel", overlay.includes("rgba(255, 255, 255, 0.055)"));
+//
+// Pinned as a RANGE rather than one literal. It was `includes("...0.055)")`, which
+// meant a polish pass that moved the fill from 0.055 to 0.06 failed a test whose
+// stated intent ("low-opacity wash, not a dark panel") it had not violated. The
+// band is what the assertion was always about; the exact number is a tuning knob.
+{
+  // Parsed by hand rather than by regex. electron/ is CRLF, and the pattern
+  // this replaces anchored on a bare newline after the semicolon — so it
+  // extracted NaN and failed as though the material had changed, when only the
+  // line endings differed. A string scan does not care.
+  const gi = overlay.indexOf(".glass {");
+  const bgAt = gi === -1 ? -1 : overlay.indexOf("background:", gi);
+  // Bounded to the background declaration: the box-shadow below it also carries
+  // an rgba(255,255,255,...) and is a different thing entirely.
+  const decl = bgAt === -1 ? "" : overlay.slice(bgAt, overlay.indexOf(";", bgAt));
+  const key = "rgba(255, 255, 255, ";
+  const k = decl.lastIndexOf(key);
+  const a = k === -1 ? NaN : parseFloat(decl.slice(k + key.length));
+  ok("the glass body is a low-opacity wash, not a dark panel", a >= 0.03 && a <= 0.12, "fill alpha " + a);
+}
 ok("...with the contrast scrim folded into the same background", overlay.includes("rgba(var(--base), var(--scrim))"));
 // The pseudo-element it replaced must not come back: it is what forced a
 // z-index onto the content and broke the buttons on Windows.
@@ -90,7 +109,8 @@ ok("no backdrop-filter anywhere in the overlay", !overlay.includes("backdrop-fil
 // The material is layered translucency over a rim instead: a dark scrim and a
 // white fill in one background, so neither needs a pseudo-element or a
 // stacking context (see the note in the stylesheet).
-ok("the glass is layered translucency instead", overlay.includes("rgba(var(--base), var(--scrim))") && overlay.includes("rgba(255, 255, 255, 0.055)"));
+ok("the glass is layered translucency instead",
+  overlay.includes("rgba(var(--base), var(--scrim))") && /\.glass \{[\s\S]*?rgba\(255, 255, 255, 0\.\d+\);/.test(overlay));
 // And the scrim is now the whole contrast guarantee, so it has to stay heavy.
 // s90 computes the actual ratios against a white desktop; this only pins the
 // input, because a lighter scrim is the tempting change and the silent one.
@@ -113,7 +133,36 @@ ok("the now-orphaned filter id is gone too", !/liquidDistort/.test(overlay));
 // --- the shadow lifts the surface, and is coloured --------------------------
 // A pure-black shadow drains colour from everything it touches and reads as the
 // panel being stamped into the page rather than floating above it.
-ok("the lift shadow is coloured, not black", overlay.includes("rgba(31, 38, 135, 0.34)"));
+ok("the lift shadow is coloured, not black", /0 6px 20px -4px rgba\(31, 38, 135, 0\.\d+\)/.test(overlay));
+/*
+ * And it is entirely contained by the transparent margin.
+ *
+ * This is the assertion the black-rectangle bug actually needed and never had:
+ * a shadow reaches offset + blur/2 + spread from its element, and a shadow that
+ * reaches further than --shadow-pad is clipped at the window edge — which is a
+ * rectangle. Computed from the stylesheet rather than asserted as a comment, so
+ * adding a fourth stop cannot quietly re-open it.
+ */
+{
+  const pad = Number(overlay.match(/--shadow-pad: (\d+)px/)?.[1] ?? NaN);
+  const frame = overlay.match(/\.frame \{[\s\S]*?\n {8}box-shadow:([\s\S]*?);/)?.[1] ?? "";
+  // Split on commas that are NOT inside an rgba(), or every colour becomes three
+  // bogus "stops" — which is what the first version of this check did, and it
+  // then failed every stop by parsing "0 0 22px -8px rgba(34" as two lengths.
+  const stops = frame.replace(/rgba?\([^)]*\)/g, "COLOR")
+    .split(",").map((t) => t.trim()).filter(Boolean);
+  ok("--shadow-pad is a number the shadow can be checked against", pad > 0, String(pad));
+  ok("the frame casts at least one shadow", stops.length > 0, stops.length + " stops");
+  for (const stop of stops) {
+    // Lengths only, and a bare `0` is a length: `0 0 22px -8px` is four of them.
+    const n = (stop.replace("COLOR", "").trim().match(/-?\d*\.?\d+(?:px)?/g) || []).map(parseFloat);   // Number("22px") is NaN; parseFloat is not
+    // [offsetX, offsetY, blur, spread] — spread is optional and defaults to 0.
+    const [ox = 0, oy = 0, blur = 0, spread = 0] = n;
+    const reach = Math.max(Math.abs(ox), Math.abs(oy)) + blur / 2 + spread;
+    ok("shadow stop fits inside the transparent margin: " + stop.replace(/\s+/g, " "),
+      reach <= pad, Math.round(reach) + "px of " + pad + "px");
+  }
+}
 
 // --- a rim, not a rainbow ----------------------------------------------------
 // One direction (top-down), fading out, not a hue wrapped around the whole
@@ -133,10 +182,46 @@ ok("...anchored top-left, matching the rim's own direction", overlay.includes("a
 // same way real Liquid Glass keeps colored control tints on a clear material.
 // What must not happen is the GLASS ITSELF (.frame's background, .glass's
 // background) carrying one of those hues.
+//
+// Re-pointed, deliberately. This used to BAN the accent hues from .frame and
+// .glass outright. The overlay now carries an environmental reflection — a cyan
+// separation halo on .frame and a cyan/violet cast inside .glass — which was
+// asked for and which is the difference between glass sitting in a room and a
+// grey card. So the rule is no longer "no hue", it is "no hue you could name":
+// every accent alpha on the material itself stays under 0.35, and the opaque
+// hex forms stay banned entirely, because those are what make it a tinted panel.
 for (const [name, sel] of [["frame", /\.frame \{[\s\S]*?\n      \}/], ["glass", /\.glass \{[\s\S]*?\n      \}/]]) {
   const block = overlay.match(sel)?.[0] ?? "";
-  ok(`${name} block carries no accent hue`,
-    block.length > 0 && !/#22d3ee|#8b7cf6|#e879f9|34, 211, 238|139, 124, 246|232, 121, 249/i.test(block));
+  ok(`${name} block exists to check`, block.length > 0);
+  ok(`${name} block uses no solid accent colour`,
+    !/#22d3ee|#8b7cf6|#e879f9/i.test(block));
+  const hues = [...block.matchAll(/rgba\((?:34, 211, 238|139, 124, 246|232, 121, 249), (0?\.\d+|0|1)\)/g)]
+    .map((mm) => Number(mm[1]));
+  ok(`${name} block keeps its accent hue restrained`, hues.every((a) => a <= 0.35),
+    hues.length ? "alphas " + hues.join(", ") : "no literal accent");
+}
+
+/*
+ * --- nothing that can promote the window to an opaque surface ---------------
+ *
+ * backdrop-filter is asserted above. mix-blend-mode is the same class of hazard
+ * and was never asserted: it is a compositing operation AGAINST the backdrop, so
+ * Chromium can give a transparent window an opaque backing to blend with, and
+ * every unpainted region comes out black. The overlay used `mix-blend-mode:
+ * screen` on the specular highlight; it is gone, and this is what keeps it gone.
+ *
+ * filter: on the overlay's own material is listed for the same reason. The
+ * `filter: brightness()` on .btn.primary:hover is fine — that is a child element
+ * with its own opaque paint, not the window's backing.
+ */
+for (const banned of ["mix-blend-mode", "backdrop-filter", "-webkit-backdrop-filter"]) {
+  ok(`no ${banned} anywhere in the Electron overlay`, !overlay.includes(banned + ":"),
+    banned);
+}
+for (const [name, sel] of [["frame", /\.frame \{[\s\S]*?\n      \}/], ["glass", /\.glass \{[\s\S]*?\n      \}/], ["glass::before", /\.glass::before \{[\s\S]*?\n      \}/]]) {
+  const block = overlay.match(sel)?.[0] ?? "";
+  ok(`${name} declares no filter or blend of its own`,
+    !/\n\s*(filter|mix-blend-mode|backdrop-filter):/.test(block));
 }
 
 // --- the waveform is a bar meter ---------------------------------------------

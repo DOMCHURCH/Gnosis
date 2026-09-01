@@ -36,7 +36,8 @@ contextBridge.exposeInMainWorld("voice", {
   /** Esc — ends the conversation, leaving the wake word armed for the next
    * "hey jarvis". The lighter of the two exits. */
   endSession: () => ipcRenderer.send("voice:end-session"),
-  /** The overlay's × — turns voice OFF, the same way the Settings switch does:
+  /** The overlay's crossed-microphone button — turns voice OFF, the same way the
+   * Settings switch does. NOT the ×, which only ends the conversation:
    * detector stopped, microphone released, and the setting persisted so
    * Settings does not go on claiming voice is on. */
   stopVoice: () => ipcRenderer.send("voice:stop-voice"),
