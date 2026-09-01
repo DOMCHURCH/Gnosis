@@ -53,6 +53,18 @@ contextBridge.exposeInMainWorld("gnosisShell", {
   // --- voice (desktop only; the served page in a browser has none of this) ---
   voiceStatus: () => ipcRenderer.invoke("voice:status"),
   speak: (text) => ipcRenderer.invoke("voice:speak", text),
+  /** Start a conversation without the wake word — the same entry point "hey
+   * jarvis" uses, so the button and the phrase cannot diverge. */
+  voiceWake: () => ipcRenderer.send("voice:wake"),
+  /** Turn the feature on or off, and hand back the state it settled in. */
+  voiceSetEnabled: (on) => ipcRenderer.invoke("voice:set-enabled", on),
+  /** Pushed whenever voice starts, stops, or opens/closes a conversation, so the
+   * button never has to poll to be honest about what it is showing. */
+  onVoiceStatus: (cb) => {
+    const h = (_e, s) => cb(s);
+    ipcRenderer.on("voice:status-changed", h);
+    return () => ipcRenderer.removeListener("voice:status-changed", h);
+  },
 
   // --- reaching other applications ---
   focusWindow: (arg) => ipcRenderer.invoke("force-focus-window", arg),

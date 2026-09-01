@@ -101,8 +101,53 @@ $s.Speak($t)
  * Which was used is returned, so the settings panel can say so rather than
  * leaving the user guessing why it sounds the way it does.
  */
+/*
+ * Text as a person would READ it, not as a screen shows it.
+ *
+ * A synthesiser pronounces what it is given. Model output is written for eyes --
+ * em dashes, bullets, backticks, asterisks, arrows -- and Kokoro says their
+ * names: "dot", "asterisk", "circumflex". One stray character turns a spoken
+ * sentence into nonsense.
+ *
+ * So marks that carry PROSODY become the punctuation that produces it (a dash
+ * between clauses becomes a comma, which is a short breath), and marks that
+ * carry only layout are removed. Sentence punctuation is left alone: a full stop
+ * is how a synthesiser knows a sentence ended, and stripping it runs everything
+ * together.
+ */
+export function speakable(text) {
+  return String(text ?? "")
+    // Fenced and inline code: never speakable, usually long.
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]*)`/g, "$1")
+    // Links: say the words, not the URL.
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, " a link ")
+    // Emphasis and headings are layout, not sound.
+    .replace(/(\*\*|__|\*|_|#+)/g, " ")
+    // A bullet or a dash between clauses is a pause, not the word "hyphen".
+    .replace(/^[ \t]*[-*•][ \t]+/gm, ", ")
+    .replace(/ [-–—]{1,2} /g, ", ")
+    .replace(/[→←⇒]/g, ", ")
+    // Whatever is left with no pronunciation. Sentence punctuation and
+    // apostrophes stay: they are what makes it sound like speech.
+    // $ and % are deliberately NOT in this class: a synthesiser says "five
+    // dollars" and "fifty percent" for them, and stripping them turns a price
+    // into a bare number — a worse error than the one being fixed.
+    .replace(/[`~^|<>{}[\]\/@#&*_+=]/g, " ")
+    // Collapse what that left behind, including runs of commas from a list of
+    // dashes, which would otherwise be a stack of pauses.
+    .replace(/\s*,(\s*,)+/g, ",")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    // A list whose first item was a bullet begins with the pause and nothing
+    // before it, which reads as a stumble.
+    .replace(/^[,s]+/, "")
+    .trim();
+}
+
 export async function speak(text, { voice, play } = {}) {
-  const t = String(text ?? "").trim();
+  const t = speakable(text);
   if (!t) return { ok: false, error: "nothing to say" };
   const k = await synthesize(t, { voice });
   if (k.ok) {
@@ -295,6 +340,18 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
       // has been observed to composite black on Windows. Costs nothing when the
       // platform was going to do the right thing anyway.
       backgroundColor: "#00000000",
+      /*
+       * Windows 11 draws a system "background material" behind a window, and
+       * Electron's patch for it takes a different path when the window is
+       * translucent -- which is reported upstream (electron/electron#49428) as
+       * producing exactly this: a black or grey backing that appears on focus
+       * events, on some hardware, for a window that asked to be transparent.
+       *
+       * Asking for no material at all keeps the window off that path. It is not
+       * the default: unset means "let the system decide", which is the case the
+       * patch handles badly.
+       */
+      backgroundMaterial: "none",
       resizable: false,
       movable: true,
       skipTaskbar: true,
@@ -338,7 +395,27 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (engine && !engine.isDestroyed()) return engine;
     engine = new BrowserWindow({
       show: false,
-      webPreferences: { preload: enginePreload, nodeIntegration: false, contextIsolation: true },
+      webPreferences: {
+        preload: enginePreload,
+        nodeIntegration: false,
+        contextIsolation: true,
+        /*
+         * The single most important line in this file.
+         *
+         * Chromium throttles timers and audio callbacks in a window that is not
+         * visible, and this window is never visible -- it exists only to hold
+         * getUserMedia, because the main process has no DOM. Throttled, its
+         * ScriptProcessor stops firing at audio rate, which starves the three
+         * things that depend on it: the tap that feeds the wake-word detector,
+         * the recorder that captures an utterance, and the level meter.
+         *
+         * That is one cause behind several symptoms that looked unrelated --
+         * "hey jarvis" not responding, the panel appearing to lag, a recording
+         * that never finishes and so leaves the recorder flag set, which then
+         * gates the detector feed off entirely.
+         */
+        backgroundThrottling: false,
+      },
     });
     void engine.loadFile(path.join(here, "voice-engine.html"));
     engine.on("closed", () => { engine = null; });
@@ -400,6 +477,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     if (session) return; // already talking; a second detection is not a new session
     session = true;
     setListening(true);
+    broadcastStatus();
     const o = makeOverlay();
     o.showInactive(); // visible, but focus stays wherever the user left it
     toOverlay("voice:state", {
@@ -451,6 +529,7 @@ export function registerVoice({ getWindow, showWindow, setListening, bridge }) {
     setListening(false);
     if (overlay && !overlay.isDestroyed()) overlay.hide();
     diag.lastSession = `ended: ${why ?? "closed"}`;
+    broadcastStatus();
   }
 
   /** Close the panel for THIS turn only — kept for the non-session paths. */
@@ -1198,7 +1277,27 @@ async function writeTurnTiming(timeline) {
   ipcMain.on("voice:engine-status", (_e, s) => {
     status = { ...status, ...s };
   });
-  ipcMain.handle("voice:status", () => status);
+  /*
+   * Voice status, for the main window's microphone button.
+   *
+   * `status` describes the FEATURE (is it enabled, is the wake word up, can it
+   * transcribe). The button also has to show whether a conversation is open
+   * right now, which is per-moment rather than per-configuration, so it is
+   * merged in here rather than bolted onto the status object that the settings
+   * panel and the tests read.
+   */
+  const publicStatus = () => ({ ...status, session: !!session });
+
+  ipcMain.handle("voice:status", () => publicStatus());
+
+  /** Tell the main window the microphone state changed, so its button does not
+   * have to poll to stay honest about what voice is doing. */
+  function broadcastStatus() {
+    try {
+      const w = getWindow?.();
+      if (w && !w.isDestroyed()) w.webContents.send("voice:status-changed", publicStatus());
+    } catch { /* the window can go at any time; this is only a hint */ }
+  }
   ipcMain.handle("voice:diagnostics", () => ({ ...diag, wakePhrase: wakePhrase(), muteWanted, muteApplied }));
   ipcMain.handle("voice:timeline", () => timeline.slice());
   // The full probe is slow (it starts Python), so it is explicit rather than
@@ -1255,7 +1354,10 @@ async function writeTurnTiming(timeline) {
   ipcMain.handle("voice:set-enabled", async (_e, on) => {
     if (on) await start();
     else stop();
-    return status;
+    // Turning voice on or off is the biggest change the button can show, and the
+    // one the user just asked for — so it must not wait for a poll.
+    broadcastStatus();
+    return publicStatus();
   });
 
   /** Play a WAV through the hidden engine renderer — main has no audio out. */

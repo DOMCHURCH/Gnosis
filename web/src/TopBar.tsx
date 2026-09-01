@@ -7,7 +7,7 @@
 // buttons: if it fails to render, the window cannot be moved or closed, so it is
 // deliberately free of data dependencies that could throw.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Z } from "./layers";
 import { MARK_ROWS } from "./logo.generated";
 
@@ -36,8 +36,11 @@ export interface ShellBridge {
   openReleasesPage(): void;
   checkForUpdate(): Promise<{ ok: boolean; version?: string | null; url?: string; error?: string }>;
 
-  voiceStatus(): Promise<{ enabled: boolean; wakeWord: boolean; transcription: boolean; reason: string }>;
+  voiceStatus(): Promise<VoiceState>;
   speak(text: string): Promise<{ ok: boolean; error?: string }>;
+  voiceWake(): void;
+  voiceSetEnabled(on: boolean): Promise<VoiceState>;
+  onVoiceStatus(cb: (s: VoiceState) => void): () => void;
 
   focusWindow(arg: { app?: string; pid?: number }): Promise<Record<string, unknown>>;
   runningApps(): Promise<Record<string, unknown>>;
@@ -48,7 +51,100 @@ export function shellBridge(): ShellBridge | null {
   return (window as unknown as { gnosisShell?: ShellBridge }).gnosisShell ?? null;
 }
 
+export interface VoiceState {
+  enabled: boolean;
+  wakeWord: boolean;
+  transcription: boolean;
+  reason: string;
+  /** True while a conversation is open — the overlay is up and listening. */
+  session?: boolean;
+}
+
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
+
+/**
+ * The microphone, given the room a headline feature deserves.
+ *
+ * Voice had no presence in this window at all: the wake word is invisible until
+ * it fires, the overlay only exists once a conversation has started, and the
+ * only control was a switch inside Settings. A feature you cannot see is a
+ * feature nobody uses, and one whose failures are silent — no Python, no
+ * transcription key, and the app looked identical to a working one.
+ *
+ * So this is a labelled control rather than a glyph: it says what state voice is
+ * in, it starts a conversation on click without needing the wake phrase, and
+ * when it cannot work it says why in its tooltip instead of doing nothing.
+ */
+function VoiceButton({ shell }: { shell: ShellBridge }) {
+  const [v, setV] = useState<VoiceState | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void shell.voiceStatus().then((s) => { if (alive) setV(s); }).catch(() => {});
+    // Pushed, not polled: the main process tells us when it changes.
+    const off = shell.onVoiceStatus?.((s) => { if (alive) setV(s); });
+    return () => { alive = false; off?.(); };
+  }, [shell]);
+
+  if (!v) return null; // a browser tab, or the status has not arrived yet
+
+  // Enabled but not actually able to hear is its own state, and the one that
+  // used to be invisible. It looks different from "off" because it is: the user
+  // asked for voice and did not get it.
+  const broken = v.enabled && (!v.wakeWord || !v.transcription);
+  const state = v.session ? "listening" : broken ? "broken" : v.enabled ? "on" : "off";
+
+  const LOOK = {
+    listening: { label: "LISTENING", fg: "#34d399", bg: "rgba(52,211,153,0.14)", bd: "rgba(52,211,153,0.42)" },
+    on: { label: "VOICE", fg: "#22d3ee", bg: "rgba(34,211,238,0.10)", bd: "rgba(34,211,238,0.30)" },
+    broken: { label: "VOICE", fg: "#FBBF24", bg: "rgba(251,191,36,0.12)", bd: "rgba(251,191,36,0.30)" },
+    off: { label: "VOICE OFF", fg: "#6B6B7B", bg: "transparent", bd: "rgba(255,255,255,0.09)" },
+  }[state];
+
+  const title =
+    state === "listening" ? "Listening — click to end the conversation"
+    : state === "broken" ? `Voice is on but cannot hear: ${v.reason || "unavailable"}. Settings → Voice to fix it.`
+    : state === "on" ? "Start talking — or just say “hey jarvis”"
+    : "Voice is off. Click to turn it on and start listening for “hey jarvis”.";
+
+  async function click() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (state === "off") setV(await shell.voiceSetEnabled(true));
+      else if (state === "broken") shell.openSettings();
+      else shell.voiceWake();   // starts a conversation, or is ignored if one is open
+    } catch { /* the tooltip already says what is wrong */ } finally { setBusy(false); }
+  }
+
+  return (
+    <button
+      type="button"
+      data-testid="voice-button"
+      title={title}
+      aria-label={title}
+      aria-pressed={v.enabled}
+      onClick={click}
+      style={{
+        WebkitAppRegion: "no-drag",
+        display: "flex", alignItems: "center", gap: 6,
+        fontFamily: MONO, fontSize: 9, letterSpacing: 1.5,
+        padding: "4px 11px", borderRadius: 999,
+        background: LOOK.bg, color: LOOK.fg, border: `1px solid ${LOOK.bd}`,
+        cursor: busy ? "default" : "pointer", whiteSpace: "nowrap",
+        opacity: busy ? 0.6 : 1,
+      } as CSSProperties}
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+        <path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3z" />
+        <path d="M5 11a7 7 0 0014 0M12 18v3" />
+        {state === "off" && <path d="M4 3l16 18" />}
+      </svg>
+      {LOOK.label}
+    </button>
+  );
+}
 
 /** The mark, drawn from the same pixel rows as the Windows icon and the tray. */
 function Logo({ size = 32 }: { size?: number }) {
@@ -120,7 +216,7 @@ function ControlButton(props: { label: string; onClick: () => void; title: strin
         color: hot ? (props.danger ? "#FFFFFF" : "#E4E8EE") : "#8A8A9B",
         background: hot ? (props.danger ? "#C42B1C" : "rgba(255,255,255,0.08)") : "transparent",
         transition: "background-color 150ms ease-out, color 150ms ease-out",
-      } as React.CSSProperties}
+      } as CSSProperties}
     >
       {props.label}
     </button>
@@ -154,7 +250,7 @@ export function TopBar(props: { shell: ShellBridge; modelId: string | null; cost
         gap: 12,
         padding: "0 12px 0 14px",
         fontFamily: MONO,
-      } as React.CSSProperties}
+      } as CSSProperties}
     >
       <Logo size={32} />
       <span
@@ -215,12 +311,14 @@ export function TopBar(props: { shell: ShellBridge; modelId: string | null; cost
         </span>
       )}
 
+      <VoiceButton shell={props.shell} />
+
       <button
         type="button"
         title="Settings"
         aria-label="Settings"
         onClick={() => props.shell.openSettings()}
-        style={{ WebkitAppRegion: "no-drag", fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", border: 0, color: "#6B6B7B", cursor: "pointer", padding: "4px 6px" } as React.CSSProperties}
+        style={{ WebkitAppRegion: "no-drag", fontFamily: MONO, fontSize: 13, lineHeight: 1, background: "transparent", border: 0, color: "#6B6B7B", cursor: "pointer", padding: "4px 6px" } as CSSProperties}
       >
         ⚙
       </button>
