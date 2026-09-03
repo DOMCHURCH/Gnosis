@@ -40,7 +40,11 @@ export type Preview =
 const DANGEROUS: RegExp[] = [
   /\brm\s+-\w*r\w*f\w*/i, // rm -rf, -Rf, ...
   /\brm\s+-\w*f\w*r\w*/i, // rm -fr
-  /\bgit\s+push\b[^\n]*--force/i,
+  // Both the long form (--force, --force-with-lease, --force-if-includes) and
+  // the short flag (-f, or -f combined with other short flags) — a bare
+  // substring check on "--force" alone let `git push -f` (the far more common
+  // spelling) through as an ordinary, silenceable push.
+  /\bgit\s+push\b[^\n]*(?:--force(?:-with-lease|-if-includes)?\b|(?:^|\s)-\w*f\w*(?:\s|$))/i,
   /\bdd\b/i,
   /\bmkfs\b/i,
   /\bcurl\b[^|]*\|\s*sh\b/i,

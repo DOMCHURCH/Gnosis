@@ -13,7 +13,7 @@ import { execa } from "execa";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { domDir } from "./config.js";
-import { resolveShell } from "./tools/bash.js";
+import { resolveShell, killTree } from "./tools/bash.js";
 
 export type HookEvent = "SessionStart" | "PreToolUse" | "PostToolUse" | "Stop";
 export const HOOK_EVENTS: HookEvent[] = ["SessionStart", "PreToolUse", "PostToolUse", "Stop"];
@@ -86,18 +86,35 @@ interface RunOutcome {
 
 async function runHookProcess(ref: HookRef, payload: unknown, cwd: string): Promise<RunOutcome> {
   const { file, args } = commandFor(ref.path);
+  // execa's own `timeout` option only reaps the DIRECT child (the interpreter/
+  // shell running the hook) — a hook that backgrounds a subprocess (e.g. a
+  // shell hook doing `some-linter & wait`) would leave the grandchild running
+  // as an orphan past the 5s cutoff, once per PreToolUse call since it fires
+  // on every tool. Cancel via our own AbortSignal instead and tree-kill on
+  // it, mirroring tools/bash.ts killTree, which solved the same problem for
+  // the bash tool.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await execa(file, args, {
+    const child = execa(file, args, {
       input: JSON.stringify(payload),
       cwd,
-      timeout: TIMEOUT_MS,
       reject: false,
       windowsHide: true,
+      cancelSignal: controller.signal,
+      forceKillAfterDelay: 2000,
+      // POSIX: own process group so killTree(-pid) takes the whole tree.
+      detached: process.platform !== "win32",
     });
-    return { exitCode: res.exitCode ?? 0, stderr: (res.stderr ?? "").trim(), timedOut: !!res.timedOut, crashed: false };
+    controller.signal.addEventListener("abort", () => killTree(child.pid), { once: true });
+    const res = await child;
+    const timedOut = res.isCanceled === true;
+    return { exitCode: res.exitCode ?? 0, stderr: (res.stderr ?? "").trim(), timedOut, crashed: false };
   } catch (e) {
-    const timedOut = (e as { timedOut?: boolean })?.timedOut === true;
+    const timedOut = controller.signal.aborted;
     return { exitCode: null, stderr: ((e as Error).message ?? "").trim(), timedOut, crashed: !timedOut };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

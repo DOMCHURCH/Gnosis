@@ -116,6 +116,24 @@ function tokenOk(candidate: string | undefined | null, token: string): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/** WebSocket upgrade defense-in-depth: hostOk/tokenOk are the real gate, but
+ * neither checks Origin. A browser always sends one; a non-browser client
+ * (curl, a Node script driving the API directly — a documented, supported
+ * way to reach dom serve) never does, so absence is not itself suspicious.
+ * When present, it must name the same loopback/private-LAN host hostOk
+ * already trusts — this is what would still block a malicious webpage from
+ * opening a cross-site WebSocket if the token ever leaked by some other
+ * means, since Origin (unlike a query param) cannot be forged by the page
+ * making the request. */
+function originOk(originHeader: string | undefined): boolean {
+  if (!originHeader) return true;
+  try {
+    return hostOk(new URL(originHeader).host);
+  } catch {
+    return false;
+  }
+}
+
 // --- WebSocket framing -------------------------------------------------------
 
 function frame(opcode: number, payload: Buffer): Buffer {
@@ -244,16 +262,19 @@ function cwdForTab(bridge: AppBridge, tabId: number): string | null {
  * The cwd comes from the live agent, and file reads are guarded to stay inside it
  * (readFileInRoot). Returns true if it handled the request.
  */
-async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge, res: http.ServerResponse, getPublicUrl: () => string | null, getLanUrl: () => string | null): Promise<boolean> {
+async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge, res: http.ServerResponse, getPublicUrl: () => string | null, getLanUrl: () => string | null, webhookToken: string): Promise<boolean> {
   // Serve info: the public tunnel URL (if `/serve --public` is up), so the WEBHOOKS
   // tab can show the URL external services actually need to reach.
   if (url.pathname === "/api/serveinfo") {
     sendJson(res, 200, { public: getPublicUrl(), lan: getLanUrl() });
     return true;
   }
-  // Webhook inspector: the whole ring buffer, plus the public URL for the generator.
+  // Webhook inspector: the whole ring buffer, plus the public URL and the
+  // separate low-privilege token the generator needs to build a working URL
+  // (this route itself is gated on the master token, same as every /api/*
+  // route — only /webhook/* itself uses webhookToken).
   if (url.pathname === "/api/webhooks") {
-    sendJson(res, 200, { webhooks: webhooks.list(), labels: webhooks.labels(), public: getPublicUrl() });
+    sendJson(res, 200, { webhooks: webhooks.list(), labels: webhooks.labels(), public: getPublicUrl(), webhookToken });
     return true;
   }
   // Replay a stored webhook to a local target URL (POST { target }).
@@ -304,11 +325,21 @@ async function handleApi(req: http.IncomingMessage, url: URL, bridge: AppBridge,
       const ext = path.extname(full).toLowerCase();
       const mime = RAW_MIME[ext] ?? "application/octet-stream";
       const body = await fsp.readFile(full);
+      // SVG is the one inline-rendered type that can carry a <script> — every
+      // other unrecognised type already forces a download below. Rendered
+      // inline (not through an <img>, which never executes SVG script — via a
+      // direct tab/iframe open of this URL), a malicious SVG anywhere in the
+      // workspace (a repo file, or one a prompt-injected agent wrote) runs
+      // script in the server's own origin, with the page's own ?token= sitting
+      // right there in location.search for it to read. Force it through the
+      // same download path as an unknown type, plus a locked-down CSP as a
+      // second layer in case a future caller ever renders it inline anyway.
+      const forceDownload = mime === "application/octet-stream" || ext === ".svg";
       res.writeHead(200, {
         "content-type": mime,
         "content-length": String(body.length),
-        // An unrecognised type is a download, never something the browser sniffs.
-        ...(mime === "application/octet-stream" ? { "content-disposition": `attachment; filename="${path.basename(full).replace(/"/g, "")}"` } : {}),
+        ...(forceDownload ? { "content-disposition": `attachment; filename="${path.basename(full).replace(/"/g, "")}"` } : {}),
+        ...(ext === ".svg" ? { "content-security-policy": "default-src 'none'; sandbox" } : {}),
         // The bytes are the user's own files behind a token — never let a shared
         // cache hold them.
         "cache-control": "private, no-store",
@@ -605,6 +636,13 @@ function attachPty(socket: Duplex, cwd: string, cols: number, rows: number): voi
 export interface ServerHandle {
   url: string;
   token: string;
+  /** Separate, lower-privilege token that gates ONLY /webhook/*. A webhook URL
+   * is handed to third-party services (GitHub, Stripe, ...) which routinely
+   * show full delivery URLs — including the query string — to anyone with
+   * admin on that integration. `token` is equivalent to a full interactive
+   * shell (via /pty); that must never be the secret that ends up in someone
+   * else's delivery log. */
+  webhookToken: string;
   port: number;
   clients(): number;
   /** The LAN URL (base, no token); null only when the machine has no LAN address. */
@@ -621,6 +659,7 @@ const SHUTDOWN_SIGNALS = Object.keys(SIGNAL_NUMBERS) as (keyof typeof SIGNAL_NUM
 
 export async function startServer(bridge: AppBridge, opts: { port?: number } = {}): Promise<ServerHandle> {
   const token = crypto.randomBytes(24).toString("base64url");
+  const webhookToken = crypto.randomBytes(24).toString("base64url");
   // Identity of THIS server instance, announced to every client as it connects. A
   // browser that reconnects and sees a different instance knows its whole picture
   // belongs to a server that no longer exists, and starts over. `instance` is what
@@ -657,21 +696,31 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   const jobsUnsub = bridgeJobsToBus(bridge.bus);
 
   const server = http.createServer((req, res) => {
+    // Every response gets this — set before any writeHead so it survives every
+    // response path below (Node merges setHeader into a later writeHead's own
+    // headers object). Printed URLs carry the token in ?token=, so the token
+    // is effectively a credential in the address bar; without this, any
+    // outbound navigation/resource load FROM the served UI leaks it to a
+    // third party via the Referer header.
+    res.setHeader("referrer-policy", "no-referrer");
     if (!hostOk(req.headers.host)) {
       res.writeHead(403);
       res.end("forbidden host");
       return;
     }
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
-    const tok = url.searchParams.get("token") ?? (req.headers["x-dom-token"] as string | undefined);
-    if (!tokenOk(tok, token)) {
-      res.writeHead(401);
-      res.end("unauthorized");
-      return;
-    }
-    // Webhook capture: any method to /webhook/:label is stored in the ring buffer
-    // and announced on the bus. The token gate above already protects it.
+
+    // Webhook capture: any method to /webhook/:label is stored in the ring
+    // buffer and announced on the bus. Gated on webhookToken, NOT the master
+    // token — see ServerHandle.webhookToken for why the two must not be the
+    // same secret.
     if (url.pathname.startsWith("/webhook/")) {
+      const whTok = url.searchParams.get("token") ?? (req.headers["x-dom-token"] as string | undefined);
+      if (!tokenOk(whTok, webhookToken)) {
+        res.writeHead(401);
+        res.end("unauthorized");
+        return;
+      }
       void (async () => {
         const label = decodeURIComponent(url.pathname.slice("/webhook/".length)).replace(/\/+$/, "") || "default";
         const body = await readBody(req, 256 * 1024);
@@ -681,8 +730,15 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
       })().catch(() => { res.writeHead(500); res.end("error"); });
       return;
     }
+
+    const tok = url.searchParams.get("token") ?? (req.headers["x-dom-token"] as string | undefined);
+    if (!tokenOk(tok, token)) {
+      res.writeHead(401);
+      res.end("unauthorized");
+      return;
+    }
     if (url.pathname.startsWith("/api/")) {
-      void handleApi(req, url, bridge, res, () => publicUrl, () => (lanAddr ? `http://${lanAddr}:${port}` : null)).then((handled) => {
+      void handleApi(req, url, bridge, res, () => publicUrl, () => (lanAddr ? `http://${lanAddr}:${port}` : null), webhookToken).then((handled) => {
         if (!handled) { res.writeHead(404); res.end("not found"); }
       }).catch(() => { res.writeHead(500); res.end("error"); });
       return;
@@ -692,6 +748,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
 
   server.on("upgrade", (req, socket) => {
     if (!hostOk(req.headers.host)) return void socket.destroy();
+    if (!originOk(req.headers.origin as string | undefined)) return void socket.destroy();
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     // Two token-gated channels: /ws (the event mirror) and /pty (the human terminal,
     // whose output never reaches the bus/model). Everything else is rejected.
@@ -825,6 +882,7 @@ export async function startServer(bridge: AppBridge, opts: { port?: number } = {
   const handle: ServerHandle = {
     url: `http://127.0.0.1:${port}/?token=${token}`,
     token,
+    webhookToken,
     port,
     clients: () => clients.size,
     lanUrl: lanAddr ? `http://${lanAddr}:${port}` : null,

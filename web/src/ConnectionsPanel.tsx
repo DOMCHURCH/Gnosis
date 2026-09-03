@@ -105,7 +105,11 @@ export function ConnectionsBody(props: { data: ConnectionsData | null; memory?: 
         {d.jobs.map((j) => (
           <div key={j.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px" }}>
             <span style={{ width: 7, height: 7, background: j.status === "running" ? "#4ADE80" : "#6B6B7B" }} />
-            <a href={`http://127.0.0.1:${j.port}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#22D3EE", textDecoration: "none", whiteSpace: "nowrap" }}>:{j.port}</a>
+            {/* Built from the page's own host, not a hardcoded 127.0.0.1 — this
+                panel is reached over LAN and the public tunnel too, where
+                127.0.0.1 resolves against the VIEWER's device, not the one
+                actually running the job. */}
+            <a href={`${location.protocol}//${location.hostname}:${j.port}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#22D3EE", textDecoration: "none", whiteSpace: "nowrap" }}>:{j.port}</a>
             <span style={{ fontSize: 9, color: "#6B6B7B", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.command}</span>
           </div>
         ))}

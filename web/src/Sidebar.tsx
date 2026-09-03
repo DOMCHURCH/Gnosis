@@ -175,6 +175,13 @@ export function Sidebar(props: {
   const [open, setOpen] = useState<Record<string, boolean>>({ project: true });
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const hasVault = !!props.vault?.configured;
+  // The Files section's own manual refresh — previously wired to
+  // onRefreshVault, which refetches the Obsidian vault tree (a different,
+  // usually-collapsed panel), not this one: clicking it did nothing a user
+  // could see. fileEpoch already covers changes the agent makes; this covers
+  // the case that can't — a file edited outside dom (another editor, a
+  // terminal) while the tab is idle.
+  const [filesRefreshToken, setFilesRefreshToken] = useState(0);
 
   return (
     <div
@@ -201,7 +208,7 @@ export function Sidebar(props: {
               <button
                 type="button"
                 title="refresh"
-                onClick={(e) => { e.stopPropagation(); props.onRefreshVault(); }}
+                onClick={(e) => { e.stopPropagation(); setFilesRefreshToken((n) => n + 1); }}
                 style={{ fontFamily: MONO, fontSize: 12, lineHeight: 1, background: "transparent", color: "#6B6B7B", border: 0, cursor: "pointer", padding: "0 4px" }}
               >
                 +
@@ -212,7 +219,7 @@ export function Sidebar(props: {
              * to say "these rows belong to the folder above" without giving the
              * rows themselves any more weight. */}
             <div style={{ marginLeft: 27, paddingLeft: 9, borderLeft: "1px solid rgba(255,255,255,0.055)" }}>
-              <FilesBody tabId={props.tabId} fileEpoch={props.fileEpoch} onAttach={props.onAttach} />
+              <FilesBody tabId={props.tabId} fileEpoch={props.fileEpoch} refreshToken={filesRefreshToken} onAttach={props.onAttach} />
             </div>
           </Section>
         </Section>

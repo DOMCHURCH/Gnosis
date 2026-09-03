@@ -1,6 +1,6 @@
 // Verify 3 (controller): separate histories, message-triggers-turn, and the three
 // loop guards (hop limit, no-reply-to-sender, global cap) + badge-without-focus-steal.
-import { TabsController, MAX_HOPS, MAX_MESSAGES } from "../dist/tabs.js";
+import { TabsController, MAX_HOPS, MAX_MESSAGES, MAX_TABS } from "../dist/tabs.js";
 
 let fails = 0;
 const ok = (name, cond) => { console.log(`${cond ? "✓" : "✗"} ${name}`); if (!cond) fails++; };
@@ -61,6 +61,48 @@ controller.messageCount = MAX_MESSAGES;
 const capped = controller.route("main", "worker", "over cap");
 ok("routing past the global cap is a hard stop", !capped.ok && /cap/i.test(capped.message));
 controller.messageCount = saved;
+
+// --- createTab (office mode=real) obeys the SAME loop guards as route() —
+// it is the one path a whole-office fill uses to spawn real, fully-capable
+// tabs, and previously bypassed hops, messageCount, and had no tab-count
+// ceiling at all. ---
+{
+  const c3 = new TabsController(makeEngine(), "main", executor, () => {});
+  const rootTab = c3.active();
+  const rt = rootTab.engine.toolContext.tab;
+
+  const r1 = rt.createTab("w1", "", "do a thing");
+  ok("createTab: a normal call from hop 0 succeeds", r1.ok);
+  ok("...and spends the shared message budget for it", c3.messageCount === 1);
+
+  // hop limit: a creator already at the limit must be refused, not reset to hop 1
+  rootTab.currentHops = MAX_HOPS;
+  const rHop = rt.createTab("wHop", "", "task");
+  ok("createTab: refuses when the creator is already at the hop limit", !rHop.ok && /hop/i.test(rHop.message));
+  ok("...and does NOT create the tab", !c3.byName("wHop"));
+  rootTab.currentHops = 0;
+
+  // message cap: exhaust it, then confirm createTab-with-task is refused too
+  c3.messageCount = MAX_MESSAGES;
+  const rCap = rt.createTab("wCap", "", "task");
+  ok("createTab: refuses past the global message cap, same as route()", !rCap.ok && /cap/i.test(rCap.message));
+  ok("...and does NOT create the tab", !c3.byName("wCap"));
+  c3.messageCount = 0;
+
+  // a task-less createTab doesn't touch hops/messageCount (nothing is dispatched)
+  const rBare = rt.createTab("wBare", "", undefined);
+  ok("createTab: a task-less call still opens an idle tab", rBare.ok && !!c3.byName("wBare"));
+  ok("...without spending the message budget", c3.messageCount === 0);
+  c3.close(c3.byName("wBare").id);
+
+  // tab-count ceiling: nothing capped total tabs before this fix
+  while (c3.tabs.length < MAX_TABS) rt.createTab(undefined, "", undefined);
+  ok(`createTab: reaches the ${MAX_TABS}-tab ceiling`, c3.tabs.length === MAX_TABS);
+  const before = c3.tabs.length;
+  const rFull = rt.createTab("overflow", "", undefined);
+  ok("createTab: refuses once the tab-count cap is reached", !rFull.ok && /cap/i.test(rFull.message));
+  ok("...and does NOT create the tab", c3.tabs.length === before);
+}
 
 // --- self / unknown target ---
 ok("a tab cannot message itself", !controller.route("main", "main", "x").ok);

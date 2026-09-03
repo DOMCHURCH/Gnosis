@@ -3,9 +3,18 @@
 // desktop itself). Detection only — binding + the Host allowlist live in server.ts.
 
 import os from "node:os";
+import net from "node:net";
 
 /** True for a private / link-local IPv4 (the ranges a LAN device would connect on). */
 export function isPrivateIpv4(host: string): boolean {
+  // The prefix regexes below match on TEXT, not structure — unanchored, "10."
+  // matches the start of "10.evil.com" just as readily as "10.1.2.3", which
+  // silently broke the DNS-rebinding defense server.ts's hostOk() relies on
+  // this for (an attacker's own domain resolving/pointing at any hostname
+  // starting with a private-range prefix would read as "private", i.e.
+  // trusted). net.isIPv4 requires a real 4-octet dotted-decimal address
+  // first, so nothing with a hostname tacked on can reach the prefix checks.
+  if (!net.isIPv4(host)) return false;
   return /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^169\.254\./.test(host);
 }
 

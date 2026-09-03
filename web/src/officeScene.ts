@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { ZONES } from "./sessions.js";
+import { escapeHtml } from "./highlight.js";
 
 export type AgentState = "idle" | "thinking" | "awaiting" | "speaking";
 export type SceneAgent = { id: string; name: string; zone: string; slot: number; state: AgentState; color?: string };
@@ -336,8 +337,8 @@ export function createOfficeScene(container: HTMLElement) {
     // room is a label, not an answer — a newcomer cannot tell what any of these
     // rooms are for without asking, so hovering one says it in plain English.
     const el = labelEl(
-      `<span class="zl-name">${z.name}</span><span class="zl-count">0/${z.slots.length}</span>` +
-      `<span class="zl-what">${z.what}</span>`,
+      `<span class="zl-name">${escapeHtml(z.name)}</span><span class="zl-count">0/${z.slots.length}</span>` +
+      `<span class="zl-what">${escapeHtml(z.what)}</span>`,
       "zone-label",
     );
     (el.querySelector(".zl-name") as HTMLElement).style.color = `#${accent.toString(16).padStart(6, "0")}`;
@@ -518,7 +519,12 @@ export function createOfficeScene(container: HTMLElement) {
     badge.visible = agent.state === "awaiting";
     figure.add(badge);
 
-    const el = labelEl(`<span>${agent.name}</span>`, "agent-badge");
+    // agent.name reaches here from the office tool's model-supplied `names`
+    // array (see web/src/store.ts office.place / office.clear) — genuinely
+    // untrusted text, unlike the static zone labels above. Escaped, not just
+    // defensively: an unescaped name was a stored-XSS sink in the one part of
+    // the app the office tool (explicitly ungated — SECURITY.md) can reach.
+    const el = labelEl(`<span>${escapeHtml(agent.name)}</span>`, "agent-badge");
     const label = new CSS2DObject(el);
     label.position.set(0, 1.80, -0.95);
     group.add(label);

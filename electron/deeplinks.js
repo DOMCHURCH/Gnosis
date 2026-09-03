@@ -13,6 +13,23 @@ import { app } from "electron";
 
 const SCHEME = "gnosis";
 
+/**
+ * Defense in depth for gnosis://file/<path>. A gnosis:// link is trivially
+ * attacker-triggerable — any webpage or email link, no confirmation beyond
+ * the OS's own protocol-launch prompt — so the path it names is hardened
+ * here regardless of what the current renderer does with it (today: an
+ * inert @<path> reference dropped into the chat input, never read or
+ * revealed automatically — but that must not be the only thing stopping a
+ * UNC or traversal path from doing something worse if that ever changes).
+ * Rejects a UNC-shaped path, `..` traversal, and anything implausibly long.
+ */
+function safeFilePath(rest) {
+  if (!rest || rest.length > 4096) return null;
+  if (rest.startsWith("\\\\") || rest.startsWith("//")) return null; // UNC
+  if (rest.split(/[\\/]+/).includes("..")) return null; // traversal
+  return rest;
+}
+
 /** Parse a gnosis:// URL into an action, or null if it is not one of ours. */
 export function parseDeepLink(raw) {
   if (typeof raw !== "string") return null;
@@ -34,8 +51,10 @@ export function parseDeepLink(raw) {
     case "session":
       // A name is required; gnosis://session/ alone is ambiguous.
       return rest ? { action: "session", name: rest } : null;
-    case "file":
-      return rest ? { action: "file", path: rest } : null;
+    case "file": {
+      const safe = safeFilePath(rest);
+      return safe ? { action: "file", path: safe } : null;
+    }
     case "serve":
       return { action: "serve" };
     default:

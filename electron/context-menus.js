@@ -56,11 +56,20 @@ export function registerContextMenus({ getRoot }) {
             click: () => {
               // OS-level actions never round-trip through the renderer.
               if (item.command === "file.copyPath") {
-                clipboard.writeText(absolute(getRoot(), payload.path));
+                const abs = absolute(getRoot(), payload.path);
+                if (abs) clipboard.writeText(abs);
                 return;
               }
               if (item.command === "file.reveal") {
-                shell.showItemInFolder(absolute(getRoot(), payload.path));
+                // A path outside root (a "\\host\share\x" UNC form, or plain
+                // ../ traversal) must never reach shell.showItemInFolder: on a
+                // UNC path, Explorer opens an outbound SMB connection to
+                // whatever host is named, which is a well-known way to leak
+                // the machine's NTLM hash. This same renderer is served over
+                // HTTP to LAN browsers (see shell-preload.cjs), so a payload
+                // here is not necessarily hand-typed by the local user.
+                const abs = absolute(getRoot(), payload.path);
+                if (abs) shell.showItemInFolder(abs);
                 return;
               }
               if (win.isDestroyed()) return;
@@ -73,9 +82,22 @@ export function registerContextMenus({ getRoot }) {
   });
 }
 
-/** File-browser paths are relative to the session root; the OS needs absolutes. */
+/**
+ * File-browser paths are relative to the session root; the OS needs
+ * absolutes. Returns null (never a guess) when the resolved path would
+ * escape root — a `..` traversal, a UNC path (`\\host\share\...`), or an
+ * absolute path on a different drive. Callers must not act on a null result.
+ */
 function absolute(root, p) {
+  // path.resolve("") returns the PROCESS'S cwd, not "no root" — checking
+  // truthiness AFTER resolving would silently treat "no session root
+  // configured" as "resolve against wherever Electron's main process
+  // happens to be running from", which is not the same thing as refusing.
+  if (!root) return null;
   const rel = String(p ?? "");
-  if (!rel) return root ?? "";
-  return path.isAbsolute(rel) ? rel : path.join(root ?? "", rel);
+  const rootResolved = path.resolve(root);
+  if (!rel) return rootResolved;
+  const resolved = path.isAbsolute(rel) ? path.resolve(rel) : path.resolve(rootResolved, rel);
+  const within = path.relative(rootResolved, resolved);
+  return within === "" || (!within.startsWith("..") && !path.isAbsolute(within)) ? resolved : null;
 }

@@ -8,11 +8,13 @@ const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
 // The FILES tab body: the active session's cwd as a file tree. Folders expand in
 // place; a file click previews it in a modal; the + button attaches the file to the
-// next message. Refreshes when the tab changes or a tool touches files (fileEpoch,
-// driven by the existing tool.end event stream — no polling). The surrounding panel
-// shell (the collapsible section it sits in) lives in Sidebar.
-export function FilesBody(props: { tabId: number | null; fileEpoch: number; onAttach: (path: string) => void }) {
-  const { tabId, fileEpoch } = props;
+// next message. Refreshes when the tab changes, a tool touches files (fileEpoch,
+// driven by the existing tool.end event stream — no polling), or the panel's own
+// refresh button bumps refreshToken (for a change made outside dom's own tools,
+// which fileEpoch can't see). The surrounding panel shell (the collapsible
+// section it sits in) lives in Sidebar.
+export function FilesBody(props: { tabId: number | null; fileEpoch: number; refreshToken?: number; onAttach: (path: string) => void }) {
+  const { tabId, fileEpoch, refreshToken } = props;
   const [data, setData] = useState<TreeResult | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [preview, setPreview] = useState<FilePreview | null>(null);
@@ -29,7 +31,7 @@ export function FilesBody(props: { tabId: number | null; fileEpoch: number; onAt
     void apiGet<TreeResult>("/api/tree", { tabId: tabId ?? 0, ...(root === "gnosis" ? { root: "gnosis" } : {}) }).then((r) => setData(r));
   }, [tabId, root]);
 
-  useEffect(() => { refresh(); setExpanded({}); }, [refresh, fileEpoch]);
+  useEffect(() => { refresh(); setExpanded({}); }, [refresh, fileEpoch, refreshToken]);
 
   const openFile = (node: TreeNode) => {
     setLoadingPreview(true);

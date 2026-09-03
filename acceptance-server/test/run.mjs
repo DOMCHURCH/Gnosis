@@ -6,7 +6,7 @@
 // "keep the payload and come back" — because getting that backwards is how an
 // acceptance silently disappears.
 
-import { buildServer } from "../src/server.js";
+import { buildServer, resetRateLimitForTests } from "../src/server.js";
 import { validateAcceptance } from "../src/validate.js";
 
 let fails = 0;
@@ -144,6 +144,29 @@ const good = () => ({
   // answering a transient outage with a 4xx would discard a real acceptance.
   ok("a database failure returns 503", res.statusCode === 503, String(res.statusCode));
   await app.close();
+}
+
+// --- 9. rate limiting: an unauthenticated write route needs a ceiling -------
+// installId proves nothing — a client-chosen value with no proof of
+// ownership — so without a limit, anyone can script unlimited distinct rows.
+{
+  resetRateLimitForTests();
+  const app = buildServer({ logger: false, insert: async () => ({ id: "r", created: true }) });
+
+  let last = null;
+  for (let i = 0; i < 20; i++) {
+    last = await app.inject({ method: "POST", url: "/accept", payload: good(), remoteAddress: "203.0.113.10" });
+  }
+  ok("the first 20 requests from one IP within the window all succeed", last.statusCode === 200);
+
+  const over = await app.inject({ method: "POST", url: "/accept", payload: good(), remoteAddress: "203.0.113.10" });
+  ok("the 21st request from the SAME IP in the same window is refused", over.statusCode === 429);
+
+  const other = await app.inject({ method: "POST", url: "/accept", payload: good(), remoteAddress: "203.0.113.11" });
+  ok("a DIFFERENT IP is unaffected by another IP's usage", other.statusCode === 200);
+
+  await app.close();
+  resetRateLimitForTests();
 }
 
 console.log(fails === 0 ? "\nALL PASSED" : `\n${fails} FAILED`);

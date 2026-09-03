@@ -52,7 +52,16 @@ await fs.utimes(path.join(dir, "src", "a.ts"), new Date(Date.now() + 10000), new
 const c3 = await buildRepoMap(dir, 1024);
 ok("touching one file reparses ONLY that file", c3.parsed === 1 && c3.cached === 1);
 
+// --- the cache is shared across cwds: it merges, it does not replace -----------
+// repomap.db is one file under the (fake) home, keyed by absolute path, used by
+// every cwd. Building the map for `dir` just now must not have evicted the
+// entries this suite already cached for `repo` above — a wholesale
+// save-what-I-saw-this-run overwrite would silently do exactly that, forcing
+// every OTHER open project to reparse from cold on its next map.
 process.chdir(prevCwd);
+const d = await buildRepoMap(repo, 1024);
+ok("building a DIFFERENT cwd's map does not evict this repo's cache entries", d.parsed === 0 && d.cached === a.files);
+
 await fs.rm(dir, { recursive: true, force: true });
 await fs.rm(fake, { recursive: true, force: true });
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");

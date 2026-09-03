@@ -200,14 +200,28 @@ export async function configIsBroken(): Promise<boolean> {
   return (await readConfigFile()).broken;
 }
 
-export async function saveConfig(patch: Partial<Config>): Promise<void> {
-  await ensureDir(domDir());
-  const { config: current, broken } = await readConfigFile();
-  // Never merge into a file we could not read: `{...{}, ...patch}` would quietly
-  // drop every setting it holds. Keep the original beside it so nothing is lost.
-  if (broken) await fs.copyFile(configPath(), `${configPath()}.bak`).catch(() => {});
-  const next = { ...current, ...patch };
-  await fs.writeFile(configPath(), JSON.stringify(next, null, 2), "utf8");
+// Chained so concurrent callers in THIS process read-modify-write in order
+// rather than racing. Without it, two tabs saving around the same moment
+// (e.g. tab A's `/model --save` and tab B flipping a web-UI setting) both
+// read the same base snapshot, and whichever writes last silently discards
+// the OTHER caller's entire patch — not just the key it touched. This only
+// orders writes within one process; a second dom process writing the same
+// file is a separate, pre-existing, much rarer race that this doesn't cover.
+let saveChain: Promise<unknown> = Promise.resolve();
+
+export function saveConfig(patch: Partial<Config>): Promise<void> {
+  const run = async (): Promise<void> => {
+    await ensureDir(domDir());
+    const { config: current, broken } = await readConfigFile();
+    // Never merge into a file we could not read: `{...{}, ...patch}` would quietly
+    // drop every setting it holds. Keep the original beside it so nothing is lost.
+    if (broken) await fs.copyFile(configPath(), `${configPath()}.bak`).catch(() => {});
+    const next = { ...current, ...patch };
+    await fs.writeFile(configPath(), JSON.stringify(next, null, 2), "utf8");
+  };
+  const result = saveChain.then(run, run); // run even if the previous save in the chain rejected
+  saveChain = result.catch(() => {}); // never let one failed save wedge the queue for good
+  return result;
 }
 
 /** Parse ~/.dom/.env (KEY=value lines, # comments, optional quotes). Shared by

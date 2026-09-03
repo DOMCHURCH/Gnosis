@@ -100,36 +100,48 @@ async function sessionFileCount(): Promise<number> {
  *  - decisions.md  appended when a decision affects DECISION_MIN_FILES+ files
  *  - patterns.md   a pattern promoted once seen PATTERN_THRESHOLD+ times
  */
-export async function recordSession(fact: SessionFact): Promise<void> {
-  await fs.mkdir(sessionsDir(), { recursive: true });
-  const date = fact.timestamp.slice(0, 10);
-  const file = path.join(sessionsDir(), `${date}-${fact.sessionId}.json`);
-  const existing = JSON.parse((await readText(file)) || "[]");
-  const arr = Array.isArray(existing) ? existing : [];
-  arr.push(fact);
-  await fs.writeFile(file, JSON.stringify(arr, null, 2), "utf8");
+// Multiple tabs/engines share the SAME bank files (they are not per-session),
+// so two turns finishing around the same moment can each read the pre-update
+// banks, compute derived state from that stale snapshot, and write it back —
+// the second write silently discards whatever the first one added. Chained
+// the same way saveConfig() in config.ts serializes ~/.dom/config.json writes.
+let recordChain: Promise<unknown> = Promise.resolve();
 
-  const facts = await allFacts();
+export function recordSession(fact: SessionFact): Promise<void> {
+  const run = async (): Promise<void> => {
+    await fs.mkdir(sessionsDir(), { recursive: true });
+    const date = fact.timestamp.slice(0, 10);
+    const file = path.join(sessionsDir(), `${date}-${fact.sessionId}.json`);
+    const existing = JSON.parse((await readText(file)) || "[]");
+    const arr = Array.isArray(existing) ? existing : [];
+    arr.push(fact);
+    await fs.writeFile(file, JSON.stringify(arr, null, 2), "utf8");
 
-  // files.md — top touched files with counts, recomputed every session.
-  const counts = new Map<string, number>();
-  for (const f of facts) for (const p of f.files_touched ?? []) counts.set(p, (counts.get(p) ?? 0) + 1);
-  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([p, c]) => `- ${p} (${c})`);
-  await writeBank("files", ranked);
+    const facts = await allFacts();
 
-  // errors.md — after every error recovery.
-  if (fact.error_recovery) await appendBank("errors", fact.error_recovery);
+    // files.md — top touched files with counts, recomputed every session.
+    const counts = new Map<string, number>();
+    for (const f of facts) for (const p of f.files_touched ?? []) counts.set(p, (counts.get(p) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([p, c]) => `- ${p} (${c})`);
+    await writeBank("files", ranked);
 
-  // decisions.md — a decision that affected 2+ files.
-  if (fact.decision && (fact.files_touched?.length ?? 0) >= DECISION_MIN_FILES) await appendBank("decisions", fact.decision);
+    // errors.md — after every error recovery.
+    if (fact.error_recovery) await appendBank("errors", fact.error_recovery);
 
-  // patterns.md — promote a pattern once it recurs 3+ times across sessions.
-  if (fact.pattern) {
-    const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-    const pc = new Map<string, number>();
-    for (const f of facts) if (f.pattern) pc.set(norm(f.pattern), (pc.get(norm(f.pattern)) ?? 0) + 1);
-    if ((pc.get(norm(fact.pattern)) ?? 0) >= PATTERN_THRESHOLD) await appendBank("patterns", fact.pattern);
-  }
+    // decisions.md — a decision that affected 2+ files.
+    if (fact.decision && (fact.files_touched?.length ?? 0) >= DECISION_MIN_FILES) await appendBank("decisions", fact.decision);
+
+    // patterns.md — promote a pattern once it recurs 3+ times across sessions.
+    if (fact.pattern) {
+      const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+      const pc = new Map<string, number>();
+      for (const f of facts) if (f.pattern) pc.set(norm(f.pattern), (pc.get(norm(f.pattern)) ?? 0) + 1);
+      if ((pc.get(norm(fact.pattern)) ?? 0) >= PATTERN_THRESHOLD) await appendBank("patterns", fact.pattern);
+    }
+  };
+  const result = recordChain.then(run, run); // run even if the previous record in the chain rejected
+  recordChain = result.catch(() => {}); // never let one failed record wedge the queue for good
+  return result;
 }
 
 /**

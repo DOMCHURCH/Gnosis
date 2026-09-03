@@ -17,11 +17,69 @@ import { insertAcceptance, migrate, closePool } from "./db.js";
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = "0.0.0.0"; // Railway routes to the container's external interface.
 
+// --- rate limiting -----------------------------------------------------------
+//
+// POST /accept is deliberately unauthenticated (see the header comment), and
+// installId proves nothing — it's a client-chosen 32-hex value with no proof
+// of ownership. Without a limit, anyone can script unlimited distinct rows,
+// polluting the evidentiary table and/or exhausting the 5-connection pg pool.
+// A single in-memory fixed-window counter is enough for a single-process
+// service with one route to protect; no dependency added, keeping this
+// project's deliberately small footprint (fastify + pg) as it is.
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const RATE_LIMIT_MAX = 20; // per IP per window — generous for the client's own documented retry/backoff, bounds a script
+const RATE_LIMIT_MAX_TRACKED_IPS = 10_000; // hard ceiling on the table itself, independent of window expiry
+const hits = new Map();
+
+/** True when `ip` has exceeded its window, OR the tracked-IP table itself is
+ * full — shedding load rather than growing the map without bound is the
+ * right failure mode for an unauthenticated write route facing many distinct
+ * source IPs, not just a repeat one. */
+function isRateLimited(ip) {
+  const now = Date.now();
+  const entry = hits.get(ip);
+  if (entry && now < entry.resetAt) {
+    entry.count++;
+    return entry.count > RATE_LIMIT_MAX;
+  }
+  if (hits.size >= RATE_LIMIT_MAX_TRACKED_IPS) {
+    // Opportunistic prune before refusing outright — most of the time this
+    // clears plenty of expired entries and legitimate traffic never notices.
+    for (const [k, e] of hits) if (now >= e.resetAt) hits.delete(k);
+    if (hits.size >= RATE_LIMIT_MAX_TRACKED_IPS) return true;
+  }
+  hits.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+  return false;
+}
+
+/** Test-only: clear accumulated rate-limit state between test cases that need
+ * a clean slate (state is module-level and shared across buildServer() calls
+ * in the same process, same as a real deployment shares it across requests). */
+export function resetRateLimitForTests() {
+  hits.clear();
+}
+
 export function buildServer({ insert = insertAcceptance, logger = true, isReady = () => true } = {}) {
   const app = Fastify({
     logger,
     // The payload is six short fields. Anything larger is not an acceptance.
     bodyLimit: 16 * 1024,
+    // `true` trusts the WHOLE client-supplied X-Forwarded-For chain, so a
+    // client that sends its own XFF header before Railway's edge appends the
+    // real one can make request.ip resolve to a fake, attacker-chosen value
+    // (Fastify takes the leftmost entry) — rotating that value per request
+    // bypasses the IP rate limit below entirely. The fix is a specific
+    // trusted-proxy value (this Fastify version's numeric trustProxy
+    // deliberately "fails closed" to the raw socket address instead of
+    // hop-counting — see node_modules/fastify/lib/request.js
+    // getTrustProxyFn's own comment — so a bare hop count is NOT the right
+    // knob here), but that requires knowing Railway's actual edge IP
+    // range/CIDR, which isn't something to guess: getting it wrong would
+    // make request.ip resolve to Railway's OWN shared edge address for
+    // EVERY distinct user, turning the per-IP limit below into one global
+    // counter across all traffic — a worse regression than the spoofing gap
+    // it would "fix". Left as `true`, documented rather than silently
+    // guessed at. See SECURITY.md / the release audit notes.
     trustProxy: true,
   });
 
@@ -36,6 +94,9 @@ export function buildServer({ insert = insertAcceptance, logger = true, isReady 
   app.get("/health", async () => ({ ok: true, ready: isReady() }));
 
   app.post("/accept", async (request, reply) => {
+    if (isRateLimited(request.ip)) {
+      return reply.code(429).send({ ok: false, error: "too many requests; try again later" });
+    }
     const result = validateAcceptance(request.body);
     if (!result.ok) {
       // 400 is meaningful to the client: it stops retrying on a 4xx, because a

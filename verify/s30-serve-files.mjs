@@ -23,6 +23,8 @@ await fs.mkdir(path.join(proj, "src"), { recursive: true });
 await fs.writeFile(path.join(proj, "src", "main.ts"), "export const n = 41;\n");
 await fs.mkdir(path.join(proj, "node_modules"), { recursive: true });
 await fs.writeFile(path.join(proj, "node_modules", "junk.js"), "noise");
+await fs.writeFile(path.join(proj, "evil.svg"), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.location)</script></svg>');
+await fs.writeFile(path.join(proj, "pic.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
 const bus = new EventBus();
 const bridge = createBridge(bus);
@@ -36,7 +38,7 @@ function httpGet(pathWithQuery, { host = "localhost" } = {}) {
     const req = http.request({ host: "127.0.0.1", port: server.port, path: pathWithQuery, method: "GET", headers: { Host: host } }, (res) => {
       let body = "";
       res.on("data", (c) => { body += c.toString("utf8"); });
-      res.on("end", () => resolve({ status: res.statusCode, body }));
+      res.on("end", () => resolve({ status: res.statusCode, body, headers: res.headers }));
     });
     req.on("error", reject);
     req.end();
@@ -77,6 +79,22 @@ try {
   // non-localhost Host → 403 (DNS-rebinding defense), even with a good token
   const badHost = await httpGet(`/api/tree?token=${T}&tabId=7`, { host: "evil.example.com" });
   ok("a non-localhost Host is rejected (403)", badHost.status === 403);
+
+  // /api/file/raw: an SVG is the one inline-rendered raw type that can carry a
+  // <script> — opened directly (not via <img>, which never executes SVG
+  // script), it would run in the server's own origin with the page's own
+  // ?token= sitting in location.search. It must be forced through the same
+  // download path an unknown type already gets, plus a locked-down CSP.
+  const svg = await httpGet(`/api/file/raw?token=${T}&tabId=7&path=evil.svg`);
+  ok("/api/file/raw returns 200 for an SVG", svg.status === 200);
+  ok("...still reports the real SVG content-type", svg.headers["content-type"] === "image/svg+xml");
+  ok("...but forces it to download rather than render inline", /^attachment/.test(svg.headers["content-disposition"] ?? ""));
+  ok("...and locks it down with a CSP as a second layer", svg.headers["content-security-policy"] === "default-src 'none'; sandbox");
+  ok("...body is untouched (still the real bytes, not stripped)", svg.body.includes("<script>"));
+
+  // An ordinary image must NOT be forced to download — only SVG carries this risk.
+  const png = await httpGet(`/api/file/raw?token=${T}&tabId=7&path=pic.png`);
+  ok("/api/file/raw does not force-download an ordinary image", png.status === 200 && !png.headers["content-disposition"]);
 } catch (e) {
   ok(`serve-files completed (${e.message})`, false);
 }

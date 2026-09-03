@@ -102,6 +102,13 @@ export class McpServer {
       return;
     }
 
+    // Tracked outside `this.client` from the moment it's constructed — the
+    // catch block below closes THIS, not this.client, which used to stay null
+    // until every await below succeeded. A connect()/listTools() timeout threw
+    // before that assignment ever ran, so the catch's `this.client?.close()`
+    // closed nothing and the transport's spawned child process (npx and
+    // whatever it launches) leaked as an orphan for the life of the process.
+    let client: Client | undefined;
     try {
       const env = await resolveServerEnv(this.config);
       const transport = new StdioClientTransport({
@@ -110,7 +117,7 @@ export class McpServer {
         env,
         stderr: "ignore",
       });
-      const client = new Client({ name: "gnosis", version: "1.3.0" }, { capabilities: {} });
+      client = new Client({ name: "gnosis", version: "1.3.0" }, { capabilities: {} });
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, "connect timed out");
       const listed = await withTimeout(client.listTools(), CONNECT_TIMEOUT_MS, "listTools timed out");
       const offered = (listed.tools ?? []).map((t: any) => ({
@@ -136,7 +143,7 @@ export class McpServer {
     } catch (e) {
       this.status = "error";
       this.error = (e as Error)?.message ?? String(e);
-      try { await this.client?.close(); } catch { /* ignore */ }
+      try { await client?.close(); } catch { /* ignore */ }
       this.client = null;
     }
   }

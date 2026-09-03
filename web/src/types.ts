@@ -172,6 +172,9 @@ export interface WebhookData {
   webhooks: WebhookEntry[];
   labels: string[];
   public: string | null;
+  /** Separate, lower-privilege token for /webhook/* — NOT the session's master
+   * token, which is shell-equivalent (see ServerHandle.webhookToken). */
+  webhookToken: string;
 }
 
 /** A live selection overlay mirrored from the TUI (model/session/file/history). */

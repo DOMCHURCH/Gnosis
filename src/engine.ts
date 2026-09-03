@@ -17,6 +17,7 @@ import { recordSession } from "./sessionmemory.js";
 import { isWebFile } from "./design.js";
 import { captureScreenshot } from "./screenshot.js";
 import { chooseLsp, countLspErrors, type Markers } from "./lsp.js";
+import { resolveUserPath } from "./homepath.js";
 
 /** Pull the human-readable limit phrase out of a 413 error body for the message. */
 export function limitPhrase(detail: string): string {
@@ -1749,7 +1750,7 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
   /** Record that a file was read this session, at its current mtime. */
   private async recordRead(p: string): Promise<void> {
     try {
-      const abs = path.resolve(this.cwd, p);
+      const abs = resolveUserPath(this.cwd, p);
       const st = await fs.stat(abs);
       this.readFiles.set(abs, st.mtimeMs);
     } catch {
@@ -1763,7 +1764,7 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
    * changed on disk since it read it. Creating a NEW file with write is exempt.
    */
   private async precheckStale(tool: "write" | "edit", args: any): Promise<string | null> {
-    const abs = path.resolve(this.cwd, String(args.path ?? ""));
+    const abs = resolveUserPath(this.cwd, String(args.path ?? ""));
     let st: Awaited<ReturnType<typeof fs.stat>> | null = null;
     try {
       st = await fs.stat(abs);
@@ -1881,7 +1882,7 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
     }
     if (!result.isError && (tool.name === "write" || tool.name === "edit")) {
       this.editedThisTurn = true; // arm the auto lint/test loop
-      const abs = path.resolve(this.cwd, String(args.path ?? ""));
+      const abs = resolveUserPath(this.cwd, String(args.path ?? ""));
       // Capture the pre-turn HEAD before the first edit's commit, for the verifier's diff.
       if (this.turnBaseSha === undefined) this.turnBaseSha = await gitHead(this.cwd);
       this.turnEditedFiles.add(abs);

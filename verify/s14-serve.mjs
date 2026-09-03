@@ -59,14 +59,16 @@ function decodeServerFrames(buf, onText) {
   return buf.subarray(off);
 }
 
-function wsConnect(token) {
+function wsConnect(token, origin) {
   return new Promise((resolve) => {
     const socket = net.connect(server.port, "127.0.0.1", () => {
       const key = crypto.randomBytes(16).toString("base64");
       socket.write(
         `GET /ws${token ? `?token=${token}` : ""} HTTP/1.1\r\n` +
           `Host: localhost:${server.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n` +
-          `Sec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`,
+          `Sec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n` +
+          (origin ? `Origin: ${origin}\r\n` : "") +
+          `\r\n`,
       );
     });
     let buf = Buffer.alloc(0);
@@ -97,6 +99,14 @@ function wsConnect(token) {
 ok("WS connect without a token is refused (no 101)", (await wsConnect(null)).ok === false);
 const client = await wsConnect(server.token);
 ok("WS connect with the token upgrades (101)", client.ok === true);
+
+// --- WS Origin enforcement (defense in depth beyond the token) --------------
+// A browser always sends Origin; a non-browser client (curl, a Node script —
+// the documented way to drive dom serve directly) never does, so its absence
+// alone must not be treated as suspicious.
+ok("WS connect with NO Origin header still upgrades (non-browser clients)", (await wsConnect(server.token, null)).ok === true);
+ok("WS connect with a same-host Origin still upgrades", (await wsConnect(server.token, `http://127.0.0.1:${server.port}`)).ok === true);
+ok("WS connect with a cross-site Origin is refused even with a valid token", (await wsConnect(server.token, "http://evil.example.com")).ok === false);
 
 // Every connection opens with server.hello — which server instance this is, so a
 // client resuming against a restarted one can drop the old picture BEFORE the new

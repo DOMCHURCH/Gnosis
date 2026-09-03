@@ -35,6 +35,16 @@ ok("isPrivateIpv4 covers the four private/link-local ranges",
   isPrivateIpv4("10.1.2.3") && isPrivateIpv4("192.168.0.1") && isPrivateIpv4("172.20.0.1") && isPrivateIpv4("169.254.9.9")
   && !isPrivateIpv4("172.15.0.1") && !isPrivateIpv4("172.32.0.1") && !isPrivateIpv4("8.8.8.8"));
 
+// The prefix regexes match TEXT, not structure — unanchored, "10." matches the
+// START of a hostname just as readily as a real IPv4, which would read an
+// attacker's own domain as "private" (i.e. trusted by hostOk's DNS-rebinding
+// defense) purely because it happens to start with a private-range prefix.
+ok("isPrivateIpv4 rejects a hostname merely PREFIXED like a private range",
+  !isPrivateIpv4("10.evil.com") && !isPrivateIpv4("192.168.1.1.attacker.example.com") &&
+  !isPrivateIpv4("172.16.attacker.io") && !isPrivateIpv4("169.254.evil.net"));
+ok("...and hostOk agrees — refuses the same hostnames dressed up as a Host header",
+  !hostOk("10.evil.com:7777") && !hostOk("192.168.1.1.attacker.example.com:7777") && !hostOk("172.16.attacker.io:7777"));
+
 // --- the --lan flag is gone --------------------------------------------------
 const flags = parseArgs(["serve", "--lan"]);
 ok("parseArgs no longer sets a lan flag", flags.lan === undefined);
@@ -93,4 +103,11 @@ try {
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
-process.exit(fails ? 1 : 0);
+// Not process.exit(): this suite is the one real net.Server + fetch() combo in
+// the fleet, and forcing an immediate exit races libuv's own handle-closing
+// on Windows (fetch's undici socket teardown vs. the just-awaited
+// server.close()), surfacing as "Assertion failed:
+// !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76" AFTER
+// every assertion above has already passed. Setting exitCode and letting the
+// event loop drain avoids tearing down a handle mid-close.
+process.exitCode = fails ? 1 : 0;

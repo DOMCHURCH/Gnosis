@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { WebhookData, WebhookEntry } from "./types";
-import { apiGet, apiPost, token } from "./api";
+import { apiGet, apiPost } from "./api";
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -69,7 +69,11 @@ export function WebhooksBody(props: { webhookEpoch: number; localOrigin: string 
 
   // External services need the PUBLIC url when a tunnel is up; else the local one.
   const base = data?.public ?? props.localOrigin;
-  const hookUrl = `${base.replace(/\/$/, "")}/webhook/${encodeURIComponent(label || "test")}?token=${token()}`;
+  // webhookToken, not the session's master token — this URL is handed to
+  // third-party services that routinely show full delivery URLs (including
+  // the query string) to anyone with admin on that integration, and the
+  // master token is equivalent to a full interactive shell.
+  const hookUrl = data ? `${base.replace(/\/$/, "")}/webhook/${encodeURIComponent(label || "test")}?token=${data.webhookToken}` : "";
   const copy = () => { void navigator.clipboard?.writeText(hookUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }); };
 
   const list = (data?.webhooks ?? []).filter((w) => {

@@ -41,10 +41,20 @@ const targetUrl = `http://127.0.0.1:${target.address().port}/hook`;
 
 try {
   const T = server.token;
+  const WH = server.webhookToken;
+
+  // token separation: /webhook/* is gated on its OWN token, not the master
+  // one — the master token is equivalent to a full interactive shell (via
+  // /pty), and a webhook URL is handed to third-party services that
+  // routinely show full delivery URLs to anyone with admin on that
+  // integration, so the two must not be the same secret.
+  ok("webhookToken is a real, distinct token", typeof WH === "string" && WH.length > 0 && WH !== T);
+  ok("the MASTER token does NOT authorize webhook capture", (await req("POST", `/webhook/stripe?token=${T}`, { body: "{}" })).status === 401);
+  ok("the webhook token does NOT authorize an ordinary /api/* route", (await req("GET", `/api/serveinfo?token=${WH}`)).status === 401);
 
   // capture
   const payload = JSON.stringify({ event: "checkout.session.completed", amount: 4200 });
-  const cap = await req("POST", `/webhook/stripe?token=${T}`, { body: payload });
+  const cap = await req("POST", `/webhook/stripe?token=${WH}`, { body: payload });
   ok("POST /webhook/:label returns 200 ok", cap.status === 200 && JSON.parse(cap.body).ok === true);
   const id = JSON.parse(cap.body).id;
   ok("webhook.received was emitted on the bus", events.some((e) => e.label === "stripe" && e.id === id));
@@ -55,6 +65,7 @@ try {
   ok("/api/webhooks lists the captured webhook", list.status === 200 && lj.webhooks.some((w) => w.id === id && w.label === "stripe"));
   ok("the stored body is the posted payload", lj.webhooks.find((w) => w.id === id).body === payload);
   ok("/api/webhooks reports public:null when no tunnel", lj.public === null);
+  ok("/api/webhooks hands the client the webhook token, matching the server's", lj.webhookToken === WH);
 
   // replay
   const rep = await req("POST", `/api/webhooks/${id}/replay?token=${T}`, { body: JSON.stringify({ target: targetUrl }) });
@@ -70,7 +81,7 @@ try {
 
   // gates
   ok("bad token → 401 on capture", (await req("POST", `/webhook/x?token=WRONG`, { body: "{}" })).status === 401);
-  ok("non-localhost Host → 403 on capture", (await req("POST", `/webhook/x?token=${T}`, { host: "evil.example.com", body: "{}" })).status === 403);
+  ok("non-localhost Host → 403 on capture", (await req("POST", `/webhook/x?token=${WH}`, { host: "evil.example.com", body: "{}" })).status === 403);
 } catch (e) {
   ok(`serve-webhooks completed (${e.message})`, false);
 }

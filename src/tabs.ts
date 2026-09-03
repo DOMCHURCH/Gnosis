@@ -16,6 +16,11 @@ import type { EventBus, AppBridge } from "./events.js";
 
 export const MAX_HOPS = 3;
 export const MAX_MESSAGES = 20;
+/** Total live tabs a single process will hold. A whole-office fill (office.ts
+ * ZONE_DESKS) opens at most 19 real sessions in one call — this leaves
+ * headroom for that plus the root tab and a few the user opened by hand,
+ * while still hard-stopping runaway recursive growth well short of it. */
+export const MAX_TABS = 32;
 
 export type Badge = "none" | "output" | "approval";
 
@@ -367,17 +372,41 @@ export class TabsController {
       selfId: () => tab.id,
       sendMessage: (to, text) => this.route(tab.name, to, text),
       createTab: (name, purpose, task) => {
-        const made = this.create(name, purpose);
+        // office(mode="real") is the one caller of this path (a whole-office fill
+        // can open up to 19 tabs in one call, and each of THOSE tabs can call
+        // office again on its own first turn), so a spawned tab must be bound by
+        // the same loop guards route() enforces for ordinary inter-agent
+        // messages — otherwise tab creation is an unguarded side door around all
+        // three of them. It previously hardcoded hops:1 regardless of the
+        // creator's own depth (so a tab already deep in a hop chain could reset
+        // to a fresh hop-1 tree) and never touched messageCount (so creation
+        // didn't spend the per-session cap at all) — together, an unbounded
+        // recursive spawn with no backstop. A tab-count ceiling is new; nothing
+        // capped total tabs before.
+        if (this.tabs.length >= MAX_TABS) {
+          return { ok: false, message: `office: not opened — already at the ${MAX_TABS}-session cap for this process.` };
+        }
         const text = task?.trim();
+        let hops = 1;
+        if (text) {
+          hops = tab.currentHops + 1;
+          if (hops > MAX_HOPS) {
+            return { ok: false, message: `office: not opened — this would be hop ${hops}, over the ${MAX_HOPS}-hop limit. Loop stopped.` };
+          }
+          if (this.messageCount >= MAX_MESSAGES) {
+            return { ok: false, message: `office: not opened — inter-agent message cap (${MAX_MESSAGES}/session) reached. Hard stop.` };
+          }
+        }
+        const made = this.create(name, purpose);
         if (text) {
           // Seeded straight into the new tab's queue rather than through route():
           // this is the first task handed to a session that has never run, not a
-          // reply, so it must not spend the per-session inter-agent message
-          // budget (a whole-office fill would eat all of it). It still starts at
-          // hop 1, so anything the new tab goes on to send stays hop-bounded.
-          made.queue.push({ from: tab.name, text, hops: 1 });
+          // reply — but it still spends the shared budget and carries the real
+          // hop depth, exactly like a route()d message would.
+          this.messageCount++;
+          made.queue.push({ from: tab.name, text, hops });
           if (made.id !== this.activeId && made.badge !== "approval") made.badge = "output";
-          this.bus?.emit({ type: "message.sent", from: tab.name, to: made.name, hops: 1 });
+          this.bus?.emit({ type: "message.sent", from: tab.name, to: made.name, hops });
           this.onChange();
           this.dispatch(made);
         }

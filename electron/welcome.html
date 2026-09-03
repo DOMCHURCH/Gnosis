@@ -225,10 +225,20 @@
           paintVoice();
           void checkVoiceDeps();
           if (s && s.enabled && s.wakeWord === false) {
-            $("voiceNote").innerHTML =
-              '<strong style="color:var(--amber)">Voice is on, but the wake word is not ready.</strong> ' +
-              (s.reason ? String(s.reason) : "") +
-              ' You can finish setting it up in Settings → Voice → Install voice support.';
+            // Built with DOM APIs, not innerHTML — s.reason can originate from
+            // openWakeWord/Python stderr text (see wakeword.js), and every
+            // other dynamic-text site in this app deliberately uses
+            // textContent so it can never become a script sink.
+            const note = $("voiceNote");
+            note.textContent = "";
+            const strong = document.createElement("strong");
+            strong.style.color = "var(--amber)";
+            strong.textContent = "Voice is on, but the wake word is not ready.";
+            note.appendChild(strong);
+            note.appendChild(document.createTextNode(
+              (s.reason ? " " + String(s.reason) : "") +
+              " You can finish setting it up in Settings → Voice → Install voice support.",
+            ));
           }
         } catch (e) {
           voiceOn = false;

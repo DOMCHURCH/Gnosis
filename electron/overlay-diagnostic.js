@@ -135,7 +135,12 @@ export function runOverlayDiagnostic() {
       webPreferences: {
         preload: path.join(here, "voice-preload.cjs"),
         contextIsolation: true,
-        sandbox: false,
+        // voice.js's real overlay does not set `sandbox` at all (Electron 44
+        // defaults it to true) — this file's own comment above says these
+        // options "must stay copied," and `sandbox: false` had drifted from
+        // that. Left in place, a diagnostic-only window (opt-in via
+        // GNOSIS_OVERLAY_DIAGNOSTIC=1) would misrepresent what the shipped
+        // window's webPreferences actually are.
       },
     });
     overlay.setAlwaysOnTop(true, "screen-saver");

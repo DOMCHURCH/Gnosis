@@ -218,7 +218,7 @@ what the agent was doing instead of scrolling a wall of text and hoping.
   edits are grounded in the real shape of the codebase
 - **Streaming diffs** — a large edit writes progressively into a live diff viewer
   and only lands on disk at commit
-- **144 automated test suites** — offline, isolated, green on Windows CI every push
+- **151 automated test suites** — offline, isolated, green on Windows CI every push
 
 <div align="center">
 
@@ -287,7 +287,7 @@ secrets are referenced as `${VAR_NAME}` rather than inlined. Full details in
 
 ## Development
 
-Want to contribute? The codebase is well-tested — 144 suites, all offline and
+Want to contribute? The codebase is well-tested — 151 suites, all offline and
 isolated — and the architecture is documented in
 [CONTRIBUTING.md](CONTRIBUTING.md), along with test conventions and how to add
 a skill.
@@ -298,7 +298,7 @@ cd Gnosis
 npm install
 npm run build
 npm link
-npm run verify      # 144 test suites
+npm run verify      # 151 test suites
 npm run eval        # 10-task eval harness
 ```
 

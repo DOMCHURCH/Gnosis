@@ -25,7 +25,7 @@
 
 import os from "node:os";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { gnosisDir } from "./workspace.js";
 
 // A directory is "a project" if it, or an ancestor, has a VCS dir or a build
@@ -53,9 +53,37 @@ export function sourceDir(): string {
   return path.join(os.homedir(), "dom");
 }
 
-/** True when `target` is `root` or sits underneath it. */
+/**
+ * Resolve `target` through any symlinks in the portion of the path that
+ * already exists on disk, so a symlink planted inside an allowed directory
+ * (e.g. materialized by cloning/checking out a repo that commits one) can't
+ * redirect a write/edit to a location the containment checks below would
+ * otherwise reject. The final, possibly not-yet-created, path segment is
+ * appended untouched — a "create" target legitimately doesn't exist yet.
+ */
+function realish(target: string): string {
+  const abs = path.resolve(target);
+  let dir = abs;
+  const tail: string[] = [];
+  while (!existsSync(dir)) {
+    const parent = path.dirname(dir);
+    if (parent === dir) return abs; // hit the filesystem root, nothing real found
+    tail.unshift(path.basename(dir));
+    dir = parent;
+  }
+  try {
+    const realDir = realpathSync(dir);
+    return tail.length ? path.join(realDir, ...tail) : realDir;
+  } catch {
+    return abs; // realpath failed (permissions, TOCTOU race) — fall back to the literal path
+  }
+}
+
+/** True when `target` is `root` or sits underneath it. Both sides are
+ *  resolved through symlinks first (see realish) — plain path.resolve
+ *  comparison alone can't see a symlink that points outside `root`. */
 export function isInside(target: string, root: string): boolean {
-  const rel = path.relative(path.resolve(root), path.resolve(target));
+  const rel = path.relative(realish(root), realish(target));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
@@ -202,7 +230,14 @@ export function commandPaths(cmd: string, cwd: string): string[] {
   const home = os.homedir();
   const norm = cmd.replace(/\\/g, "/");
   for (const arg of argumentTokens(norm)) {
-    const re = /(?:[A-Za-z]:)?[~.]?[/\w][\w./~-]*/g;
+    // [~.]? previously only ever consumed ONE leading dot, so a token starting
+    // with ".." (any relative traversal) lost its first "." entirely before the
+    // rest of the token could match — "../dom/x" extracted as "./dom/x",
+    // "../../dom/x" as "./../dom/x" (one level too shallow) — silently
+    // defeating both source-directory protection and delete-confirmation for
+    // ordinary relative paths. (?:~|\.+)? instead consumes a run of dots (or a
+    // single ~) as one unit, so a chain of ".." segments round-trips intact.
+    const re = /(?:[A-Za-z]:)?(?:~|\.+)?[/\w][\w./~-]*/g;
     for (let m = re.exec(arg); m; m = re.exec(arg)) {
       let tok = m[0];
       if (tok.length < 2 || /^-/.test(tok)) continue;

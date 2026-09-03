@@ -268,7 +268,12 @@ export async function buildRepoMap(cwd: string, budgetTokens = 1024): Promise<Re
       fresh[abs] = { mtimeMs, defs: [], refs: {} };
     }
   }
-  await saveDb(fresh);
+  // Merge, not replace: `fresh` only covers files under THIS cwd, but the same
+  // cache file is shared by every repo/tab. Replacing it wholesale silently
+  // evicted every other cwd's entries on their next read, forcing a full
+  // reparse there — not a correctness bug, but it defeated the cache for
+  // anyone working across more than one repo root.
+  await saveDb({ ...db, ...fresh });
 
   // name → files defining it.
   const definedIn = new Map<string, string[]>();

@@ -4,6 +4,8 @@
 // history or the transcript (Authorization/api-key are shown as <redacted>, and
 // the echoed request uses the model's original ${VAR} text, never the value).
 
+import net from "node:net";
+import { lookup as realDnsLookup } from "node:dns/promises";
 import { loadEnv, envPath } from "../config.js";
 import { truncateOutput } from "./truncate.js";
 import type { HttpArgs } from "./schemas.js";
@@ -35,39 +37,51 @@ export function normalizeMethod(method: unknown): string {
 export { loadEnv, envPath };
 
 // --- SSRF / scheme guard ----------------------------------------------------
+//
+// Address ranges are enforced with node:net's BlockList rather than hand-rolled
+// regex. This matters specifically for IPv6: BlockList#check() correctly
+// resolves an IPv4-mapped IPv6 literal (::ffff:127.0.0.1, and any of its many
+// equivalent compressed forms, e.g. what new URL() actually normalizes it to:
+// "::ffff:7f00:1") against the ipv4 rules below — verified empirically, since a
+// naive regex on the literal text (the previous approach) only ever matches the
+// one exact spelling it was written against and lets every other valid
+// spelling of the same address through. The bare "::/96" rule additionally
+// catches the deprecated IPv4-compatible form (::a.b.c.d, no ffff marker),
+// which BlockList does not special-case on its own — that /96 does not
+// overlap ::ffff:0:0/96 (verified), so real IPv4-mapped public addresses are
+// unaffected.
+const BLOCKED = new net.BlockList();
+BLOCKED.addSubnet("0.0.0.0", 8, "ipv4"); // 0.0.0.0/8
+BLOCKED.addSubnet("127.0.0.0", 8, "ipv4"); // loopback
+BLOCKED.addSubnet("10.0.0.0", 8, "ipv4"); // private
+BLOCKED.addSubnet("172.16.0.0", 12, "ipv4"); // private
+BLOCKED.addSubnet("192.168.0.0", 16, "ipv4"); // private
+BLOCKED.addSubnet("169.254.0.0", 16, "ipv4"); // link-local incl. 169.254.169.254 metadata
+BLOCKED.addSubnet("::1", 128, "ipv6"); // loopback
+BLOCKED.addSubnet("::", 128, "ipv6"); // unspecified
+BLOCKED.addSubnet("fe80::", 10, "ipv6"); // link-local
+BLOCKED.addSubnet("fc00::", 7, "ipv6"); // unique-local
+BLOCKED.addSubnet("::", 96, "ipv6"); // deprecated IPv4-compatible ::a.b.c.d/96
 
-/** Is this hostname a loopback / private / link-local / cloud-metadata target? */
+/** Is this hostname (already resolved to a literal IP) a loopback / private /
+ * link-local / cloud-metadata address? Hostnames that are not IP literals
+ * return false here — see resolvedHostBlockReason for the DNS-aware check. */
 function isBlockedHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, ""); // strip IPv6 brackets
   if (!h) return true;
   if (h === "localhost" || h.endsWith(".localhost")) return true;
-  if (h === "::" || h === "::1") return true; // IPv6 unspecified / loopback
-  if (/^fe80:/i.test(h)) return true; // IPv6 link-local
-  if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true; // IPv6 unique-local fc00::/7
-
-  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (v4) {
-    const a = Number(v4[1]);
-    const b = Number(v4[2]);
-    if (a === 0) return true; // 0.0.0.0/8
-    if (a === 127) return true; // loopback 127.0.0.0/8
-    if (a === 10) return true; // private 10.0.0.0/8
-    if (a === 192 && b === 168) return true; // private 192.168.0.0/16
-    if (a === 172 && b >= 16 && b <= 31) return true; // private 172.16.0.0/12
-    if (a === 169 && b === 254) return true; // link-local incl. 169.254.169.254 metadata
-    return false;
-  }
-
-  // IPv4-mapped IPv6, e.g. ::ffff:127.0.0.1
-  const mapped = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i);
-  if (mapped) return isBlockedHost(mapped[1]!);
+  if (net.isIPv4(h)) return BLOCKED.check(h, "ipv4");
+  if (net.isIPv6(h)) return BLOCKED.check(h, "ipv6");
   return false;
 }
 
 /**
  * Reason this URL must be blocked outright (never prompted), or null if allowed.
- * Rejects non-http(s) schemes (file/ftp/...) and SSRF targets. Also used by the
- * permission gate so a blocked request is refused before any prompt.
+ * Rejects non-http(s) schemes (file/ftp/...) and literal-IP SSRF targets. Also
+ * used by the permission gate so a blocked request is refused before any
+ * prompt. This is a synchronous, DNS-free check — see resolvedHostBlockReason
+ * for the check that also catches a hostname that merely *resolves* to a
+ * blocked address, which this function cannot see.
  */
 export function httpBlockReason(args: { url?: unknown }): string | null {
   const raw = String(args?.url ?? "");
@@ -84,6 +98,49 @@ export function httpBlockReason(args: { url?: unknown }): string | null {
   }
   if (isBlockedHost(u.hostname)) {
     return `http: blocked host ${u.hostname} — loopback, private, or cloud-metadata addresses are refused (SSRF guard).`;
+  }
+  return null;
+}
+
+/**
+ * DNS-aware companion to httpBlockReason: resolves a non-literal hostname and
+ * checks EVERY returned address against the same blocklist, refusing the
+ * whole request if any of them lands inside it. Without this, a domain name
+ * (as opposed to an IP literal) sailed through the guard entirely — nothing
+ * upstream of fetch() ever inspected what it actually resolves to. A literal
+ * IP hostname is skipped here (already fully covered by isBlockedHost).
+ *
+ * This still leaves a narrow, acknowledged residual race: fetch()'s own DNS
+ * resolution happens moments after this check, so a resolver that returns a
+ * different, blocked answer on the *next* lookup (true DNS rebinding, which
+ * requires an attacker-controlled authoritative server and a very low TTL)
+ * is not fully pinned out. That is a materially harder attack than the
+ * "domain just resolves to an internal IP" case this closes, and matches
+ * common practice for this class of guard.
+ */
+// Swappable so offline verify suites can mock fetch() without needing real
+// DNS to resolve their test hostnames (api.example.com and friends don't have
+// A/AAAA records) — production always uses the real resolver.
+let dnsLookupImpl: typeof realDnsLookup = realDnsLookup;
+/** Test-only: override the resolver resolvedHostBlockReason uses. Pass null
+ * to restore the real one. */
+export function setDnsLookupForTests(fn: typeof realDnsLookup | null): void {
+  dnsLookupImpl = fn ?? realDnsLookup;
+}
+
+async function resolvedHostBlockReason(hostname: string): Promise<string | null> {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h || net.isIP(h)) return null; // literal IPs are handled by isBlockedHost already
+  let records: { address: string }[];
+  try {
+    records = await dnsLookupImpl(h, { all: true, verbatim: true });
+  } catch (e) {
+    return `http: could not resolve host ${h}: ${(e as Error).message}`;
+  }
+  for (const r of records) {
+    if (isBlockedHost(r.address)) {
+      return `http: blocked host ${h} — resolves to ${r.address}, a loopback, private, or cloud-metadata address (SSRF guard).`;
+    }
   }
   return null;
 }
@@ -189,6 +246,8 @@ export async function runHttp(args: HttpArgs, signal?: AbortSignal): Promise<Too
     for (let hop = 0; ; hop++) {
       const hopBlock = httpBlockReason({ url: currentUrl });
       if (hopBlock) return { output: `${hopBlock} (redirect target)`, isError: true };
+      const dnsBlock = await resolvedHostBlockReason(new URL(currentUrl).hostname);
+      if (dnsBlock) return { output: `${dnsBlock}${hop > 0 ? " (redirect target)" : ""}`, isError: true };
       response = await fetch(currentUrl, {
         method,
         headers: sentHeaders,
