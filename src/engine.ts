@@ -1385,14 +1385,89 @@ ${approvalNotice(this.mode, this.autoApproveEdits)}`;
     });
     return Promise.all(
       subtasks.map(async (t, i) => {
-        const res = await this.runSubAgent(t.description, t.prompt, signal, {
-          maxIter: COORD_SUBAGENT_MAX_ITER,
-          tokenBudget: budgets[i],
-          tools,
-        });
-        return { ...res, description: t.description };
+        // Reserve the estimated spend BEFORE the await below, synchronously.
+        // Array.prototype.map invokes every one of these async callbacks back
+        // to back, and each runs uninterrupted up to its OWN first `await` —
+        // nothing else executes on this single JS thread until one of them
+        // yields — so this check-then-reserve is atomic across the whole
+        // fan-out with no lock needed. Without it, N sub-agents dispatched
+        // near the ceiling would each see the SAME this.cost.usd (no
+        // sibling's actual cost has landed yet, since none of them have
+        // reached an await either), so all N could independently pass a
+        // "not over budget yet" check and collectively overshoot by up to
+        // N-1 reservations' worth before the first one even finishes.
+        const est = this.estimateSubAgentUsd(budgets[i]!);
+        const projected = this.cost.usd + this.reservedUsd + est;
+        if (projected >= this.budgetCeiling) {
+          const text =
+            `Refused: dispatching this sub-agent would put projected spend at $${projected.toFixed(4)}, ` +
+            `past the $${this.budgetCeiling.toFixed(2)} budget ceiling (committed so far: ` +
+            `$${this.cost.usd.toFixed(4)}; reserved for ${this.reservedUsd > 0 ? "sibling sub-agents still running" : "nothing else right now"}: ` +
+            `$${this.reservedUsd.toFixed(4)}; this one's estimate: $${est.toFixed(4)}).`;
+          // No subagent.start was ever emitted for this one, so without an
+          // end event the web floor's task.plan row would sit at "queued"
+          // forever — the same fold the web already uses for a real failure
+          // (foldPlan in taskplan.js matches subagent.end by description
+          // regardless of whether that subtask ever reached "running").
+          this.bus?.emit({ type: "subagent.end", tabId: this.agentId, description: t.description, result: text.slice(0, 500), ok: false });
+          return { text, tools: 0, tokens: 0, capped: "budget", description: t.description };
+        }
+        this.reservedUsd += est;
+        try {
+          const res = await this.runSubAgent(t.description, t.prompt, signal, {
+            maxIter: COORD_SUBAGENT_MAX_ITER,
+            tokenBudget: budgets[i],
+            tools,
+          });
+          return { ...res, description: t.description };
+        } finally {
+          // The sub-agent's actual cost is already folded into this.cost.usd
+          // by the time runSubAgent resolves (applyUsage runs synchronously
+          // during its own completion handling) — releasing the ESTIMATE
+          // here, whatever it was, hands the reservation back to whatever
+          // is still in flight without double-counting: cost.usd is now the
+          // ground truth for this subtask, reservedUsd only ever needs to
+          // cover the ones that haven't finished yet. This is also how an
+          // estimate that ran high or low self-corrects for the NEXT
+          // subtask's check, with nothing extra to track: an underestimate
+          // shows up as a higher this.cost.usd once this subtask lands, an
+          // overestimate as a lower one — either way the next projected
+          // total is exact, not still carrying the old guess.
+          this.reservedUsd -= est;
+        }
       }),
     );
+  }
+
+  /**
+   * Dollars reserved against the budget ceiling for coordinated sub-agents
+   * that have been dispatched but whose actual cost hasn't landed in
+   * this.cost.usd yet. Always 0 outside a runCoordinatedTask() fan-out.
+   */
+  private reservedUsd = 0;
+
+  /**
+   * Conservative dollar estimate for a sub-agent about to be dispatched with
+   * `tokenBudget` tokens, from the CURRENT model's real per-token pricing —
+   * never a guessed or observed-average rate, and never derived by hashing or
+   * otherwise inspecting anything the sub-agent hasn't produced yet. Uses the
+   * higher of the prompt/completion rates as an upper bound, since which of
+   * the budget's tokens end up prompt vs. completion isn't known in advance
+   * and completion tokens are typically the pricier of the two. Used ONLY to
+   * size a pre-dispatch reservation; actual spend still lands through the
+   * normal applyUsage() accounting once the sub-agent completes.
+   */
+  private estimateSubAgentUsd(tokenBudget: number): number {
+    const pm = this.currentModel();
+    if (!pm) return 0; // no pricing metadata loaded — nothing to reserve against
+    const rate = Math.max(pm.pricing.prompt, pm.pricing.completion);
+    if (!(rate > 0)) return 0; // free/local model — no dollar cost to reserve
+    // An uncapped sub-agent's real tokenBudget can be Infinity (resolveSubBudget's
+    // "remove the limit" answer) — estimate against the same ceiling a capped
+    // request would have gotten, since "no token limit" cannot mean "no dollar
+    // estimate either" for a budget reservation whose whole point is a number.
+    const budget = Number.isFinite(tokenBudget) ? tokenBudget : SUBAGENT_MAX_TOKEN_BUDGET;
+    return budget * rate;
   }
 
   /**

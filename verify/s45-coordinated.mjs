@@ -112,6 +112,66 @@ globalThis.fetch = async (_u, init) => {
   ok("a sub-agent attempting a coordinated task is refused", t && t.r.isError && /only be launched by the top-level agent/i.test(t.r.output));
 }
 
+// --- (6) budget reservation: a burst near the ceiling doesn't let all through ---
+// Parallel sub-agents each used to check the dollar ceiling independently at
+// spawn time, all in the same tick — none saw a sibling's cost yet, so a
+// burst near the ceiling could let every one of them through. This proves the
+// fix reserves synchronously BEFORE each dispatch: exactly the subtasks that
+// fit are dispatched, the rest are refused without ever running, and genuine
+// concurrency among the ones that DO proceed is untouched.
+{
+  // Non-zero pricing, unlike the zero-cost `model` used above — the
+  // reservation estimate comes from pricing.prompt/completion, so a
+  // free/zero-priced model would estimate every subtask at $0 and never
+  // refuse anything.
+  const pricedModel = { ...model, pricing: { prompt: 0.000001, completion: 0.000002, cacheRead: 0, cacheWrite: 0 } };
+  const engine = new Engine({ apiKey: "test", cwd: dir, systemPrompt: "SYS", models: [pricedModel], session: createSession(dir, pricedModel.id, "yolo"), skills: [], autoCommit: false });
+  engine.budgetCeiling = 0.05; // three subtasks estimated at $0.02 each: two fit, the third doesn't
+
+  const TOKEN_BUDGET = 10_000; // * $0.000002/token (the higher of prompt/completion) = $0.02 estimate each
+  const threeSubtasks = [
+    { description: "sub A", prompt: "do A", tokenBudget: TOKEN_BUDGET },
+    { description: "sub B", prompt: "do B", tokenBudget: TOKEN_BUDGET },
+    { description: "sub C", prompt: "do C", tokenBudget: TOKEN_BUDGET },
+  ];
+
+  // A controllable stub standing in for a real sub-agent turn: resolves after
+  // a delay (so dispatched sub-agents genuinely overlap in time, same as the
+  // fetch-mock's 30ms hold above) and, on resolving, folds a real cost into
+  // engine.cost.usd — exactly what applyUsage() does for a real completion —
+  // so the NEXT subtask's reservation check sees true committed spend, not a
+  // stale estimate.
+  let inFlight2 = 0, maxInFlight2 = 0;
+  const dispatched = [];
+  engine.runSubAgent = async (description) => {
+    dispatched.push(description);
+    inFlight2++;
+    maxInFlight2 = Math.max(maxInFlight2, inFlight2);
+    await new Promise((r) => setTimeout(r, 30));
+    engine.cost.usd += 0.02;
+    inFlight2--;
+    return { text: `done: ${description}`, tools: 0, tokens: 0, capped: null };
+  };
+
+  const endedRefused = [];
+  engine.bus = { emit: (e) => { if (e.type === "subagent.end" && e.ok === false) endedRefused.push(e.description); } };
+
+  const results = await engine.runCoordinatedTask(threeSubtasks, undefined, {});
+
+  ok("all three subtasks return a result (none throw)", results.length === 3);
+  const refused = results.filter((r) => r.capped === "budget");
+  const proceeded = results.filter((r) => r.capped !== "budget");
+  ok("exactly one of the three near-ceiling subtasks is refused, not all three going through", refused.length === 1);
+  ok("...and the other two actually proceeded", proceeded.length === 2);
+  ok("the refused one was never actually dispatched to runSubAgent", !dispatched.includes(refused[0]?.description));
+  ok("the refused one's text explains the budget ceiling", /budget ceiling/i.test(refused[0]?.text ?? ""));
+  ok("the two that proceeded genuinely overlapped (concurrency preserved by the fix)", maxInFlight2 === 2);
+  ok("a subagent.end(ok:false) fired for the refused one so its floor row doesn't hang at 'queued' forever",
+    endedRefused.includes(refused[0]?.description));
+  ok("final committed cost reflects exactly the two that actually ran ($0.04), not a phantom third",
+    Math.abs(engine.cost.usd - 0.04) < 1e-9);
+}
+
 process.chdir(prevCwd);
 await fs.rm(dir, { recursive: true, force: true });
 await fs.rm(fake, { recursive: true, force: true });
