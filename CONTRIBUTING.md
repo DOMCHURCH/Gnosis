@@ -65,6 +65,20 @@ Two conventions worth knowing:
 
 CI runs `npm ci && npm run build && npm run verify` on `windows-latest`, Node 20.
 
+**Two suites don't actually run on CI.** `s110-voice-overlay-render.mjs` and
+`s111-overlay-packaged.mjs` each drive a real Electron `BrowserWindow` and
+read its rendered pixels back — the only way to catch the class of bug where
+the compositor paints the transparent overlay opaque-black instead of
+honouring its alpha. GitHub's hosted `windows-latest` runner has no
+interactive display session for Electron to open a window into (there is no
+Windows equivalent of Xvfb available there), so both suites take their own
+"no window available" skip path and exit 0. `npm run verify`'s summary line
+now reports these separately (`N passed, M skipped`) rather than folding them
+into the pass count, but a skip is still not a check — **run `npm run verify`
+locally on a real desktop session before a release** if you've touched
+`voice-overlay.html`, `voice.js`, or anything under `electron/` that affects
+the overlay window's rendering. CI green does not cover this.
+
 ## Adding a skill
 
 Skills are named procedures the model reads on demand. Each is a folder with a

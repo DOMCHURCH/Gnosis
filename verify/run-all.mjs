@@ -24,20 +24,43 @@ const SUITE_TIMEOUT_MS = Number(process.env.VERIFY_SUITE_TIMEOUT_MS ?? 120_000);
 // usually a suite that crept up on a timeout, and the trend is the early warning.
 const SLOW_MS = Number(process.env.VERIFY_SLOW_MS ?? 20_000);
 
+// A suite that never actually asserted anything — it hit its own "the
+// environment for this check isn't available" branch (no display, no
+// packaged build, …) and printed a SKIP line instead of running — must not
+// silently count as a pass. `stdio: "inherit"` gave the child a direct pipe
+// to this process's own stdout, which is fast and simple but leaves run-all
+// with no way to SEE what the child printed; captured here instead so a
+// suite-level skip can be told apart from a real one. A suite that ran real
+// checks and skipped only ONE of them by design (e.g. "hidden at this size")
+// still prints its own PASS lines alongside that, so the rule is: a leading
+// SKIP line with no PASS line anywhere means nothing was actually verified.
+function isSuiteLevelSkip(stdout) {
+  return /^SKIP /m.test(stdout) && !/^PASS /m.test(stdout);
+}
+function firstSkipLine(stdout) {
+  return stdout.split(/\r?\n/).find((l) => l.startsWith("SKIP "))?.trim() ?? "skipped";
+}
+
 const failures = [];
 const slow = [];
+const skipped = [];
 for (const f of suites) {
   console.log(`\n──────────── ${f} ────────────`);
   const started = Date.now();
   const r = spawnSync(process.execPath, [path.join(dir, f)], {
-    stdio: "inherit",
+    stdio: ["ignore", "pipe", "pipe"],
     timeout: SUITE_TIMEOUT_MS,
+    encoding: "utf8",
     // Suites that spawn the real binary must not connect MCP servers: an
     // isolated $USERPROFILE has no mcp.json, so boot would write the default
     // registry and npx-fetch three servers off the network. Offline and
     // deterministic is the whole point of this harness.
     env: { ...process.env, GNOSIS_SKIP_MCP: "1" },
   });
+  // Printed after the fact rather than streamed live (the tradeoff for being
+  // able to inspect it below) — full content and suite order are unchanged.
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
   const ms = Date.now() - started;
   if (ms >= SLOW_MS) slow.push([f, ms]);
   // spawnSync reports a timeout as a kill signal, not a non-zero exit code.
@@ -50,6 +73,8 @@ for (const f of suites) {
   } else if (r.status !== 0) {
     failures.push([f, `exit ${r.status}`]);
     console.log(`  ✗ ${f} FAILED (exit ${r.status})`);
+  } else if (isSuiteLevelSkip(r.stdout ?? "")) {
+    skipped.push([f, firstSkipLine(r.stdout ?? "")]);
   }
 }
 
@@ -74,8 +99,10 @@ for (const f of suites) {
 ──────────── ${name} ────────────`);
   if (!existsSync(entry)) {
     console.log("SKIP not present");
+    skipped.push([name, "SKIP not present"]);
   } else if (!existsSync(path.join(sub, "node_modules"))) {
     console.log("SKIP dependencies not installed — run: npm --prefix acceptance-server ci");
+    skipped.push([name, "SKIP dependencies not installed"]);
   } else {
     const started = Date.now();
     const r = spawnSync(process.execPath, [entry], { stdio: "inherit", timeout: SUITE_TIMEOUT_MS, cwd: sub });
@@ -90,6 +117,10 @@ for (const f of suites) {
 }
 
 console.log("\n════════════════════════════════════════");
+if (skipped.length) {
+  console.log(`⚠ ${skipped.length} suite(s) SKIPPED — verified nothing, do not read as a pass:`);
+  for (const [f, why] of skipped) console.log(`   ○ ${f} — ${why}`);
+}
 if (slow.length) {
   console.log(`slowest suites (>= ${Math.round(SLOW_MS / 1000)}s):`);
   for (const [f, ms] of slow.sort((a, b) => b[1] - a[1]).slice(0, 5)) console.log(`   ${(ms / 1000).toFixed(1)}s  ${f}`);
@@ -99,6 +130,8 @@ if (slow.length) {
 if (failures.length) {
   console.log(`❌ ${failures.length}/${suites.length} suite(s) FAILED`);
   for (const [f, why] of failures) console.log(`   ✗ ${f} — ${why}`);
+} else if (skipped.length) {
+  console.log(`✅ ${suites.length - skipped.length}/${suites.length} suites passed, ${skipped.length} skipped (see above)`);
 } else {
   console.log(`✅ all ${suites.length} suites passed`);
 }
