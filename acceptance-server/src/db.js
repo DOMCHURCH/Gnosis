@@ -22,8 +22,27 @@ export function getPool() {
   pool = new pg.Pool({
     connectionString,
     // Railway's managed Postgres presents a certificate that does not chain to a
-    // public root. The connection is still TLS-encrypted in transit; what is
-    // being skipped is chain verification, not encryption.
+    // public root, so rejectUnauthorized would fail every connection outright.
+    //
+    // Checked, not assumed, before leaving this in place: production's
+    // DATABASE_URL host is `postgres.railway.internal` — Railway's private
+    // network DNS, which only resolves inside this project's own private
+    // network and is never reachable from the public internet at all. Per
+    // Railway's own docs (docs.railway.com/guides/private-networking), ALL
+    // inter-service traffic on that private network — this connection
+    // included — is independently WireGuard-encrypted at the network layer,
+    // beneath and regardless of whatever Postgres's own TLS is doing. So the
+    // realistic MITM surface for `rejectUnauthorized: false` here is not "the
+    // internet"; it is "someone already inside Railway's own control plane or
+    // this project's private network", a threat model chain verification
+    // against Postgres's own cert would not meaningfully add to anyway.
+    //
+    // What was NOT confirmed, and is not claimed: whether Railway issues a
+    // customer-obtainable CA certificate for an internal Postgres endpoint
+    // that could be pinned instead of disabling verification outright.
+    // Railway's docs don't cover it and this was not guessed at; if that
+    // matters more precisely than the above, ask Railway support directly
+    // rather than trust a fabricated pin here.
     ssl: connectionString.includes("localhost") ? false : { rejectUnauthorized: false },
     max: 5,
   });
