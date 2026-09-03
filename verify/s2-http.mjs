@@ -1,6 +1,10 @@
 // Verify 2: http gate rules (SSRF / methods) + secret substitution & redaction.
 // Isolated to a fake home so the real ~/.dom/.env is never read or touched.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HOME = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome");
+process.env.USERPROFILE = HOME;
 process.env.HOME = process.env.USERPROFILE;
 
 import { promises as fs } from "node:fs";
@@ -106,7 +110,7 @@ ok("runHttp surfaces a DNS resolution failure as an error, not a crash", dnsMiss
 
 setDnsLookupForTests(null); // restore the real resolver
 
-try { await fs.rm("C:/Users/Dominique/dom/verify/_fakehome", { recursive: true, force: true }); } catch {}
+try { await fs.rm(HOME, { recursive: true, force: true }); } catch {}
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

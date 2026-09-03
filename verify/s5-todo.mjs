@@ -2,7 +2,12 @@
 // replaces the whole list and updates engine.todos; the list persists per session
 // and restores on load; /clear empties it; and the App renders it above the input
 // with ○ pending / ◐ active / ● done glyphs. Isolated to a fake home, offline.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-todo";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(here, "..");
+process.env.USERPROFILE = path.join(here, "_fakehome-todo");
 process.env.HOME = process.env.USERPROFILE;
 
 // Ink batches its output under CI and never writes the intermediate frames these
@@ -37,7 +42,7 @@ globalThis.fetch = async (url) => {
 try { await fs.rm(process.env.USERPROFILE, { recursive: true, force: true }); } catch {}
 
 const model = { id: "m", name: "M", context_length: 200000, pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 }, supported_parameters: ["tools"] };
-const cwd = "C:/Users/Dominique/dom";
+const cwd = REPO_ROOT;
 const engine = new Engine({ apiKey: "test", cwd, systemPrompt: "t", models: [model], session: createSession(cwd, "m", "yolo"), skills: [], autoCommit: false });
 
 async function turn(name, args) {

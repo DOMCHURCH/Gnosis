@@ -2,7 +2,10 @@
 // same way it already does for path tools — a bash command may read/write under
 // ~/.dom/cache and ~/.dom/skills but stays blocked from config.json, .env, and
 // sessions/; (b) the 413 limitPhrase never truncates a limit number mid-digit.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+process.env.USERPROFILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome");
 process.env.HOME = process.env.USERPROFILE;
 
 import { gate, domTarget } from "../dist/permissions.js";

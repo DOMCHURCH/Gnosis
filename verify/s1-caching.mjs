@@ -2,7 +2,11 @@
 // system + tools + last message for cache-capable models; nothing for others;
 // cached-token accounting; and an offline mirror of a 5-iteration Sonnet turn
 // (cache reads on iterations 2-5). Isolated to a fake home for the engine tests.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HOME = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome");
+process.env.USERPROFILE = HOME;
 process.env.HOME = process.env.USERPROFILE;
 
 import { promises as fs } from "node:fs";
@@ -101,7 +105,7 @@ const lastMarked = (b) => Array.isArray(b.messages.at(-1).content) && b.messages
   ok("non-caching model records 0 cached tokens", (engine.cost.cachedPromptTokens ?? 0) === 0);
 }
 
-try { await fs.rm("C:/Users/Dominique/dom/verify/_fakehome", { recursive: true, force: true }); } catch {}
+try { await fs.rm(HOME, { recursive: true, force: true }); } catch {}
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

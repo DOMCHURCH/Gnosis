@@ -1,7 +1,12 @@
 // Verify (1.7 — /context readout + /resume cwd picker): contextBreakdown splits
 // window usage by category; /context prints it with percentages; /resume (no args)
 // lists only prior sessions for the current cwd.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-ctx";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(here, "..");
+process.env.USERPROFILE = path.join(here, "_fakehome-ctx");
 process.env.HOME = process.env.USERPROFILE;
 
 // Ink batches its output under CI and never writes the intermediate frames these
@@ -45,7 +50,7 @@ const strip = (s) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b[()][
 // --- prior sessions for two different cwds -----------------------------------
 try { await fs.rm(process.env.USERPROFILE, { recursive: true, force: true }); } catch {}
 globalThis.fetch = async () => new Response("{}", { status: 200 });
-const cwd = "C:/Users/Dominique/dom";
+const cwd = REPO_ROOT;
 {
   const here = createSession(cwd, "here-model", "ask");
   here.messages = [{ role: "user", text: "earlier work here" }];

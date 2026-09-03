@@ -9,7 +9,10 @@
 // The token cost is the smaller half. An advertised tool is one the model will
 // try, and then spend a whole round trip discovering it cannot work here — at
 // the 4-7s per call measured in voice, that is the expensive kind of mistake.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+process.env.USERPROFILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome");
 process.env.HOME = process.env.USERPROFILE;
 
 import { allToolNames, toolDefinitions, resolveTool } from "../dist/tools/index.js";

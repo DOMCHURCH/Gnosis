@@ -10,7 +10,9 @@
 // Its own throwaway home: the Groq case needs a groqApiKey in config, and
 // writing one into the shared _fakehome would hand it to every other suite.
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
-const HOME = "C:/Users/Dominique/dom/verify/_fakehome-s107";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const HOME = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome-s107");
 rmSync(HOME, { recursive: true, force: true });
 mkdirSync(HOME + "/.dom", { recursive: true });
 writeFileSync(HOME + "/.dom/config.json", JSON.stringify({ groqApiKey: "gsk_test" }));

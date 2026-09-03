@@ -1,7 +1,12 @@
 // Verify (feature 4 — pipe mode): `dom -p "prompt"` reads piped stdin, runs ONE
 // turn, writes the result to stdout, and exits 0/1. No session file unless --save.
 // Progress/errors go to stderr so stdout stays clean. Isolated fake home, offline.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-pipe";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(here, "..");
+process.env.USERPROFILE = path.join(here, "_fakehome-pipe");
 process.env.HOME = process.env.USERPROFILE;
 
 import { promises as fs } from "node:fs";
@@ -53,7 +58,7 @@ async function capture(fn) {
 }
 
 const model = { id: "m", name: "M", context_length: 200000, pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 }, supported_parameters: ["tools"] };
-const cwd = "C:/Users/Dominique/dom";
+const cwd = REPO_ROOT;
 const mkEngine = () => new Engine({ apiKey: "test", cwd, systemPrompt: "t", models: [model], session: createSession(cwd, "m", "ask"), skills: [], autoCommit: false });
 
 // --- 1) piped stdin + prompt → one turn, answer to stdout, exit 0 -----------

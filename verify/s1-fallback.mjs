@@ -1,7 +1,11 @@
 // Verify: fallbackModel. Upstream/shared-pool 429s and 404s don't clear on retry,
 // so they switch to the fallback model (once, for the session) with a dim notice
 // naming both models. Our-own 429s still retry in place. Isolated to a fake home.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HOME = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome");
+process.env.USERPROFILE = HOME;
 process.env.HOME = process.env.USERPROFILE;
 
 import { promises as fs } from "node:fs";
@@ -71,7 +75,7 @@ const fb = { id: "anthropic/claude-3.5-haiku", name: "Claude Haiku", context_len
   ok("no fallbackModel → active model is unchanged", engine.modelId === primary.id);
 }
 
-try { await fs.rm("C:/Users/Dominique/dom/verify/_fakehome", { recursive: true, force: true }); } catch {}
+try { await fs.rm(HOME, { recursive: true, force: true }); } catch {}
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

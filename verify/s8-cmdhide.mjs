@@ -2,7 +2,10 @@
 // bidi Unicode, and control chars as <U+XXXX>, flags them suspicious, and shows the
 // full multi-line command; buildBashPreview displays the revealed command + a
 // warning; the gate forces a prompt even in yolo when a command hides characters.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-cmd";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+process.env.USERPROFILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome-cmd");
 process.env.HOME = process.env.USERPROFILE;
 
 import { normalizeCommand, hasHiddenChars } from "../dist/cmdnorm.js";

@@ -2,7 +2,12 @@
 // user prompts newest-first (this session, then prior sessions for the SAME cwd),
 // de-duplicated, excluding inter-agent relays and the current session; and Ctrl+R
 // opens the reverse-search picker over them in the TUI.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-hist";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(here, "..");
+process.env.USERPROFILE = path.join(here, "_fakehome-hist");
 process.env.HOME = process.env.USERPROFILE;
 
 // Ink batches its output under CI and never writes the intermediate frames these
@@ -62,7 +67,7 @@ const send = (s) => { inq.push(s); stdin.emit("readable"); };
 const allText = () => strip(frames.join("\n"));
 
 const model = { id: "m", name: "M", context_length: 200000, pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 }, supported_parameters: ["tools"], input_modalities: ["text"] };
-const cwd = "C:/Users/Dominique/dom";
+const cwd = REPO_ROOT;
 const engine = new Engine({ apiKey: "test", cwd, systemPrompt: "t", models: [model], session: createSession(cwd, "m", "ask"), skills: [], autoCommit: false });
 engine.messages.push({ role: "user", text: "refactor the auth module" }); // a prior prompt to find
 

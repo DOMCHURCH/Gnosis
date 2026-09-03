@@ -1,6 +1,11 @@
 // Verify 1c: rejecting the same write twice ends the turn (no identical-retry loop).
 // Isolated to a fake home so persisted sessions never touch the real ~/.dom.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const HOME = path.join(here, "_fakehome");
+process.env.USERPROFILE = HOME;
 process.env.HOME = process.env.USERPROFILE;
 
 import { existsSync, rmSync } from "node:fs";
@@ -10,7 +15,7 @@ import { createSession } from "../dist/config.js";
 let fails = 0;
 const ok = (name, cond) => { console.log(`${cond ? "✓" : "✗"} ${name}`); if (!cond) fails++; };
 
-const TARGET = "C:/Users/Dominique/dom/verify/_work/reject-target.txt";
+const TARGET = path.join(here, "_work", "reject-target.txt");
 if (existsSync(TARGET)) rmSync(TARGET);
 
 // The model always answers with the SAME write call (the "retries identically" bug).
@@ -40,7 +45,7 @@ ok("turn announced it ended after the 2nd decline", systems.some((s) => /decline
 ok("the rejected write was never applied (file absent)", !existsSync(TARGET));
 
 // Clean up the isolated fake home so the tree stays tidy.
-try { rmSync("C:/Users/Dominique/dom/verify/_fakehome", { recursive: true, force: true }); } catch {}
+try { rmSync(HOME, { recursive: true, force: true }); } catch {}
 
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

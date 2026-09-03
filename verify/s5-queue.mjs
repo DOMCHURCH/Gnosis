@@ -3,7 +3,12 @@
 // boundary; Esc discards the queue; Ctrl+C aborts the turn but KEEPS the queue.
 // Drives the real App through mock stdin/stdout, gating fetch so a turn stays
 // "busy" for a controllable window. Isolated to a fake home; fully offline.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome-queue";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(here, "..");
+process.env.USERPROFILE = path.join(here, "_fakehome-queue");
 process.env.HOME = process.env.USERPROFILE;
 
 // Ink batches its output under CI and never writes the intermediate frames these
@@ -62,8 +67,8 @@ const keyp = async (s) => { send(s); await wait(120); };
 const models = [{ id: "m", name: "M", context_length: 200000, pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 }, supported_parameters: ["tools"] }];
 try { await fs.rm(process.env.USERPROFILE, { recursive: true, force: true }); } catch {}
 
-const session = createSession("C:/Users/Dominique/dom", "m", "yolo"); // yolo: no permission prompts
-const engine = new Engine({ apiKey: "test", cwd: "C:/Users/Dominique/dom", systemPrompt: "test", models, session, skills: [], autoCommit: false });
+const session = createSession(REPO_ROOT, "m", "yolo"); // yolo: no permission prompts
+const engine = new Engine({ apiKey: "test", cwd: REPO_ROOT, systemPrompt: "test", models, session, skills: [], autoCommit: false });
 
 let app, mountError = null;
 try {

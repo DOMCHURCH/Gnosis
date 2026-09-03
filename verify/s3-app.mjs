@@ -1,7 +1,12 @@
 // Verify (UI): boots straight into config.model (no startup picker); /model is
 // session-scoped (never writes config) and shows a divergence marker; --save is
 // the only path that writes config; tabs still work. Isolated to a fake home.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(here, "..");
+process.env.USERPROFILE = path.join(here, "_fakehome");
 process.env.HOME = process.env.USERPROFILE;
 
 // Ink batches its output under CI and never writes the intermediate frames these
@@ -11,7 +16,6 @@ import React from "react";
 import { render } from "ink";
 import { EventEmitter } from "node:events";
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import { App } from "../dist/ui/App.js";
 import { Engine } from "../dist/engine.js";
 import { createSession } from "../dist/config.js";
@@ -58,8 +62,8 @@ const configFile = path.join(process.env.USERPROFILE, ".dom", "config.json");
 const readConfig = async () => { try { return JSON.parse(await fs.readFile(configFile, "utf8")); } catch { return null; } };
 try { await fs.rm(path.join(process.env.USERPROFILE, ".dom"), { recursive: true, force: true }); } catch {}
 
-const session = createSession("C:/Users/Dominique/dom", DEFAULT, "ask");
-const engine = new Engine({ apiKey: "test", cwd: "C:/Users/Dominique/dom", systemPrompt: "test", models, session, skills: [] });
+const session = createSession(REPO_ROOT, DEFAULT, "ask");
+const engine = new Engine({ apiKey: "test", cwd: REPO_ROOT, systemPrompt: "test", models, session, skills: [] });
 
 let app, mountError = null;
 try {

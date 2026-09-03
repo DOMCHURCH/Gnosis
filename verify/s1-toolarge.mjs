@@ -1,7 +1,11 @@
 // Verify: 413 (request too large / TPM limit) is NOT retried in place. It compacts
 // + retries once; if still too large, falls back to a larger model (when set),
 // else surfaces a clear error naming the limit + suggesting /compact or /clear.
-process.env.USERPROFILE = "C:/Users/Dominique/dom/verify/_fakehome";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HOME = path.join(path.dirname(fileURLToPath(import.meta.url)), "_fakehome");
+process.env.USERPROFILE = HOME;
 process.env.HOME = process.env.USERPROFILE;
 
 import { promises as fs } from "node:fs";
@@ -56,6 +60,6 @@ const cb = () => { const systems = []; return { systems, cb: { onLine() {}, onPe
   ok("with fallback: the turn then completed", engine.messages.some((m) => m.role === "assistant" && m.text === "ok"));
 }
 
-try { await fs.rm("C:/Users/Dominique/dom/verify/_fakehome", { recursive: true, force: true }); } catch {}
+try { await fs.rm(HOME, { recursive: true, force: true }); } catch {}
 console.log(fails ? `\nFAILED (${fails})` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

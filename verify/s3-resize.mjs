@@ -5,10 +5,14 @@
 import React from "react";
 import { render } from "ink";
 import { EventEmitter } from "node:events";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { App } from "../dist/ui/App.js";
 import { Engine } from "../dist/engine.js";
 import { createSession } from "../dist/config.js";
 import { detectCaps } from "../dist/ui/terminal.js";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 let fails = 0;
 const ok = (name, cond) => { console.log(`${cond ? "PASS" : "FAIL"} ${name}`); if (!cond) fails++; };
@@ -23,7 +27,7 @@ stdin.isTTY = true; stdin.setRawMode = () => {}; stdin.setEncoding = () => {};
 stdin.resume = () => {}; stdin.pause = () => {}; stdin.ref = () => {}; stdin.unref = () => {}; stdin.read = () => null;
 
 const models = [{ id: "google/gemini-2.5-flash-lite", name: "Gemini", context_length: 1e6, pricing: { prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0 }, supported_parameters: ["tools"] }];
-const engine = new Engine({ apiKey: "test", cwd: "C:/Users/Dominique/dom", systemPrompt: "t", models, session: createSession("C:/Users/Dominique/dom", models[0].id, "ask"), skills: [] });
+const engine = new Engine({ apiKey: "test", cwd: REPO_ROOT, systemPrompt: "t", models, session: createSession(REPO_ROOT, models[0].id, "ask"), skills: [] });
 const caps = detectCaps();
 
 const app = render(
