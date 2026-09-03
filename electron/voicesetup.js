@@ -32,10 +32,24 @@ const MODEL_DIR = path.join(os.homedir(), ".dom", "kokoro");
  * Pinned to a specific release tag rather than "latest" on purpose: the bridge
  * expects the v1.0 file layout (one model + one voices blob), and a later
  * release that reshapes that would break synthesis for anyone who happened to
- * install on the wrong day. `bytes` is the expected size, used only to report
+ * install on the wrong day. `minBytes` is the expected size, used only to report
  * progress and to reject a truncated download — an HTML error page saved as
  * `kokoro-v1.0.onnx` is the classic failure here, and it fails later, in the
  * bridge, as an unreadable-model error that names the wrong culprit.
+ *
+ * NO CRYPTOGRAPHIC HASH IS PINNED HERE, and that is a checked fact, not an
+ * oversight: neither this release (thewh1teagle/kokoro-onnx model-files-v1.0)
+ * nor its own upstream source (taylorchu/kokoro-onnx v0.2.0, which this
+ * release's own notes name as where these files come from) publishes a
+ * SHA-256 anywhere — GitHub's own asset `digest` field is null on every file
+ * in both releases, neither release's notes include a checksums file, and the
+ * HuggingFace model card those notes point to (hexgrad/Kokoro-82M, for voice
+ * names) carries no hash for this specific packaged asset either. Hashing the
+ * file after downloading it from this same URL would only prove the download
+ * matched itself, not that it matched anything trustworthy — hashing what you
+ * just fetched can't detect a compromise of that same fetch. Until the
+ * upstream project publishes an authoritative checksum to pin against, the
+ * size floor above plus HTTPS transport are what this can actually verify.
  */
 const KOKORO_FILES = [
   {
