@@ -14,7 +14,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(path.join(root, "electron", "deeplinks.js"), "utf8");
+// Normalized to LF before any matching below. The extractors anchor on a
+// newline followed by the closing brace, and a Windows checkout can land the
+// file with CRLF — the carriage return sits between them, so parseDeepLink
+// came back unextractable and this suite failed on CI while passing locally.
+// The raw text is read once more only to report which the checkout produced.
+const raw = readFileSync(path.join(root, "electron", "deeplinks.js"), "utf8");
+console.log(`INFO source line endings as checked out: ${raw.includes("\r") ? "CRLF" : "LF"}`);
+const src = raw.replace(/\r\n/g, "\n");
 
 let fails = 0;
 const ok = (n, c, extra = "") => { console.log(`${c ? "PASS" : "FAIL"} ${n}${extra ? ` — ${extra}` : ""}`); if (!c) fails++; };
